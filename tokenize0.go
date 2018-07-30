@@ -5,9 +5,10 @@ import (
 	"fmt"
 )
 
-type Token struct {
+type Token0 struct {
 	Type int
 	Data string
+	*SourceLocation
 }
 
 var TokenGroups = []string{
@@ -15,7 +16,7 @@ var TokenGroups = []string{
 	" \t\r\n",
 }
 
-func tokenize(input string) []Token {
+func tokenize0(input string) []Token0 {
 	fmt.Println("input", input)
 
 	var tokenBuffer bytes.Buffer
@@ -23,7 +24,7 @@ func tokenize(input string) []Token {
 
 	var tokenLookup = make(map[byte]int)
 
-	var rv = make([]Token, 0)
+	var rv = make([]Token0, 0)
 
 	// build tokenLookup
 	for i := 0; i < len(TokenGroups); i++ {
@@ -32,8 +33,6 @@ func tokenize(input string) []Token {
 			tokenLookup[tg[j]] = i
 		}
 	}
-
-	fmt.Println("Tokenlookup table", tokenLookup)
 
 	for i := 0; i < len(input); i++ {
 		var cbyte byte = input[i]
@@ -44,10 +43,12 @@ func tokenize(input string) []Token {
 			group = -1
 		}
 		if group != oldGroup || group == -1 {
-			fmt.Println("Emit buffer", tokenBuffer.String())
-			token := Token{}
+			token := Token0{}
 			token.Data = tokenBuffer.String()
-			token.Type = group
+			token.Type = oldGroup
+			sl := &SourceLocation{}
+			sl.char = i
+			token.SourceLocation = sl
 			rv = append(rv, token)
 			tokenBuffer.Reset()
 			tokenBuffer.WriteByte(cbyte)

@@ -1,18 +1,33 @@
-srcfile = *srcfileunit
-srcfileunit = {vardec funcdec}
-vardec = varname [typeid] [varinit]
-typeid = typename [typeargs]
-typeargs = args
-args = "(" lsep(vardec, ",") ")"
-lsep(rep, delim) = {*(rep delim) *(rep delim) rep}
-funcdec = funcname [args] [rettype] funcbody
-funcbody = *funcstmt
-funcstmt = {vardec varassign funccall}
-funccall = funcname args
-varassign = varname varassignop rvalue
-varassignop = ":"
-funcname = idengen
-varname = idengen
-idengen = token(iden)
-rvalue = const
-const {token(int) token(str) token(bool)}
+class root
+main srcfile
+arglist '( lsep < vardec ', > ')
+lsep < rep delim > { * ( rep delim ) * ( rep delim ) rep }
+value const
+const { ^ str ^ int ^ bool }
+
+class srcfile
+main * unit
+unit { var.dec func.dec }
+
+class type
+id name ? args
+args 
+
+class block < x >
+main { oneline multiline }
+oneline ': x ^ eol
+multiline ': ^ eol * ( ^ indent x ^ eol )
+
+class var
+assignop ':
+init assignop value
+dec name ? type.id ? init
+assign name init
+
+class func
+stmt { var.dec var.assign call }
+call name args
+name token(iden)
+args arglist
+dec name ? args ? rettype body
+body block < stmt >
