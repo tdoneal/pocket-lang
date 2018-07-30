@@ -14,8 +14,8 @@ func main() {
 
 	tokens0 := tokenize0(string(dat))
 	fmt.Println("tokens0", tokens0)
-	tokens1 := tokenize1(tokens0)
-	fmt.Println("tokens1", tokens1)
+	// tokens1 := tokenize1(tokens0)
+	// fmt.Println("tokens1", tokens1)
 }
 
 type ParserRules struct {

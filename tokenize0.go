@@ -1,5 +1,7 @@
 package main
 
+// Tokenizes an input string into tokens of alphanumeric, whitespace, and individual punctuation characters
+
 import (
 	"bytes"
 	"fmt"
@@ -11,12 +13,19 @@ type Token0 struct {
 	*SourceLocation
 }
 
+const (
+	TOK0_PUNCTUATION  = 0
+	TOK0_ALPHANUMERIC = 1
+	TOK0_WHITESPACE   = 2
+)
+
 var TokenGroups = []string{
+	"!@#$%^&*()-=_+[]\\;',./{}|:\"<>?",
 	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
 	" \t\r\n",
 }
 
-func tokenize0(input string) []Token0 {
+func tokenize0(input string) []Token {
 	fmt.Println("input", input)
 
 	var tokenBuffer bytes.Buffer
@@ -24,7 +33,7 @@ func tokenize0(input string) []Token0 {
 
 	var tokenLookup = make(map[byte]int)
 
-	var rv = make([]Token0, 0)
+	var rv = make([]Token, 0)
 
 	// build tokenLookup
 	for i := 0; i < len(TokenGroups); i++ {
@@ -42,14 +51,17 @@ func tokenize0(input string) []Token0 {
 		} else {
 			group = -1
 		}
-		if group != oldGroup || group == -1 {
-			token := Token0{}
+		if group != oldGroup || group == -1 || group == 0 {
+			token := Token{}
 			token.Data = tokenBuffer.String()
 			token.Type = oldGroup
 			sl := &SourceLocation{}
 			sl.char = i
 			token.SourceLocation = sl
-			rv = append(rv, token)
+
+			if group >= 0 {
+				rv = append(rv, token)
+			}
 			tokenBuffer.Reset()
 			tokenBuffer.WriteByte(cbyte)
 		} else {

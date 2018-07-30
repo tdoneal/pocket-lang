@@ -1,2 +1,7 @@
+token lookup
+punc 0
+iden 1
+wtsp 2
+
 class root
 main ^ iden

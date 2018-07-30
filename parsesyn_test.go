@@ -14,4 +14,18 @@ func TestThing(t *testing.T) {
 	}
 	parser := &ParserSyn{}
 	parser.parsesyn(string(dat))
+
+	fakeTokens := []Token{
+		Token{
+			Data: "hello",
+			Type: TOK0_ALPHANUMERIC,
+		},
+	}
+
+	fmt.Println("final token lookup table", parser.tokenLookup)
+	fmt.Println("final generated parser", *parser.output)
+
+	finalIsValid := parser.output.isValid(fakeTokens)
+
+	fmt.Println("final isValid?", finalIsValid)
 }

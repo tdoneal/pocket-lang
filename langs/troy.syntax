@@ -7,25 +7,25 @@ const { ^ str ^ int ^ bool }
 
 class srcfile
 main * unit
-unit { var.dec func.dec }
+unit { . < var dec > . < func dec > }
 
 class type
 id name ? args
-args 
+args arglist
 
 class block < x >
 main { oneline multiline }
 oneline ': x ^ eol
-multiline ': ^ eol * ( ^ indent x ^ eol )
+multiline ': ^ eol incindent * ( ^ indent x ^ eol ) decindent
 
 class var
 assignop ':
 init assignop value
-dec name ? type.id ? init
+dec name ? . < type id > ? init
 assign name init
 
 class func
-stmt { var.dec var.assign call }
+stmt { . < var dec > . < var assign > call }
 call name args
 name token(iden)
 args arglist

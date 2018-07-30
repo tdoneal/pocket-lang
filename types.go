@@ -5,3 +5,9 @@ type SourceLocation struct {
 	column int
 	char   int
 }
+
+type Token struct {
+	Type int
+	Data string
+	*SourceLocation
+}
