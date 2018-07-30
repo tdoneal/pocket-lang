@@ -1,0 +1,8 @@
+srcfile = *srcfileunit
+srcfileunit = {comment codewhite token strlit}
+comment = "#" *token(char) eol
+eol "\n"
+codewhite = *white
+white = {" ", "\t", "\r", "\n"}
+strlit = "\"" *anynoquote "\""
+anynoquote = - token(char) "\""

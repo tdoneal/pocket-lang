@@ -1,0 +1,21 @@
+tokenizer # handles comments, whitespace indenting, and tokens
+parser # creates ast
+
+# stage: split input file into characters
+# stage: groups letters, numbers, whitespace, separates other chars
+# stage: remove comments, identify types of tokens, parse literals
+# example: 
+
+add50(x int)
+    ## this does stuff
+    #  and stuff
+    ##
+    s: "hello"
+    return x + 50
+
+stage: ["a", "d", "d", ... "+", " ", "5", "\n"] # character level
+stage: ["add50", "(", "x", " ", "int", ")", "\n\t", "#", "#", "this", "does", ..."\t", "#", "#", 
+    ..., """, "hello", """, ..., "return", " ", "x", " ", "+", "50", "\n"] # tokenization 0
+stage: [iden("add50") "(" iden("x") iden("int") ")" eol startindent ... strlit("hello") eol
+     return iden("x") "+" intlit("50") eol endindent]
+stage: [srcfile(srcunit(funcdef(header(name("add50") args(...)) body(statement(varassign(...)) statement(returnstmt(...))))))]
