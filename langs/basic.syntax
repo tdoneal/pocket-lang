@@ -1,8 +1,7 @@
 token lookup
 punc 0
-iden 1
+anum 1
 wtsp 2
 
 class root
-main twoidens
-twoidens [ ^ iden ^ iden ]
+main * ^ anum

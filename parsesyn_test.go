@@ -24,6 +24,17 @@ func TestThing(t *testing.T) {
 			Data: "me",
 			Type: TOK0_ALPHANUMERIC,
 		},
+		Token{
+			Data: "me",
+			Type: TOK0_ALPHANUMERIC,
+		},
+		Token{
+			Data: "me",
+			Type: TOK0_PUNCTUATION,
+		}, Token{
+			Data: "me",
+			Type: TOK0_ALPHANUMERIC,
+		},
 	}
 
 	fmt.Println("final token lookup table", parser.tokenLookup)

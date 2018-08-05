@@ -24,6 +24,7 @@ type ParserSyn struct {
 	class       string
 	tokenLookup map[string]int
 	output      *Parser
+	tokens      []string
 }
 
 const (
@@ -76,6 +77,7 @@ func (parser *ParserSyn) parsesyn(file string) Parser {
 
 func (parser *ParserSyn) handleLineTokens(tokens []string) {
 	ftok := tokens[0]
+	parser.tokens = tokens
 
 	if ftok == "class" {
 		clsname := tokens[1]
@@ -90,15 +92,15 @@ func (parser *ParserSyn) handleLineTokens(tokens []string) {
 		if parser.ctx == PS_CTX_CLASS {
 			pattname := tokens[0]
 			fmt.Println("pattern definition", pattname)
-			pattvalue, _ := parser.parseValue(tokens, 1, PS_VAL_CTX_GENERIC)
+			pattvalue, _ := parser.parseValue(1, PS_VAL_CTX_GENERIC)
 			fmt.Println("final pattern value", pattvalue)
 			if pattname == "main" && parser.class == "root" {
 				parser.output.main = pattvalue
 			}
 			if parser.output.patternLookup == nil {
-				parser.output.patternLookup = make(map[string]Pattern)
+				parser.output.patternLookup = make(map[string]*Pattern)
 			}
-			parser.output.patternLookup[pattname] = pattvalue
+			parser.output.patternLookup[pattname] = &pattvalue
 		} else if parser.ctx == PS_CTX_TOK_LOOKUP {
 			parser.handleTokenLookup(tokens)
 		}
@@ -122,23 +124,25 @@ func (parser *ParserSyn) handleTokenLookup(tokens []string) {
 
 // starts parsing from a given location
 // returns the parsed value and how many tokens were consumed
-func (parser *ParserSyn) parseValue(tokens []string, offset int, ctx int) (Pattern, int) {
-	ftok := tokens[offset]
+func (parser *ParserSyn) parseValue(offset int, ctx int) (Pattern, int) {
+	ftok := parser.tokens[offset]
 	fmt.Println("Parsing at position", offset)
 
 	if ftok == "^" {
 		fmt.Println("operator ^ encountered")
-		arg, argcons := parser.parseValue(tokens, offset+1, PS_VAL_CTX_LLTOK)
+		arg, argcons := parser.parseValue(offset+1, PS_VAL_CTX_LLTOK)
 		rv := Pattern{
 			Type:     PATTERN_OPERATOR,
 			Operator: ftok,
 			Args:     []Pattern{arg},
 		}
 		return rv, 1 + argcons
+	} else if ftok == "*" {
+		return parser.parseUnaryOp(offset, "*")
 	} else if ftok == "[" {
-		return parser.parseSequence(tokens, offset, ctx)
+		return parser.parseSequence(offset, ctx)
 	} else if ftok == "{" {
-		return parser.parseDisjunction(tokens, offset, ctx)
+		return parser.parseDisjunction(offset, ctx)
 	} else {
 		rv := Pattern{}
 		if ctx == PS_VAL_CTX_GENERIC {
@@ -157,8 +161,19 @@ func (parser *ParserSyn) parseValue(tokens []string, offset int, ctx int) (Patte
 	}
 }
 
+// Par
+func (parser *ParserSyn) parseUnaryOp(offset int, op string) (Pattern, int) {
+	arg, argcons := parser.parseValue(offset+1, PS_VAL_CTX_GENERIC)
+	rv := Pattern{
+		Args:     []Pattern{arg},
+		Operator: op,
+		Type:     PATTERN_OPERATOR,
+	}
+	return rv, argcons + 1
+}
+
 // Parses the [ ... ] construction
-func (parser *ParserSyn) parseSequence(tokens []string, offset int, ctx int) (Pattern, int) {
+func (parser *ParserSyn) parseSequence(offset int, ctx int) (Pattern, int) {
 	patterns := make([]Pattern, 0)
 	cons := 0
 
@@ -166,8 +181,8 @@ func (parser *ParserSyn) parseSequence(tokens []string, offset int, ctx int) (Pa
 	offset += 1
 	cons += 1
 
-	for offset < len(tokens) {
-		ctok := tokens[offset]
+	for offset < len(parser.tokens) {
+		ctok := parser.tokens[offset]
 		if ctok == "]" {
 			rv := Pattern{
 				Type:     PATTERN_OPERATOR,
@@ -177,7 +192,7 @@ func (parser *ParserSyn) parseSequence(tokens []string, offset int, ctx int) (Pa
 			fmt.Println("finished parsing sequence:", len(patterns), "elements")
 			return rv, cons
 		} else {
-			patt, pcons := parser.parseValue(tokens, offset, PS_VAL_CTX_GENERIC)
+			patt, pcons := parser.parseValue(offset, PS_VAL_CTX_GENERIC)
 			patterns = append(patterns, patt)
 			offset += pcons
 			cons += pcons
@@ -187,7 +202,7 @@ func (parser *ParserSyn) parseSequence(tokens []string, offset int, ctx int) (Pa
 }
 
 // Parses the { ... } (disjunction) construction
-func (parser *ParserSyn) parseDisjunction(tokens []string, offset int, ctx int) (Pattern, int) {
+func (parser *ParserSyn) parseDisjunction(offset int, ctx int) (Pattern, int) {
 	patterns := make([]Pattern, 0)
 	cons := 0
 
@@ -195,8 +210,8 @@ func (parser *ParserSyn) parseDisjunction(tokens []string, offset int, ctx int) 
 	offset += 1
 	cons += 1
 
-	for offset < len(tokens) {
-		ctok := tokens[offset]
+	for offset < len(parser.tokens) {
+		ctok := parser.tokens[offset]
 		if ctok == "}" {
 			rv := Pattern{
 				Type:     PATTERN_OPERATOR,
@@ -206,7 +221,7 @@ func (parser *ParserSyn) parseDisjunction(tokens []string, offset int, ctx int) 
 			fmt.Println("finished parsing disjunction:", len(patterns), "elements")
 			return rv, cons
 		} else {
-			patt, pcons := parser.parseValue(tokens, offset, PS_VAL_CTX_GENERIC)
+			patt, pcons := parser.parseValue(offset, PS_VAL_CTX_GENERIC)
 			patterns = append(patterns, patt)
 			offset += pcons
 			cons += pcons

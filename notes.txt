@@ -1,0 +1,3 @@
+two types of patterns:
+whole-pattern: must consume the entire pattern to be valid
+whole-input: must consume the entire input to be valid

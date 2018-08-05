@@ -5,7 +5,7 @@ import "fmt"
 // Parser interprets a syntax tree (Pattern) and parses an input token string based on that syntax tree
 type Parser struct {
 	main          Pattern
-	patternLookup map[string]Pattern
+	patternLookup map[string]*Pattern
 	tokenLookup   map[string]int
 	tokens        []Token
 }
@@ -37,6 +37,8 @@ func (parser *Parser) isValidNode(pattern Pattern, offset int) (bool, int) {
 			return parser.isValidSequence(pattern.Args, offset)
 		} else if pattern.Operator == "{}" {
 			return parser.isValidDisjunction(pattern.Args, offset)
+		} else if pattern.Operator == "*" {
+			return parser.isValidManyGreedy(pattern.Args[0], offset)
 		} else {
 			panic("unknown operator \"" + pattern.Operator + "\"")
 		}
@@ -44,10 +46,28 @@ func (parser *Parser) isValidNode(pattern Pattern, offset int) (bool, int) {
 		patternref := pattern.Data
 		followedref := parser.patternLookup[patternref]
 		println("following pattern reference '" + patternref + "'")
-		return parser.isValidNode(followedref, offset)
+		return parser.isValidNode(*followedref, offset)
 	}
 
 	return false, 0
+}
+
+func (parser *Parser) isValidManyGreedy(repPattern Pattern, offset int) (bool, int) {
+	cons := 0
+	for {
+		argvalid, argcons := parser.isValidNode(repPattern, offset)
+		if argvalid {
+			offset += argcons
+			cons += argcons
+			if offset >= len(parser.tokens) {
+				println("ManyGreedy: Reached EOF")
+				break
+			}
+		} else {
+			break
+		}
+	}
+	return true, cons
 }
 
 func (parser *Parser) isValidDisjunction(patterns []Pattern, offset int) (bool, int) {
