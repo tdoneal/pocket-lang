@@ -4,4 +4,5 @@ iden 1
 wtsp 2
 
 class root
-main [ ^ iden ^ punc ]
+main twoidens
+twoidens [ ^ iden ^ iden ]

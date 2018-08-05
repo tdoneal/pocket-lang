@@ -18,11 +18,11 @@ func TestThing(t *testing.T) {
 	fakeTokens := []Token{
 		Token{
 			Data: "test",
-			Type: TOK0_WHITESPACE,
+			Type: TOK0_ALPHANUMERIC,
 		},
 		Token{
-			Data: ",",
-			Type: TOK0_PUNCTUATION,
+			Data: "me",
+			Type: TOK0_ALPHANUMERIC,
 		},
 	}
 

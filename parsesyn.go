@@ -26,14 +26,10 @@ type ParserSyn struct {
 	output      *Parser
 }
 
-type Parser struct {
-	main        Pattern
-	tokenLookup map[string]int
-}
-
 const (
-	PATTERN_TOKENREF = 0
-	PATTERN_OPERATOR = 1
+	PATTERN_TOKENREF   = 0
+	PATTERN_OPERATOR   = 1
+	PATTERN_PATTERNREF = 2
 )
 
 type Pattern struct {
@@ -71,14 +67,14 @@ func (parser *ParserSyn) parsesyn(file string) Parser {
 		for j := 0; j < len(tokens); j++ {
 			tokens[j] = strings.Trim(tokens[j], " \t\n\r")
 		}
-		parser.handleTokens(tokens)
+		parser.handleLineTokens(tokens)
 
 	}
 
 	return *parser.output
 }
 
-func (parser *ParserSyn) handleTokens(tokens []string) {
+func (parser *ParserSyn) handleLineTokens(tokens []string) {
 	ftok := tokens[0]
 
 	if ftok == "class" {
@@ -92,13 +88,17 @@ func (parser *ParserSyn) handleTokens(tokens []string) {
 		}
 	} else {
 		if parser.ctx == PS_CTX_CLASS {
-			tokname := tokens[0]
-			fmt.Println("token definition", tokname)
-			tokvalue, _ := parser.parseValue(tokens, 1, PS_VAL_CTX_GENERIC)
-			fmt.Println("final token value", tokvalue)
-			if tokname == "main" && parser.class == "root" {
-				parser.output.main = tokvalue
+			pattname := tokens[0]
+			fmt.Println("pattern definition", pattname)
+			pattvalue, _ := parser.parseValue(tokens, 1, PS_VAL_CTX_GENERIC)
+			fmt.Println("final pattern value", pattvalue)
+			if pattname == "main" && parser.class == "root" {
+				parser.output.main = pattvalue
 			}
+			if parser.output.patternLookup == nil {
+				parser.output.patternLookup = make(map[string]Pattern)
+			}
+			parser.output.patternLookup[pattname] = pattvalue
 		} else if parser.ctx == PS_CTX_TOK_LOOKUP {
 			parser.handleTokenLookup(tokens)
 		}
@@ -137,17 +137,20 @@ func (parser *ParserSyn) parseValue(tokens []string, offset int, ctx int) (Patte
 		return rv, 1 + argcons
 	} else if ftok == "[" {
 		return parser.parseSequence(tokens, offset, ctx)
+	} else if ftok == "{" {
+		return parser.parseDisjunction(tokens, offset, ctx)
 	} else {
-		fmt.Println("token reference", ftok, "encountered")
-		rv := Pattern{
-			Type: PATTERN_TOKENREF,
-			Data: ftok,
-		}
-		if ctx == PS_VAL_CTX_LLTOK {
+		rv := Pattern{}
+		if ctx == PS_VAL_CTX_GENERIC {
+			println("pattern reference", ftok, "encountered")
+			rv.Data = ftok
+			rv.Type = PATTERN_PATTERNREF
+		} else if ctx == PS_VAL_CTX_LLTOK {
+			fmt.Println("token reference", ftok, "encountered")
 			if itokid, ok := parser.tokenLookup[ftok]; ok {
 				rv.TokenId = itokid
 			} else {
-				panic("invalid token" + ftok)
+				panic("invalid low-level token reference " + ftok)
 			}
 		}
 		return rv, 1
@@ -183,39 +186,31 @@ func (parser *ParserSyn) parseSequence(tokens []string, offset int, ctx int) (Pa
 	panic("invalid syntax in sequential operator")
 }
 
-func (parser *Parser) isValid(tokens []Token) (bool, int) {
-	fmt.Println("Checking validity of input string", tokens)
-	return parser.isValidNode(parser.main, tokens, 0)
-}
-
-func (parser *Parser) isValidNode(pattern Pattern, tokens []Token, offset int) (bool, int) {
-	fmt.Println("checking isvalidnode.  pattern", pattern.String(), "currToken", tokens[offset].String())
-	if pattern.Operator == "^" {
-		tokenId := pattern.Args[0].TokenId
-		fmt.Println("token id", tokenId)
-		ctok := tokens[offset]
-		if ctok.Type == tokenId {
-			return true, 1
-		} else {
-			return false, 0
-		}
-	} else if pattern.Operator == "[]" {
-		return parser.isValidSequence(pattern.Args, tokens, offset)
-	} else {
-		panic("unknown operator" + pattern.Operator)
-	}
-	return false, 0
-}
-
-func (parser *Parser) isValidSequence(patterns []Pattern, tokens []Token, offset int) (bool, int) {
+// Parses the { ... } (disjunction) construction
+func (parser *ParserSyn) parseDisjunction(tokens []string, offset int, ctx int) (Pattern, int) {
+	patterns := make([]Pattern, 0)
 	cons := 0
-	for i := 0; i < len(patterns); i++ {
-		argValid, argcons := parser.isValidNode(patterns[i], tokens, offset)
-		if !argValid {
-			return false, 0
+
+	// skip initial "{"
+	offset += 1
+	cons += 1
+
+	for offset < len(tokens) {
+		ctok := tokens[offset]
+		if ctok == "}" {
+			rv := Pattern{
+				Type:     PATTERN_OPERATOR,
+				Operator: "{}",
+				Args:     patterns,
+			}
+			fmt.Println("finished parsing disjunction:", len(patterns), "elements")
+			return rv, cons
+		} else {
+			patt, pcons := parser.parseValue(tokens, offset, PS_VAL_CTX_GENERIC)
+			patterns = append(patterns, patt)
+			offset += pcons
+			cons += pcons
 		}
-		offset += argcons
-		cons += argcons
 	}
-	return true, cons
+	panic("invalid syntax in disjunction operator")
 }
