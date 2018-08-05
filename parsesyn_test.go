@@ -17,15 +17,19 @@ func TestThing(t *testing.T) {
 
 	fakeTokens := []Token{
 		Token{
-			Data: "hello",
-			Type: TOK0_ALPHANUMERIC,
+			Data: "test",
+			Type: TOK0_WHITESPACE,
+		},
+		Token{
+			Data: ",",
+			Type: TOK0_PUNCTUATION,
 		},
 	}
 
 	fmt.Println("final token lookup table", parser.tokenLookup)
 	fmt.Println("final generated parser", *parser.output)
 
-	finalIsValid := parser.output.isValid(fakeTokens)
+	finalIsValid, finalCons := parser.output.isValid(fakeTokens)
 
-	fmt.Println("final isValid?", finalIsValid)
+	fmt.Println("final isValid?", finalIsValid, "finalConsumed", finalCons)
 }

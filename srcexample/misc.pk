@@ -1,3 +1,111 @@
 
 
 arrsub = arr[7..9] # extracts elements 7 and 8
+
+square x -> * x x
+square(x)
+    return * x x
+
+square x: return * x x
+square(x): return * x x
+square(x) -> * x x
+
+add a, b -> + a b
+
+prags int32
+    a : 45
+    b : 78
+    c : 92
+
+main
+    print a
+    print(a)
+
+Dog class
+    wag: print "wag"
+    bark: print "bark"
+    hungerLevel float = 0.0
+
+    new
+        hungerLevel = 1.0
+
+main
+    d Dog : new
+    d.hungerLevel : 0.4
+    d.wag
+    d.bark
+
+    x string = "234867562"
+
+stringOpper(str string)
+    print str
+    newstring : + str "hello"
+
+    i int : 0
+    loop
+        print i
+        i +: 1
+        if i = 10: break
+
+    newstring : +(str, "hello", "other stuff")
+    newstring : + newstring "more"
+    newstring : + newstring, "more"
+
+    m Map : {
+        "thing": "thong"
+        3: 8
+        92: 173
+    } 
+
+    x List : [3, 6, 3]
+    print x # [3 6 3]
+
+    m : { 3:4  8:9}
+    m : { 3:4, 4:5 }
+
+    # list : List frozen
+    # string : String frozen
+    # map : Map frozen
+    # set : Set frozen
+    # bag : Bag frozen
+
+    s set : {4 6 "boburuncle" 8}
+    print s # {4 6 "boburuncle" 3}
+
+    l: 6 9 3
+    print l # [6 9 3]
+
+Point class
+    x,y float
+
+main
+    y list Point : [new(2 3) new(4 5)]
+    element : list 0
+    print element type # Point frozen
+    element x : 13 # error, element is frozen
+
+    for i in 0..y len
+        print "i=", i
+
+    for e in y: print e
+
+    for i in y len
+        e : y i
+        print "i=", i
+
+ArrayTypes class
+    a List
+    b list # maybe list is not only frozen, it is hasnil: false?  seems conceptually similar but cant put my finger on a justification
+    c List int  
+    d List int, len: 5 
+    e List nonil 
+    f List(len:15 defel:76 nonil)
+
+
+
+main
+    doDangerousStuff
+
+    catch e Error
+        print + "Error" e
+

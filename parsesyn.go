@@ -32,8 +32,8 @@ type Parser struct {
 }
 
 const (
-	STOK_TOKENREF = 0
-	STOK_OPERATOR = 1
+	PATTERN_TOKENREF = 0
+	PATTERN_OPERATOR = 1
 )
 
 type Pattern struct {
@@ -42,6 +42,15 @@ type Pattern struct {
 	TokenId  int
 	Operator string
 	Args     []Pattern
+}
+
+func (pattern *Pattern) String() string {
+	rv := pattern.Operator + "(" + pattern.Data
+	if pattern.Operator == "^" {
+		rv += ":" + strconv.Itoa(pattern.Args[0].TokenId)
+	}
+	rv += ")"
+	return rv
 }
 
 func (parser *ParserSyn) parsesyn(file string) Parser {
@@ -113,22 +122,25 @@ func (parser *ParserSyn) handleTokenLookup(tokens []string) {
 
 // starts parsing from a given location
 // returns the parsed value and how many tokens were consumed
-func (parser *ParserSyn) parseValue(tokens []string, offset int32, ctx int32) (Pattern, int) {
+func (parser *ParserSyn) parseValue(tokens []string, offset int, ctx int) (Pattern, int) {
 	ftok := tokens[offset]
 	fmt.Println("Parsing at position", offset)
+
 	if ftok == "^" {
 		fmt.Println("operator ^ encountered")
 		arg, argcons := parser.parseValue(tokens, offset+1, PS_VAL_CTX_LLTOK)
 		rv := Pattern{
-			Type:     STOK_OPERATOR,
+			Type:     PATTERN_OPERATOR,
 			Operator: ftok,
 			Args:     []Pattern{arg},
 		}
 		return rv, 1 + argcons
+	} else if ftok == "[" {
+		return parser.parseSequence(tokens, offset, ctx)
 	} else {
 		fmt.Println("token reference", ftok, "encountered")
 		rv := Pattern{
-			Type: STOK_TOKENREF,
+			Type: PATTERN_TOKENREF,
 			Data: ftok,
 		}
 		if ctx == PS_VAL_CTX_LLTOK {
@@ -142,19 +154,68 @@ func (parser *ParserSyn) parseValue(tokens []string, offset int32, ctx int32) (P
 	}
 }
 
-func (parser *Parser) isValid(tokens []Token) bool {
+// Parses the [ ... ] construction
+func (parser *ParserSyn) parseSequence(tokens []string, offset int, ctx int) (Pattern, int) {
+	patterns := make([]Pattern, 0)
+	cons := 0
+
+	// skip initial "["
+	offset += 1
+	cons += 1
+
+	for offset < len(tokens) {
+		ctok := tokens[offset]
+		if ctok == "]" {
+			rv := Pattern{
+				Type:     PATTERN_OPERATOR,
+				Operator: "[]",
+				Args:     patterns,
+			}
+			fmt.Println("finished parsing sequence:", len(patterns), "elements")
+			return rv, cons
+		} else {
+			patt, pcons := parser.parseValue(tokens, offset, PS_VAL_CTX_GENERIC)
+			patterns = append(patterns, patt)
+			offset += pcons
+			cons += pcons
+		}
+	}
+	panic("invalid syntax in sequential operator")
+}
+
+func (parser *Parser) isValid(tokens []Token) (bool, int) {
 	fmt.Println("Checking validity of input string", tokens)
 	return parser.isValidNode(parser.main, tokens, 0)
 }
 
-func (parser *Parser) isValidNode(pattern Pattern, tokens []Token, offset int32) bool {
+func (parser *Parser) isValidNode(pattern Pattern, tokens []Token, offset int) (bool, int) {
+	fmt.Println("checking isvalidnode.  pattern", pattern.String(), "currToken", tokens[offset].String())
 	if pattern.Operator == "^" {
 		tokenId := pattern.Args[0].TokenId
 		fmt.Println("token id", tokenId)
 		ctok := tokens[offset]
 		if ctok.Type == tokenId {
-			return true
+			return true, 1
+		} else {
+			return false, 0
 		}
+	} else if pattern.Operator == "[]" {
+		return parser.isValidSequence(pattern.Args, tokens, offset)
+	} else {
+		panic("unknown operator" + pattern.Operator)
 	}
-	return false
+	return false, 0
+}
+
+func (parser *Parser) isValidSequence(patterns []Pattern, tokens []Token, offset int) (bool, int) {
+	cons := 0
+	for i := 0; i < len(patterns); i++ {
+		argValid, argcons := parser.isValidNode(patterns[i], tokens, offset)
+		if !argValid {
+			return false, 0
+		}
+		offset += argcons
+		cons += argcons
+	}
+	return true, cons
 }
