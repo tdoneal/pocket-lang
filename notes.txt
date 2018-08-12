@@ -1,3 +1,74 @@
 two types of patterns:
 whole-pattern: must consume the entire pattern to be valid
 whole-input: must consume the entire input to be valid
+
+
+token sets ideas:
+set 0: characters
+set 1: alphanumeric, punc, whitespace
+set 2: comments, identifiers, literals (string, int, etc), keywords, syneol, syntab
+
+stream rewriting paradigm:
+stream -> stream in general:
+some tokens should go to more than one output token
+some output tokens should be composed of more than one input token
+a common representation is hierarchical
+for example we might have the syntax
+
+main
+    print "x"
+
+and we desire the output token string
+
+func ( stmt ( funccall ( strlit ( x ) ) ) )
+
+if we have intermediate token set representation, keep in mind that the final token set 
+must still go down to the character level, as it must somehow represent the entropy in the original source file,
+most of which is likely from string or numeric literals
+
+stream rewriting syntax
+pattern-name ( > output-token-sequence ) : pattern-def
+pass [args]
+
+pass semantics: passes through all tokens specified in args
+
+output-token-sequence syntax: 
+    number (pack)
+    number: output token id
+    pack: optional keyword to specify to not use the defeault OUT_ID START [CHILDREN] END output pattern.
+        if pack is specified, only the OUT_ID token will be emitted
+
+the matcher is "pattern first" by default, not "token-first"
+this means that the parser only "understands" things explicitly defined in the patterns,
+and that no tokens are passed through by default
+
+when a pattern matcher matches a pattern, an implicit "match tree" is created.  this tree
+associates the pattern with all underlying tokens which were matched.  the tree's children
+are the subpatterns of the pattern, each with their associated matched tokens.  For example
+consider the pattern StringLiteral: [" *alphanumeric "] with the input tokens "hithere".
+Some nodes in this match tree are named explicitly, others are implicit based on the specified pattern operators, 
+such as Sequence, ManyGreedy, Disjunction.
+
+Each pattern operator has its own match tree representation: TODO: define sensible match trees for each
+primitive pattern operator (Sequence, ManyGreedy, Disjunction)
+
+The generated match tree is:
+StringLiteral(Sequence(TokenMatch("), ManyGreedy(AlphaNumeric(Disjunction()))))
+
+General phases (pocket->go):
+start format: linear list of characters (max-depth: 0)
+tokenization (custom code, not that long) (output format: list of Tokens, max-depth: 1)
+syntax tree-building (could be custom, but so many different node types that can be useful to use a special pattern language)
+    (output format: custom tree )
+tree->graph ( output format: same as tree but with some circular references)
+graph type propagation (output format: same as tree)
+graph execution optimization (output format: same as tree)
+graph->tree (necessary?  not sure)
+tokenization (output format: list of tokens)
+output formatting (output format: list of characters)
+
+simplified language: only supports scripting (whole file is the "main" function)
+    only integer literals supported
+    no type declarations
+    only the print function supported
+    only the add (+) operation supported

@@ -1,0 +1,106 @@
+token lookup
+tab 11
+eol 12
+space 32
+s! 33
+s"
+s#
+s$
+s%
+s&
+s'
+s(
+s)
+s*
+s+
+s,
+s-
+s.
+s/
+s0
+s1
+s2
+s3
+s4
+s5
+s6
+s7
+s8
+s9
+s:
+s;
+s<
+s=
+s>
+s?
+s@
+A
+B
+C
+D
+E
+F
+G
+H
+I
+J
+K
+L
+M
+N
+O
+P
+Q
+R
+S
+T
+U
+V
+W
+X
+Y
+Z
+s[
+s\
+s]
+s^
+s_
+s`
+a
+b
+c
+d
+e
+f
+g
+h
+i
+j
+k
+l
+m
+n
+o
+p
+q
+r
+s
+t
+u
+v
+w
+x
+y
+z
+s{
+s|
+s}
+s~
+
+class root
+main 1000 : * { alpha numer punc space tab eol }
+alpha : * { ^ a ^ b ^ c ^ d ^ e ^ f ^ g ^ h ^ i ^ j ^ k ^ l ^ m ^ n ^ o ^ p ^ q ^ r ^ s ^ t ^ u ^ v ^ w ^ x ^ y ^ z ^ A ^ B ^ C ^ D ^ E ^ F ^ G ^ H ^ I ^ J ^ K ^ L ^ M ^ N ^ O ^ P ^ Q ^ R ^ S ^ T ^ U ^ V ^ W ^ X ^ Y ^ Z }
+numer : * { ^ s0 ^ s1 ^ s2 ^ s3 ^ s4 ^ s5 ^ s6 ^ s7 ^ s8 ^ s9 }
+punc : { ^ s! ^ s" ^ s# ^ s$ ^ s% ^ s& ^ s' ^ s( ^ s) ^ s* ^ s+ ^ s, ^ s- ^ s. ^ s/ ^ s: ^ s; ^ s< ^ s= ^ s> ^ s? ^ s@ ^ s[ ^ s\ ^ s] ^ s^ ^ s_ ^ s` ^ s{ ^ s| ^ s} ^ s~ }
+pass space tab eol
+

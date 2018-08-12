@@ -1,7 +1,8 @@
-package main
+package parsesyn
 
 import (
 	"fmt"
+	"io/ioutil"
 	"strconv"
 	"strings"
 )
@@ -20,11 +21,12 @@ const (
 )
 
 type ParserSyn struct {
-	ctx         int
-	class       string
-	tokenLookup map[string]int
-	output      *Parser
-	tokens      []string
+	ctx                  int
+	class                string
+	tokenLookup          map[string]int
+	output               *Parser
+	tokens               []string
+	outputTokenIdCounter int
 }
 
 const (
@@ -34,11 +36,12 @@ const (
 )
 
 type Pattern struct {
-	Type     int
-	Data     string
-	TokenId  int
-	Operator string
-	Args     []Pattern
+	Type          int
+	Data          string
+	TokenId       int
+	OutputTokenId int
+	Operator      string
+	Args          []Pattern
 }
 
 func (pattern *Pattern) String() string {
@@ -50,10 +53,20 @@ func (pattern *Pattern) String() string {
 	return rv
 }
 
-func (parser *ParserSyn) parsesyn(file string) Parser {
+func parseSyntaxFile(filepath string) Parser {
+	dat, err := ioutil.ReadFile("./langs/basic.syntax")
+	if err != nil {
+		panic(err)
+	}
+	return parseSyntaxFileContents(string(dat))
+}
+
+func parseSyntaxFileContents(file string) Parser {
 	fmt.Println("Parsing syntax file", file)
 
 	// currclass := "root"
+
+	parser := &ParserSyn{}
 
 	parser.output = &Parser{}
 
@@ -90,21 +103,35 @@ func (parser *ParserSyn) handleLineTokens(tokens []string) {
 		}
 	} else {
 		if parser.ctx == PS_CTX_CLASS {
-			pattname := tokens[0]
-			fmt.Println("pattern definition", pattname)
-			pattvalue, _ := parser.parseValue(1, PS_VAL_CTX_GENERIC)
-			fmt.Println("final pattern value", pattvalue)
-			if pattname == "main" && parser.class == "root" {
-				parser.output.main = pattvalue
-			}
-			if parser.output.patternLookup == nil {
-				parser.output.patternLookup = make(map[string]*Pattern)
-			}
-			parser.output.patternLookup[pattname] = &pattvalue
+			parser.parsePatternDef(tokens)
 		} else if parser.ctx == PS_CTX_TOK_LOOKUP {
 			parser.handleTokenLookup(tokens)
 		}
 	}
+}
+
+func (parser *ParserSyn) parsePatternDef(tokens []string) {
+	pattname := tokens[0]
+	fmt.Println("pattern definition", pattname)
+	// handle special cast of numeric id (output token id)
+	secondtoken := tokens[1]
+	numid, err := strconv.Atoi(secondtoken)
+	optokid := parser.outputTokenIdCounter
+	if err != nil {
+		// had output token id
+		optokid = numid
+	}
+
+	pattvalue, _ := parser.parseValue(1, PS_VAL_CTX_GENERIC)
+	fmt.Println("final pattern value", pattvalue)
+	if pattname == "main" && parser.class == "root" {
+		parser.output.main = pattvalue
+	}
+	if parser.output.patternLookup == nil {
+		parser.output.patternLookup = make(map[string]*Pattern)
+	}
+	pattvalue.OutputTokenId = optokid
+	parser.output.patternLookup[pattname] = &pattvalue
 }
 
 func (parser *ParserSyn) handleTokenLookup(tokens []string) {
@@ -117,7 +144,9 @@ func (parser *ParserSyn) handleTokenLookup(tokens []string) {
 	}
 
 	defInt, err := strconv.Atoi(def)
-	check(err)
+	if err != nil {
+		panic(err)
+	}
 
 	parser.tokenLookup[alias] = defInt
 }

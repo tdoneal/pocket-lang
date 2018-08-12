@@ -1,13 +1,13 @@
-package main
+package types
 
 import (
 	"strconv"
 )
 
 type SourceLocation struct {
-	line   int
-	column int
-	char   int
+	Line   int
+	Column int
+	Char   int
 }
 
 type Token struct {
