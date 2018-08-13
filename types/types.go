@@ -10,6 +10,15 @@ type SourceLocation struct {
 	Char   int
 }
 
+func (sl *SourceLocation) StringDebug() string {
+	if sl == nil {
+		return "(no location)"
+	}
+	humanLine := sl.Line + 1
+	humanCol := sl.Column + 1
+	return "line " + strconv.Itoa(humanLine) + " col " + strconv.Itoa(humanCol)
+}
+
 type Token struct {
 	Type int
 	Data string

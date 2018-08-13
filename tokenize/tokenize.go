@@ -29,6 +29,7 @@ type Tokenizer struct {
 	input   string
 	pos     int
 	state   int
+	srcLoc  *types.SourceLocation
 	tokbuf  *bytes.Buffer
 	outtoks []types.Token
 }
@@ -37,9 +38,14 @@ func Tokenize(input string) []types.Token {
 	fmt.Println("input", input)
 
 	tkzr := &Tokenizer{
-		input:  input,
-		pos:    0,
-		state:  0,
+		input: input,
+		pos:   0,
+		state: 0,
+		srcLoc: &types.SourceLocation{
+			Char:   0,
+			Line:   0,
+			Column: 0,
+		},
 		tokbuf: &bytes.Buffer{},
 	}
 
@@ -67,7 +73,7 @@ func (tkzr *Tokenizer) processInit(input rune) {
 		tkzr.state = TK_ALPHANUM
 	} else if input == ':' {
 		tkzr.emitTokenRune(TK_COLON, input)
-		tkzr.pos++
+		tkzr.incr()
 	} else if isDigit(input) {
 		tkzr.processLiteralInt()
 	} else if input == ' ' {
@@ -77,7 +83,7 @@ func (tkzr *Tokenizer) processInit(input rune) {
 	} else if input == '\n' {
 		tkzr.processEOL()
 	} else {
-		tkzr.pos++
+		tkzr.incr()
 	}
 }
 
@@ -87,7 +93,7 @@ func (tkzr *Tokenizer) processLiteralInt() {
 		chr := tkzr.getCurrRune()
 		if isDigit(chr) {
 			tkzr.tokbuf.WriteRune(chr)
-			tkzr.pos++
+			tkzr.incr()
 		} else {
 			break
 		}
@@ -101,7 +107,7 @@ func (tkzr *Tokenizer) getCurrRune() rune {
 
 func (tkzr *Tokenizer) processSpace() {
 	// skip for now
-	tkzr.pos++
+	tkzr.incr()
 }
 
 func (tkzr *Tokenizer) processTab() {
@@ -109,32 +115,64 @@ func (tkzr *Tokenizer) processTab() {
 }
 
 func (tkzr *Tokenizer) processEOL() {
-	tkzr.emitTokenRune(TK_EOL, '\n')
-	tkzr.pos++
+	fmt.Println("process EOL")
+
+	lastTok := &tkzr.outtoks[len(tkzr.outtoks)-1]
+	if lastTok.Type == TK_EOL {
+		// skip token emission
+		fmt.Println("skipping EOL token emission")
+	} else {
+		tkzr.emitTokenRune(TK_EOL, '\n')
+	}
+	tkzr.incrLine()
 }
 
 func (tkzr *Tokenizer) processAlphanum(input rune) {
 	fmt.Println("proc char '" + string(input) + "'")
 	if isAlphic(input) {
 		tkzr.tokbuf.WriteRune(input)
-		tkzr.pos++
+		tkzr.incr()
 	} else {
 		tkzr.endBufedToken()
 	}
 }
 func (tkzr *Tokenizer) endBufedToken() {
 	tkzr.emitAndEnd(&types.Token{
-		Data: tkzr.tokbuf.String(),
-		Type: tkzr.state,
+		Data:           tkzr.tokbuf.String(),
+		Type:           tkzr.state,
+		SourceLocation: tkzr.createCurrSourceLocation(),
 	})
 	tkzr.tokbuf.Reset()
 }
 
 func (tkzr *Tokenizer) emitTokenRune(tokenType int, input rune) {
 	tkzr.emitAndEnd(&types.Token{
-		Data: string(input),
-		Type: tokenType,
+		Data:           string(input),
+		Type:           tokenType,
+		SourceLocation: tkzr.createCurrSourceLocation(),
 	})
+}
+
+func (tkzr *Tokenizer) createCurrSourceLocation() *types.SourceLocation {
+	rv := &types.SourceLocation{
+		Char:   tkzr.srcLoc.Char,
+		Line:   tkzr.srcLoc.Line,
+		Column: tkzr.srcLoc.Column,
+	}
+	return rv
+}
+
+func (tkzr *Tokenizer) incr() {
+	tkzr.pos++
+	tkzr.srcLoc.Char++
+	tkzr.srcLoc.Column++
+}
+
+func (tkzr *Tokenizer) incrLine() {
+	tkzr.pos++
+	tkzr.srcLoc.Char++
+	tkzr.srcLoc.Column = 0
+	tkzr.srcLoc.Line++
 }
 
 func (tkzr *Tokenizer) emitAndEnd(token *types.Token) {

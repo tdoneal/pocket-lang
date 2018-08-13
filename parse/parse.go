@@ -20,6 +20,17 @@ type Parser struct {
 	output *Node
 }
 
+type ParseError struct {
+	msg      string
+	location *types.SourceLocation
+}
+
+var _ error = ParseError{}
+
+func (p ParseError) Error() string {
+	return "At " + p.location.StringDebug() + ": " + p.msg
+}
+
 func Parse(tokens []types.Token) *Imperative {
 	fmt.Println("parsin", tokens)
 
@@ -39,9 +50,21 @@ func (p *Parser) parseImperative() *Imperative {
 		stmts = append(stmts, stmt)
 	}
 	rv := &Imperative{
-		statements: stmts,
+		Statements: stmts,
 	}
 	return rv
+}
+
+func (p *Parser) tryparse(parseFunc func() interface{}) (obj interface{}, e error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered in f", r)
+			e = r.(error)
+		}
+	}()
+	e = nil
+	obj = parseFunc()
+	return
 }
 
 func (p *Parser) parseStatement() Statement {
@@ -57,8 +80,8 @@ func (p *Parser) parseVarInit() *VarInit {
 	p.parseColon()
 	val := p.parseValue()
 	return &VarInit{
-		varName:  name,
-		varValue: val,
+		VarName:  name,
+		VarValue: val,
 	}
 }
 
@@ -77,12 +100,21 @@ func (p *Parser) parseLiteralInt() *LiteralInt {
 	tok := p.parseToken(tokenize.TK_LITERALINT)
 	ival, err := strconv.Atoi(tok.Data)
 	if err != nil {
-		panic("int literal syntax err")
+		p.raiseParseError("in int literal")
 	}
 	rv := &LiteralInt{
-		value: ival,
+		Value: ival,
 	}
 	return rv
+}
+
+func (p *Parser) raiseParseError(msg string) {
+	tok := p.currToken()
+	pe := &ParseError{
+		msg:      msg,
+		location: tok.SourceLocation,
+	}
+	panic(pe)
 }
 
 func (p *Parser) parseColon() {
@@ -99,7 +131,8 @@ func (p *Parser) parseToken(tokenType int) *types.Token {
 		p.pos++
 		return cval
 	} else {
-		panic("invalid token" + fmt.Sprint(cval))
+		p.raiseParseError("unexpected token")
+		return nil
 	}
 }
 

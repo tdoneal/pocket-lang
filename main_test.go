@@ -3,9 +3,12 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"pocket-lang/generate/goback"
 	"pocket-lang/parse"
 	"pocket-lang/tokenize"
 	"testing"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 func TestTokenize(t *testing.T) {
@@ -19,5 +22,8 @@ func TestTokenize(t *testing.T) {
 	fmt.Println("final tokens", tokens)
 
 	parsed := parse.Parse(tokens)
-	fmt.Println("final parsed", parsed)
+	fmt.Println("final parsed", spew.Sdump(parsed))
+
+	genned := goback.Generate(parsed)
+	fmt.Println("final generated", genned)
 }

@@ -4,12 +4,12 @@ type Statement interface {
 }
 
 type Imperative struct {
-	statements []Statement
+	Statements []Statement
 }
 
 type VarInit struct {
-	varName  string
-	varValue Value
+	VarName  string
+	VarValue Value
 }
 
 var _ Statement = VarInit{}
@@ -18,7 +18,7 @@ type Value interface {
 }
 
 type LiteralInt struct {
-	value int
+	Value int
 }
 
 var _ Value = LiteralInt{}
