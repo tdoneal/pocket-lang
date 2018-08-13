@@ -94,7 +94,10 @@ func (p *Parser) parseVarName() string {
 }
 
 func (p *Parser) parseValue() Value {
-	return p.parseLiteralInt()
+	return p.parseDisjunction([]ParseFunc{
+		func() interface{} { return p.parseLiteralInt() },
+		func() interface{} { return p.parseReceiverCall() },
+	})
 }
 
 func (p *Parser) parseDisjunction(funcs []ParseFunc) interface{} {
