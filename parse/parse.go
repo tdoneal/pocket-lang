@@ -1,9 +1,12 @@
 package parse
 
 import (
+	"fmt"
 	"pocket-lang/tokenize"
 	"pocket-lang/types"
 	"strconv"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 type Node struct {
@@ -56,6 +59,7 @@ func (p *Parser) parseImperative() *Imperative {
 func (p *Parser) tryparse(parseFunc ParseFunc) (obj interface{}, e error) {
 	defer func() {
 		if r := recover(); r != nil {
+			fmt.Println("safely caught", r.(error))
 			e = r.(error)
 		}
 	}()
@@ -89,15 +93,88 @@ func (p *Parser) parseVarInit() *VarInit {
 }
 
 func (p *Parser) parseVarName() string {
-	tok := p.parseToken(tokenize.TK_ALPHANUM)
+	tok := p.parseTokenAlphanumeric()
 	return tok.Data
 }
 
 func (p *Parser) parseValue() Value {
 	return p.parseDisjunction([]ParseFunc{
+		func() interface{} { return p.parseValueInlineOpStream() },
+		func() interface{} { return p.parseValueParenthetical() },
 		func() interface{} { return p.parseLiteralInt() },
 		func() interface{} { return p.parseReceiverCall() },
+		func() interface{} { return p.parseVarGetter() },
 	})
+}
+
+func (p *Parser) parseValueParenthetical() Value {
+	p.parseToken(tokenize.TK_PARENL)
+	innerVal := p.parseValue()
+	p.parseToken(tokenize.TK_PARENR)
+	return innerVal
+}
+
+func (p *Parser) parseValueInlineOpStream() *ValueInlineOpStream {
+	state := true // true: parsing non-stream ("atomic" value), false: parsing inline operator
+	totalOps := 0
+	elements := make([]ValueInlineOpStreamElement, 0)
+	for {
+		if state {
+			aval, err := p.tryparse(func() interface{} { return p.parseValueAtomic() })
+			fmt.Println(spew.Sdump(aval), spew.Sdump(err))
+			if err != nil {
+				p.raiseParseError("expected atomic value")
+				return nil
+			}
+			state = false
+			elements = append(elements, aval)
+		} else {
+			oldpos := p.pos
+			aval, err := p.tryparse(func() interface{} { return p.parseInlineOp() })
+			if err != nil {
+				if totalOps == 0 {
+					p.raiseParseError("expected inline op")
+					return nil
+				}
+				// if here, we've simply reached the end of the inline op stream normally
+				p.pos = oldpos
+				break
+			}
+			state = true
+			elements = append(elements, aval)
+			totalOps++
+		}
+	}
+	return &ValueInlineOpStream{
+		Elements: elements,
+	}
+}
+
+func (p *Parser) parseValueAtomic() Value {
+	return p.parseDisjunction([]ParseFunc{
+		func() interface{} { return p.parseValueParenthetical() },
+		func() interface{} { return p.parseLiteralInt() },
+		func() interface{} { return p.parseReceiverCall() },
+		func() interface{} { return p.parseVarGetter() },
+	})
+}
+
+func (p *Parser) parseInlineOp() InlineOp {
+	fmt.Println("parsing inline op, currtoken=", spew.Sdump(p.currToken()))
+	p.parseToken(tokenize.TK_ADDOP)
+	fmt.Println("it worked...")
+	return &AddOp{}
+}
+
+func (p *Parser) parseVarGetter() *VarGetter {
+	ctok := p.parseTokenAlphanumeric()
+	return &VarGetter{
+		VarName: ctok.Data,
+	}
+}
+
+func (p *Parser) parseTokenAlphanumeric() *types.Token {
+	return p.parseToken(tokenize.TK_ALPHANUM)
 }
 
 func (p *Parser) parseDisjunction(funcs []ParseFunc) interface{} {
@@ -125,7 +202,7 @@ func (p *Parser) parseReceiverCall() *ReceiverCall {
 }
 
 func (p *Parser) parseReceiverName() string {
-	ctok := p.parseToken(tokenize.TK_ALPHANUM)
+	ctok := p.parseTokenAlphanumeric()
 	return ctok.Data
 }
 

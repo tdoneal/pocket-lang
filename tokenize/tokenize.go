@@ -17,7 +17,10 @@ const (
 	TK_LITERALINT = 10
 	TK_ALPHANUM   = 20
 	TK_COLON      = 30
+	TK_ADDOP      = 40
 	TK_COMMENT    = 50
+	TK_PARENL     = 60
+	TK_PARENR     = 61
 )
 
 type LiteralInt struct {
@@ -82,6 +85,15 @@ func (tkzr *Tokenizer) processInit(input rune) {
 		tkzr.processTab()
 	} else if input == '\n' {
 		tkzr.processEOL()
+	} else if input == '+' {
+		tkzr.emitTokenRune(TK_ADDOP, input)
+		tkzr.incr()
+	} else if input == '(' {
+		tkzr.emitTokenRune(TK_PARENL, input)
+		tkzr.incr()
+	} else if input == ')' {
+		tkzr.emitTokenRune(TK_PARENR, input)
+		tkzr.incr()
 	} else {
 		tkzr.incr()
 	}
