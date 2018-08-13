@@ -22,3 +22,8 @@ type LiteralInt struct {
 }
 
 var _ Value = LiteralInt{}
+
+type ReceiverCall struct {
+	ReceiverName    *string
+	ReceivedMessage Value
+}

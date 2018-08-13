@@ -2,10 +2,7 @@ package goback
 
 import (
 	"bytes"
-	"fmt"
 	"pocket-lang/parse"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 type Generator struct {
@@ -14,7 +11,6 @@ type Generator struct {
 }
 
 func Generate(code *parse.Imperative) string {
-	fmt.Println("Generating code for parse tree", spew.Sdump(code))
 
 	generator := &Generator{
 		buf:   &bytes.Buffer{},

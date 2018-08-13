@@ -19,7 +19,7 @@ func TestTokenize(t *testing.T) {
 	}
 
 	tokens := tokenize.Tokenize(string(dat))
-	fmt.Println("final tokens", tokens)
+	fmt.Println("final tokens", spew.Sdump(tokens))
 
 	parsed := parse.Parse(tokens)
 	fmt.Println("final parsed", spew.Sdump(parsed))

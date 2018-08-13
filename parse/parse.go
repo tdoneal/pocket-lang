@@ -1,12 +1,9 @@
 package parse
 
 import (
-	"fmt"
 	"pocket-lang/tokenize"
 	"pocket-lang/types"
 	"strconv"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 type Node struct {
@@ -20,6 +17,8 @@ type Parser struct {
 	output *Node
 }
 
+type ParseFunc func() interface{}
+
 type ParseError struct {
 	msg      string
 	location *types.SourceLocation
@@ -32,7 +31,6 @@ func (p ParseError) Error() string {
 }
 
 func Parse(tokens []types.Token) *Imperative {
-	fmt.Println("parsin", tokens)
 
 	parser := &Parser{
 		input: tokens,
@@ -55,10 +53,9 @@ func (p *Parser) parseImperative() *Imperative {
 	return rv
 }
 
-func (p *Parser) tryparse(parseFunc func() interface{}) (obj interface{}, e error) {
+func (p *Parser) tryparse(parseFunc ParseFunc) (obj interface{}, e error) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Recovered in f", r)
 			e = r.(error)
 		}
 	}()
@@ -69,10 +66,16 @@ func (p *Parser) tryparse(parseFunc func() interface{}) (obj interface{}, e erro
 
 func (p *Parser) parseStatement() Statement {
 	// expect variable assignment
-	rv := p.parseVarInit()
+	rv := p.parseStatementBody()
 	p.parseEOL()
-	fmt.Println("emitted statement", spew.Sdump(rv))
 	return rv
+}
+
+func (p *Parser) parseStatementBody() Statement {
+	return p.parseDisjunction([]ParseFunc{
+		func() interface{} { return p.parseVarInit() },
+		func() interface{} { return p.parseReceiverCall() },
+	})
 }
 
 func (p *Parser) parseVarInit() *VarInit {
@@ -91,9 +94,36 @@ func (p *Parser) parseVarName() string {
 }
 
 func (p *Parser) parseValue() Value {
-	// currently only int literals supported
-	il := p.parseLiteralInt()
-	return il
+	return p.parseLiteralInt()
+}
+
+func (p *Parser) parseDisjunction(funcs []ParseFunc) interface{} {
+	for i := 0; i < len(funcs); i++ {
+		cfunc := funcs[i]
+		oldpos := p.pos
+		val, err := p.tryparse(cfunc)
+		if err == nil {
+			return val
+		}
+		p.pos = oldpos // backtrack
+	}
+	p.raiseParseError("parse error")
+	return nil
+}
+
+func (p *Parser) parseReceiverCall() *ReceiverCall {
+	name := p.parseReceiverName()
+	val := p.parseValue()
+	rv := &ReceiverCall{
+		ReceiverName:    &name,
+		ReceivedMessage: val,
+	}
+	return rv
+}
+
+func (p *Parser) parseReceiverName() string {
+	ctok := p.parseToken(tokenize.TK_ALPHANUM)
+	return ctok.Data
 }
 
 func (p *Parser) parseLiteralInt() *LiteralInt {
