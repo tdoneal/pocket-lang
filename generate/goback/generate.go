@@ -6,11 +6,11 @@ import (
 )
 
 type Generator struct {
-	input *parse.Imperative
+	input parse.Nod
 	buf   *bytes.Buffer
 }
 
-func Generate(code *parse.Imperative) string {
+func Generate(code parse.Nod) string {
 
 	generator := &Generator{
 		buf:   &bytes.Buffer{},
@@ -22,17 +22,17 @@ func Generate(code *parse.Imperative) string {
 	return generator.buf.String()
 }
 
-func (g *Generator) genImperative(input *parse.Imperative) {
+func (g *Generator) genImperative(input parse.Nod) {
 	g.buf.WriteString("func main() {\n")
 
-	for i := 0; i < len(input.Statements); i++ {
-		stmt := input.Statements[i]
-		g.genStatement(stmt)
-	}
+	// for i := 0; i < len(input.out); i++ {
+	// 	stmt := input.Statements[i]
+	// 	g.genStatement(stmt)
+	// }
 	g.buf.WriteString("}\n")
 }
 
-func (g *Generator) genStatement(input parse.Statement) {
+func (g *Generator) genStatement(input parse.Nod) {
 	g.buf.WriteString("statement\n")
 	// if input assignable *parse.VarInit {
 	// 	g.buf.WriteString("var init\n")

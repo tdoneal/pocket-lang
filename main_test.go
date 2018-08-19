@@ -6,6 +6,7 @@ import (
 	"pocket-lang/generate/goback"
 	"pocket-lang/parse"
 	"pocket-lang/tokenize"
+	"pocket-lang/xform"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -24,6 +25,9 @@ func TestTokenize(t *testing.T) {
 	parsed := parse.Parse(tokens)
 	fmt.Println("final parsed", spew.Sdump(parsed))
 
+	xformed := xform.Xform(parsed)
+	fmt.Println("final xformed:", spew.Sdump(xformed))
+
 	genned := goback.Generate(parsed)
 	fmt.Println("final generated", genned)
 }
@@ -34,22 +38,4 @@ type MyError struct {
 
 func (e MyError) Error() string {
 	return e.msg
-}
-func TestGoSem(t *testing.T) {
-	// mf := func() { fmt.Println("ran func") }
-	mfp := func() { panic(&MyError{"huge fail"}) }
-	obj, err := tryparse(mfp)
-	fmt.Println("obj", obj, "err", err)
-}
-
-func tryparse(parseFunc func()) (obj interface{}, e error) {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("safely caught", r.(error))
-			e = r.(error)
-		}
-	}()
-	e = nil
-	parseFunc()
-	return
 }

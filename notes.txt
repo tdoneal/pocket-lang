@@ -72,3 +72,28 @@ simplified language: only supports scripting (whole file is the "main" function)
     no type declarations
     only the print function supported
     only the add (+) operation supported
+
+tree (graph) rewriting rule:
+ /statement/varinit/* -> /statement/varinit/allstatements
+ streaminlineop ->
+
+ graph xform required operations:
+ searching graph for a node matching a condition
+    traversing all outbound edges of a node without reference to node-specific information
+ replacing a node in a graph (while preserving all incoming references)
+ traversing outbound edges of a node by "relationship type" (name)
+ 
+ proposed solution: explicit edge datastructure:
+
+ type Node struct {
+    outbound[]Edge
+    inbound []Edge
+ }
+
+ type Edge struct {
+     name string
+     Node in
+     Node out
+ }
+
+ need way to represent the allowable "field names" (edge names) for each node type

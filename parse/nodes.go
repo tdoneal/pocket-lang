@@ -1,45 +1,82 @@
 package parse
 
-type Statement interface {
+// TODO: write pretty printer for this int-based graph
+//  will require way of going from int->human readable edge names
+const (
+	NT_IMPERATIVE          = 10
+	NTR_STATEMENTS_L       = 11
+	NT_VARINIT             = 20
+	NTR_VARINIT_NAME       = 21
+	NTR_VARINIT_VALUE      = 22
+	NT_RECEIVERCALL        = 30
+	NTR_RECEIVERCALL_NAME  = 31
+	NTR_RECEIVERCALL_VALUE = 32
+	NT_IDENTIFIER          = 40
+	NT_ADDOP               = 100
+	NT_INLINEOPSTREAM      = 150
+	NTR_LIT_VALUE          = 201
+	NT_LIT_INT             = 210
+	NT_VAR_GETTER          = 250
+	NTR_VAR_GETTER_NAME    = 251
+	NTR_LIST_0             = 100000 // 100000<->0th element, 100001<->1st element, etc
+)
+
+type Edge struct {
+	in       *Node
+	edgeType int
+	out      *Node
 }
 
-type Imperative struct {
-	Statements []Statement
+type Node struct {
+	nodeType int
+	in       []*Edge
+	out      map[int]*Edge
+	data     interface{}
 }
 
-type VarInit struct {
-	VarName  string
-	VarValue Value
+type Nod *Node
+
+func NodeNew(nodeType int) Nod {
+	rv := &Node{
+		nodeType: nodeType,
+		in:       make([]*Edge, 0),
+		out:      make(map[int]*Edge),
+	}
+	return rv
 }
 
-var _ Statement = VarInit{}
-
-type Value interface {
+func NodeNewData(nodeType int, data interface{}) Nod {
+	rv := NodeNew(nodeType)
+	rv.data = data
+	return rv
 }
 
-type LiteralInt struct {
-	Value int
+func NodeNewChild(nodeType int, edgeType int, child Nod) Nod {
+	rv := (*Node)(NodeNew(nodeType))
+	rv.setChild(edgeType, child)
+	return rv
 }
 
-var _ Value = LiteralInt{}
-
-type ReceiverCall struct {
-	ReceiverName    *string
-	ReceivedMessage Value
+func NodeNewChildList(nodeType int, children []Nod) Nod {
+	rv := (*Node)(NodeNew(nodeType))
+	rv.setOutList(children)
+	return rv
 }
 
-type VarGetter struct {
-	VarName string
+func (n *Node) setOutList(children []Nod) {
+	for i := 0; i < len(children); i++ {
+		child := children[i]
+		n.setChild(NTR_LIST_0+i, child)
+	}
 }
 
-type ValueInlineOpStreamElement interface{}
-
-type ValueInlineOpStream struct {
-	Elements []ValueInlineOpStreamElement
-}
-
-type InlineOp interface{}
-
-type AddOp struct {
-	Args []Value
+func (n *Node) setChild(edgeType int, child Nod) {
+	// for now assume child doesn't already exist, so skip check
+	newEdge := &Edge{
+		edgeType: edgeType,
+		in:       n,
+		out:      child,
+	}
+	n.out[edgeType] = newEdge
+	child.in = append(child.in, newEdge)
 }

@@ -9,18 +9,13 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-type Node struct {
-	parent   *Node
-	children []Node
-}
-
 type Parser struct {
 	input  []types.Token
 	pos    int
 	output *Node
 }
 
-type ParseFunc func() interface{}
+type ParseFunc func() Nod
 
 type ParseError struct {
 	msg      string
@@ -33,7 +28,7 @@ func (p ParseError) Error() string {
 	return "At " + p.location.StringDebug() + ": " + p.msg
 }
 
-func Parse(tokens []types.Token) *Imperative {
+func Parse(tokens []types.Token) Nod {
 
 	parser := &Parser{
 		input: tokens,
@@ -43,23 +38,20 @@ func Parse(tokens []types.Token) *Imperative {
 	return parser.parseImperative()
 }
 
-func (p *Parser) parseImperative() *Imperative {
+func (p *Parser) parseImperative() Nod {
 	// expect list of Statements
-	stmts := make([]Statement, 0)
+	stmts := make([]Nod, 0)
 	for !p.isEOF() {
 		stmt := p.parseStatement()
 		stmts = append(stmts, stmt)
 	}
-	rv := &Imperative{
-		Statements: stmts,
-	}
+	rv := NodeNewChildList(NT_IMPERATIVE, stmts)
 	return rv
 }
 
-func (p *Parser) tryparse(parseFunc ParseFunc) (obj interface{}, e error) {
+func (p *Parser) tryparse(parseFunc ParseFunc) (obj Nod, e error) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("safely caught", r.(error))
 			e = r.(error)
 		}
 	}()
@@ -68,59 +60,58 @@ func (p *Parser) tryparse(parseFunc ParseFunc) (obj interface{}, e error) {
 	return
 }
 
-func (p *Parser) parseStatement() Statement {
+func (p *Parser) parseStatement() Nod {
 	// expect variable assignment
 	rv := p.parseStatementBody()
 	p.parseEOL()
 	return rv
 }
 
-func (p *Parser) parseStatementBody() Statement {
+func (p *Parser) parseStatementBody() Nod {
 	return p.parseDisjunction([]ParseFunc{
-		func() interface{} { return p.parseVarInit() },
-		func() interface{} { return p.parseReceiverCall() },
+		func() Nod { return p.parseVarInit() },
+		func() Nod { return p.parseReceiverCall() },
 	})
 }
 
-func (p *Parser) parseVarInit() *VarInit {
+func (p *Parser) parseVarInit() Nod {
 	name := p.parseVarName()
 	p.parseColon()
 	val := p.parseValue()
-	return &VarInit{
-		VarName:  name,
-		VarValue: val,
-	}
+	rv := (*Node)(NodeNew(NT_VARINIT))
+	rv.setChild(NTR_VARINIT_NAME, name)
+	rv.setChild(NT_RECEIVERCALL, val)
+	return rv
 }
 
-func (p *Parser) parseVarName() string {
-	tok := p.parseTokenAlphanumeric()
-	return tok.Data
+func (p *Parser) parseVarName() Nod {
+	return p.parseIdentifier()
 }
 
-func (p *Parser) parseValue() Value {
+func (p *Parser) parseValue() Nod {
 	return p.parseDisjunction([]ParseFunc{
-		func() interface{} { return p.parseValueInlineOpStream() },
-		func() interface{} { return p.parseValueParenthetical() },
-		func() interface{} { return p.parseLiteralInt() },
-		func() interface{} { return p.parseReceiverCall() },
-		func() interface{} { return p.parseVarGetter() },
+		func() Nod { return p.parseValueInlineOpStream() },
+		func() Nod { return p.parseValueParenthetical() },
+		func() Nod { return p.parseLiteralInt() },
+		func() Nod { return p.parseReceiverCall() },
+		func() Nod { return p.parseVarGetter() },
 	})
 }
 
-func (p *Parser) parseValueParenthetical() Value {
+func (p *Parser) parseValueParenthetical() Nod {
 	p.parseToken(tokenize.TK_PARENL)
 	innerVal := p.parseValue()
 	p.parseToken(tokenize.TK_PARENR)
 	return innerVal
 }
 
-func (p *Parser) parseValueInlineOpStream() *ValueInlineOpStream {
+func (p *Parser) parseValueInlineOpStream() Nod {
 	state := true // true: parsing non-stream ("atomic" value), false: parsing inline operator
 	totalOps := 0
-	elements := make([]ValueInlineOpStreamElement, 0)
+	elements := make([]Nod, 0)
 	for {
 		if state {
-			aval, err := p.tryparse(func() interface{} { return p.parseValueAtomic() })
+			aval, err := p.tryparse(func() Nod { return p.parseValueAtomic() })
 			fmt.Println(spew.Sdump(aval), spew.Sdump(err))
 			if err != nil {
 				p.raiseParseError("expected atomic value")
@@ -130,7 +121,7 @@ func (p *Parser) parseValueInlineOpStream() *ValueInlineOpStream {
 			elements = append(elements, aval)
 		} else {
 			oldpos := p.pos
-			aval, err := p.tryparse(func() interface{} { return p.parseInlineOp() })
+			aval, err := p.tryparse(func() Nod { return p.parseInlineOp() })
 			if err != nil {
 				if totalOps == 0 {
 					p.raiseParseError("expected inline op")
@@ -145,39 +136,38 @@ func (p *Parser) parseValueInlineOpStream() *ValueInlineOpStream {
 			totalOps++
 		}
 	}
-	return &ValueInlineOpStream{
-		Elements: elements,
-	}
+	return NodeNewChildList(NT_INLINEOPSTREAM, elements)
 }
 
-func (p *Parser) parseValueAtomic() Value {
+func (p *Parser) parseValueAtomic() Nod {
 	return p.parseDisjunction([]ParseFunc{
-		func() interface{} { return p.parseValueParenthetical() },
-		func() interface{} { return p.parseLiteralInt() },
-		func() interface{} { return p.parseReceiverCall() },
-		func() interface{} { return p.parseVarGetter() },
+		func() Nod { return p.parseValueParenthetical() },
+		func() Nod { return p.parseLiteralInt() },
+		func() Nod { return p.parseReceiverCall() },
+		func() Nod { return p.parseVarGetter() },
 	})
 }
 
-func (p *Parser) parseInlineOp() InlineOp {
+func (p *Parser) parseInlineOp() Nod {
 	fmt.Println("parsing inline op, currtoken=", spew.Sdump(p.currToken()))
 	p.parseToken(tokenize.TK_ADDOP)
 	fmt.Println("it worked...")
-	return &AddOp{}
+	return NodeNew(NT_ADDOP)
 }
 
-func (p *Parser) parseVarGetter() *VarGetter {
-	ctok := p.parseTokenAlphanumeric()
-	return &VarGetter{
-		VarName: ctok.Data,
-	}
+func (p *Parser) parseVarGetter() Nod {
+	return NodeNewChild(NT_VAR_GETTER, NTR_VAR_GETTER_NAME, p.parseIdentifier())
 }
 
 func (p *Parser) parseTokenAlphanumeric() *types.Token {
 	return p.parseToken(tokenize.TK_ALPHANUM)
 }
 
-func (p *Parser) parseDisjunction(funcs []ParseFunc) interface{} {
+func (p *Parser) parseIdentifier() Nod {
+	return NodeNewData(NT_IDENTIFIER, p.parseTokenAlphanumeric().Data)
+}
+
+func (p *Parser) parseDisjunction(funcs []ParseFunc) Nod {
 	for i := 0; i < len(funcs); i++ {
 		cfunc := funcs[i]
 		oldpos := p.pos
@@ -191,31 +181,30 @@ func (p *Parser) parseDisjunction(funcs []ParseFunc) interface{} {
 	return nil
 }
 
-func (p *Parser) parseReceiverCall() *ReceiverCall {
+func (p *Parser) parseReceiverCall() Nod {
 	name := p.parseReceiverName()
 	val := p.parseValue()
-	rv := &ReceiverCall{
-		ReceiverName:    &name,
-		ReceivedMessage: val,
-	}
+	// rv := &ReceiverCall{
+	// 	ReceiverName:    &name,
+	// 	ReceivedMessage: val,
+	// }
+	rv := (*Node)(NodeNew(NT_RECEIVERCALL))
+	rv.setChild(NTR_RECEIVERCALL_NAME, name)
+	rv.setChild(NTR_RECEIVERCALL_VALUE, val)
 	return rv
 }
 
-func (p *Parser) parseReceiverName() string {
-	ctok := p.parseTokenAlphanumeric()
-	return ctok.Data
+func (p *Parser) parseReceiverName() Nod {
+	return p.parseIdentifier()
 }
 
-func (p *Parser) parseLiteralInt() *LiteralInt {
+func (p *Parser) parseLiteralInt() Nod {
 	tok := p.parseToken(tokenize.TK_LITERALINT)
 	ival, err := strconv.Atoi(tok.Data)
 	if err != nil {
 		p.raiseParseError("in int literal")
 	}
-	rv := &LiteralInt{
-		Value: ival,
-	}
-	return rv
+	return NodeNewData(NT_LIT_INT, ival)
 }
 
 func (p *Parser) raiseParseError(msg string) {
