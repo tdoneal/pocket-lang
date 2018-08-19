@@ -2,9 +2,14 @@ package parse
 
 // TODO: write pretty printer for this int-based graph
 //  will require way of going from int->human readable edge names
+
+type NodeType struct {
+	id   int
+	name string
+}
+
 const (
 	NT_IMPERATIVE          = 10
-	NTR_STATEMENTS_L       = 11
 	NT_VARINIT             = 20
 	NTR_VARINIT_NAME       = 21
 	NTR_VARINIT_VALUE      = 22

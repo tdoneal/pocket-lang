@@ -23,10 +23,10 @@ func TestTokenize(t *testing.T) {
 	fmt.Println("final tokens", spew.Sdump(tokens))
 
 	parsed := parse.Parse(tokens)
-	fmt.Println("final parsed", spew.Sdump(parsed))
+	fmt.Println("final parsed", parse.PrettyPrint(parsed))
 
 	xformed := xform.Xform(parsed)
-	fmt.Println("final xformed:", spew.Sdump(xformed))
+	fmt.Println("final xformed:", parse.PrettyPrint(xformed))
 
 	genned := goback.Generate(parsed)
 	fmt.Println("final generated", genned)
