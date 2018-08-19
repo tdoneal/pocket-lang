@@ -35,11 +35,27 @@ func (d *Debug) initialize() {
 	ntl[NTR_RECEIVERCALL_NAME] = "NAME"
 	ntl[NTR_RECEIVERCALL_VALUE] = "ARG"
 	ntl[NT_ADDOP] = "ADD"
+	ntl[NT_VARINIT] = "VARINIT"
 	d.initialized = true
+}
+
+func (n *Node) String() string {
+	return n.PrettyPrint()
 }
 
 func PrettyPrint(n Nod) string {
 	return ((*Node)(n)).PrettyPrint()
+}
+
+func PrettyPrintNodes(nodes []Nod) string {
+	var buf bytes.Buffer = bytes.Buffer{}
+	buf.WriteString("[\n")
+	for _, ele := range nodes {
+		buf.WriteString(PrettyPrint(ele))
+		buf.WriteString("\n")
+	}
+	buf.WriteString("]\n")
+	return buf.String()
 }
 
 func (n *Node) PrettyPrint() string {
@@ -61,26 +77,26 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 		d.buf.WriteString("<SEEN>")
 		return
 	}
-	d.printNodeType(node.nodeType)
+	d.printNodeType(node.NodeType)
 	cnt := 0
-	if len(node.out) > 0 {
+	if len(node.Out) > 0 {
 		d.incIndent(1)
 		d.printEOL()
-		for _, edge := range node.out {
-			d.printNodeType(edge.edgeType)
+		for _, edge := range node.Out {
+			d.printNodeType(edge.EdgeType)
 			d.buf.WriteString("->")
-			d.internalPrettyPrint(edge.out)
-			if cnt < (len(node.out) - 1) {
+			d.internalPrettyPrint(edge.Out)
+			if cnt < (len(node.Out) - 1) {
 				d.printEOL()
 			}
 			cnt++
 		}
 		d.incIndent(-1)
 	} else {
-		if val, ok := node.data.(int); ok {
+		if val, ok := node.Data.(int); ok {
 			d.buf.WriteString(": ")
 			d.buf.WriteString(strconv.Itoa(val))
-		} else if val, ok := node.data.(string); ok {
+		} else if val, ok := node.Data.(string); ok {
 			d.buf.WriteString(": \"")
 			d.buf.WriteString(val)
 			d.buf.WriteString("\"")

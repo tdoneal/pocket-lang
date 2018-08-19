@@ -80,7 +80,7 @@ func (p *Parser) parseVarInit() Nod {
 	val := p.parseValue()
 	rv := (*Node)(NodeNew(NT_VARINIT))
 	rv.setChild(NTR_VARINIT_NAME, name)
-	rv.setChild(NT_RECEIVERCALL, val)
+	rv.setChild(NTR_VARINIT_VALUE, val)
 	return rv
 }
 

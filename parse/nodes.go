@@ -27,32 +27,32 @@ const (
 )
 
 type Edge struct {
-	in       *Node
-	edgeType int
-	out      *Node
+	In       *Node
+	EdgeType int
+	Out      *Node
 }
 
 type Node struct {
-	nodeType int
-	in       []*Edge
-	out      map[int]*Edge
-	data     interface{}
+	NodeType int
+	In       []*Edge
+	Out      map[int]*Edge
+	Data     interface{}
 }
 
 type Nod *Node
 
 func NodeNew(nodeType int) Nod {
 	rv := &Node{
-		nodeType: nodeType,
-		in:       make([]*Edge, 0),
-		out:      make(map[int]*Edge),
+		NodeType: nodeType,
+		In:       make([]*Edge, 0),
+		Out:      make(map[int]*Edge),
 	}
 	return rv
 }
 
 func NodeNewData(nodeType int, data interface{}) Nod {
 	rv := NodeNew(nodeType)
-	rv.data = data
+	rv.Data = data
 	return rv
 }
 
@@ -78,10 +78,10 @@ func (n *Node) setOutList(children []Nod) {
 func (n *Node) setChild(edgeType int, child Nod) {
 	// for now assume child doesn't already exist, so skip check
 	newEdge := &Edge{
-		edgeType: edgeType,
-		in:       n,
-		out:      child,
+		EdgeType: edgeType,
+		In:       n,
+		Out:      child,
 	}
-	n.out[edgeType] = newEdge
-	child.in = append(child.in, newEdge)
+	n.Out[edgeType] = newEdge
+	child.In = append(child.In, newEdge)
 }
