@@ -39,3 +39,9 @@ type MyError struct {
 func (e MyError) Error() string {
 	return e.msg
 }
+
+func TestGenCode(t *testing.T) {
+	x := (7)
+	y := (7 + 9 + (3 + 5))
+	print((4 + 90))
+}

@@ -45,7 +45,7 @@ func (p *Parser) parseImperative() Nod {
 		stmt := p.parseStatement()
 		stmts = append(stmts, stmt)
 	}
-	rv := NodeNewChildList(NT_IMPERATIVE, stmts)
+	rv := NodNewChildList(NT_IMPERATIVE, stmts)
 	return rv
 }
 
@@ -78,9 +78,9 @@ func (p *Parser) parseVarInit() Nod {
 	name := p.parseVarName()
 	p.parseColon()
 	val := p.parseValue()
-	rv := (*Node)(NodeNew(NT_VARINIT))
-	rv.setChild(NTR_VARINIT_NAME, name)
-	rv.setChild(NTR_VARINIT_VALUE, val)
+	rv := NodNew(NT_VARINIT)
+	NodSetChild(rv, NTR_VARINIT_NAME, name)
+	NodSetChild(rv, NTR_VARINIT_VALUE, val)
 	return rv
 }
 
@@ -136,7 +136,7 @@ func (p *Parser) parseValueInlineOpStream() Nod {
 			totalOps++
 		}
 	}
-	return NodeNewChildList(NT_INLINEOPSTREAM, elements)
+	return NodNewChildList(NT_INLINEOPSTREAM, elements)
 }
 
 func (p *Parser) parseValueAtomic() Nod {
@@ -152,11 +152,11 @@ func (p *Parser) parseInlineOp() Nod {
 	fmt.Println("parsing inline op, currtoken=", spew.Sdump(p.currToken()))
 	p.parseToken(tokenize.TK_ADDOP)
 	fmt.Println("it worked...")
-	return NodeNew(NT_ADDOP)
+	return NodNew(NT_ADDOP)
 }
 
 func (p *Parser) parseVarGetter() Nod {
-	return NodeNewChild(NT_VAR_GETTER, NTR_VAR_GETTER_NAME, p.parseIdentifier())
+	return NodNewChild(NT_VAR_GETTER, NTR_VAR_GETTER_NAME, p.parseIdentifier())
 }
 
 func (p *Parser) parseTokenAlphanumeric() *types.Token {
@@ -164,7 +164,7 @@ func (p *Parser) parseTokenAlphanumeric() *types.Token {
 }
 
 func (p *Parser) parseIdentifier() Nod {
-	return NodeNewData(NT_IDENTIFIER, p.parseTokenAlphanumeric().Data)
+	return NodNewData(NT_IDENTIFIER, p.parseTokenAlphanumeric().Data)
 }
 
 func (p *Parser) parseDisjunction(funcs []ParseFunc) Nod {
@@ -188,9 +188,9 @@ func (p *Parser) parseReceiverCall() Nod {
 	// 	ReceiverName:    &name,
 	// 	ReceivedMessage: val,
 	// }
-	rv := (*Node)(NodeNew(NT_RECEIVERCALL))
-	rv.setChild(NTR_RECEIVERCALL_NAME, name)
-	rv.setChild(NTR_RECEIVERCALL_VALUE, val)
+	rv := NodNew(NT_RECEIVERCALL)
+	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
+	NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
 	return rv
 }
 
@@ -204,7 +204,7 @@ func (p *Parser) parseLiteralInt() Nod {
 	if err != nil {
 		p.raiseParseError("in int literal")
 	}
-	return NodeNewData(NT_LIT_INT, ival)
+	return NodNewData(NT_LIT_INT, ival)
 }
 
 func (p *Parser) raiseParseError(msg string) {

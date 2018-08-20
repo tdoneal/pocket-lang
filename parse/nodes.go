@@ -13,10 +13,14 @@ const (
 	NT_VARINIT             = 20
 	NTR_VARINIT_NAME       = 21
 	NTR_VARINIT_VALUE      = 22
+	NT_VARDEF              = 25
+	NTR_VARDEF_NAME        = 26
 	NT_RECEIVERCALL        = 30
 	NTR_RECEIVERCALL_NAME  = 31
 	NTR_RECEIVERCALL_VALUE = 32
 	NT_IDENTIFIER          = 40
+	NT_VARTABLE            = 50
+	NTR_VARTABLE           = 51
 	NT_ADDOP               = 100
 	NT_INLINEOPSTREAM      = 150
 	NTR_LIT_VALUE          = 201
@@ -41,7 +45,7 @@ type Node struct {
 
 type Nod *Node
 
-func NodeNew(nodeType int) Nod {
+func NodNew(nodeType int) Nod {
 	rv := &Node{
 		NodeType: nodeType,
 		In:       make([]*Edge, 0),
@@ -50,32 +54,51 @@ func NodeNew(nodeType int) Nod {
 	return rv
 }
 
-func NodeNewData(nodeType int, data interface{}) Nod {
-	rv := NodeNew(nodeType)
+func NodNewData(nodeType int, data interface{}) Nod {
+	rv := NodNew(nodeType)
 	rv.Data = data
 	return rv
 }
 
-func NodeNewChild(nodeType int, edgeType int, child Nod) Nod {
-	rv := (*Node)(NodeNew(nodeType))
-	rv.setChild(edgeType, child)
+func NodNewChild(nodeType int, edgeType int, child Nod) Nod {
+	rv := (*Node)(NodNew(nodeType))
+	NodSetChild(rv, edgeType, child)
 	return rv
 }
 
-func NodeNewChildList(nodeType int, children []Nod) Nod {
-	rv := (*Node)(NodeNew(nodeType))
-	rv.setOutList(children)
+func NodNewChildList(nodeType int, children []Nod) Nod {
+	rv := (*Node)(NodNew(nodeType))
+	NodSetOutList(rv, children)
 	return rv
 }
 
-func (n *Node) setOutList(children []Nod) {
+func NodSetOutList(n Nod, children []Nod) {
 	for i := 0; i < len(children); i++ {
 		child := children[i]
-		n.setChild(NTR_LIST_0+i, child)
+		NodSetChild(n, NTR_LIST_0+i, child)
 	}
 }
 
-func (n *Node) setChild(edgeType int, child Nod) {
+func NodGetChild(n Nod, edgeType int) Nod {
+	return n.Out[edgeType].Out
+}
+
+func NodGetChildList(n Nod) []Nod {
+	rv := make([]Nod, 0)
+	li := NTR_LIST_0
+	for {
+		val, hasIt := n.Out[li]
+		if hasIt {
+			rv = append(rv, val.Out)
+			li++
+		} else {
+			break
+		}
+	}
+	return rv
+}
+
+func NodSetChild(n Nod, edgeType int, child Nod) {
 	// for now assume child doesn't already exist, so skip check
 	newEdge := &Edge{
 		EdgeType: edgeType,

@@ -36,6 +36,9 @@ func (d *Debug) initialize() {
 	ntl[NTR_RECEIVERCALL_VALUE] = "ARG"
 	ntl[NT_ADDOP] = "ADD"
 	ntl[NT_VARINIT] = "VARINIT"
+	ntl[NT_VARTABLE] = "VARTABLE"
+	ntl[NT_VARDEF] = "VARDEF"
+	ntl[NTR_VARDEF_NAME] = "VARNAME"
 	d.initialized = true
 }
 
@@ -73,13 +76,13 @@ func (d *DebugPrinter) PrettyPrint(node *Node) string {
 }
 
 func (d *DebugPrinter) internalPrettyPrint(node *Node) {
+	seen := false
 	if _, ok := d.alreadySeen[node]; ok {
-		d.buf.WriteString("<SEEN>")
-		return
+		seen = true
 	}
 	d.printNodeType(node.NodeType)
 	cnt := 0
-	if len(node.Out) > 0 {
+	if len(node.Out) > 0 && !seen {
 		d.incIndent(1)
 		d.printEOL()
 		for _, edge := range node.Out {
@@ -101,6 +104,10 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 			d.buf.WriteString(val)
 			d.buf.WriteString("\"")
 		}
+	}
+
+	if seen {
+		d.buf.WriteString(" (SEEN)")
 	}
 
 	d.alreadySeen[node] = true
