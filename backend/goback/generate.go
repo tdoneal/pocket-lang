@@ -70,9 +70,16 @@ func (g *Generator) genValue(n Nod) {
 		g.buf.WriteString(strconv.Itoa(n.Data.(int)))
 	} else if nt == NT_INLINEOPSTREAM {
 		g.genOpStream(n)
+	} else if nt == NT_VAR_GETTER {
+		g.genVarGetter(n)
 	} else {
 		g.buf.WriteString("value")
 	}
+}
+
+func (g *Generator) genVarGetter(n Nod) {
+	varName := NodGetChild(n, NTR_VAR_GETTER_NAME).Data.(string)
+	g.buf.WriteString(varName)
 }
 
 func (g *Generator) genOpStream(n Nod) {

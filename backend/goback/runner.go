@@ -8,7 +8,6 @@ import (
 )
 
 func RunFile(filePath string) {
-	fmt.Println("Running file", filePath)
 
 	gopath := "../outexec"
 	cleanr(gopath)
@@ -18,6 +17,7 @@ func RunFile(filePath string) {
 	copyFile(filePath, dst)
 	fmt.Println("copied source file from", filePath, "to", dst)
 
+	fmt.Println("running file", filePath)
 	output, _ := exec.Command("go", "run", dst).CombinedOutput()
 
 	fmt.Println("Output:")
