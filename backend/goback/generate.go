@@ -18,9 +18,14 @@ func Generate(code Nod) string {
 		input: code,
 	}
 
-	generator.genImperative(code)
+	generator.genSourceFile(code)
 
 	return generator.buf.String()
+}
+
+func (g *Generator) genSourceFile(input Nod) {
+	g.buf.WriteString("package main\n\n")
+	g.genImperative(input)
 }
 
 func (g *Generator) genImperative(input Nod) {

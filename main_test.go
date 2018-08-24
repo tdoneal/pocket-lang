@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"pocket-lang/generate/goback"
+	"pocket-lang/backend/goback"
 	"pocket-lang/parse"
 	"pocket-lang/tokenize"
 	"pocket-lang/xform"
@@ -35,6 +35,8 @@ func TestMain(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
+
+	goback.RunFile("./outcode/out.go")
 }
 
 type MyError struct {
