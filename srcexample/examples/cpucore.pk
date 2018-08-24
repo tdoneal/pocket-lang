@@ -1,0 +1,20 @@
+
+var itypes = [i8, i16, i32, i64]
+var dtypes = [i8, i16, i32, i64, f32, f64]
+
+surface ALU:
+	pragma func
+	
+	for itype in itypes:
+		add(itype, itype) -> itype
+		multiply(itype, itype) -> itype
+		negate(itype) -> itype
+
+surface RAM:
+	for itype in itypes:
+		for dtype in dtypes:
+			func memget(itype) -> dtype
+			func memset(itype, dtype) -> void
+			
+ALUCoreSurface alu
+RAMSurface ram

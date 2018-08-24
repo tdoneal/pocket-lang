@@ -12,7 +12,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-func TestTokenize(t *testing.T) {
+func TestMain(t *testing.T) {
 	fmt.Println("running")
 	dat, err := ioutil.ReadFile("./srcexample/hello.pk")
 	if err != nil {
@@ -30,6 +30,11 @@ func TestTokenize(t *testing.T) {
 
 	genned := goback.Generate(parsed)
 	fmt.Println("final generated", genned)
+
+	err = ioutil.WriteFile("./outcode/out.go", []byte(genned), 0644)
+	if err != nil {
+		panic(err)
+	}
 }
 
 type MyError struct {
@@ -41,7 +46,5 @@ func (e MyError) Error() string {
 }
 
 func TestGenCode(t *testing.T) {
-	x := (7)
-	y := (7 + 9 + (3 + 5))
-	print((4 + 90))
+
 }

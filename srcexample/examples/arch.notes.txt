@@ -1,0 +1,4 @@
+notes:
+
+Pocket programs run "in the pocket", when compiled, the output is generic to any Pocket runtime.
+The Pocket runtime is reponsible for any JIT.

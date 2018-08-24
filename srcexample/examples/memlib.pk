@@ -1,0 +1,17 @@
+use cpucore 
+
+		
+surface MemCopy:
+	for itype in itypes:
+		func copy(itype src, itype dest, itype len)
+		
+class MemCopierSoftware implements MemCopy:
+	over copy(itype src, dest, len):
+		itype i = 0
+		while counter<dest:
+			ram.memset(dest + i, ram.memget(src + i))
+			i ++
+		
+MemCopy memCopy
+
+			
