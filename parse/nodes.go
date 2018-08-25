@@ -88,6 +88,11 @@ func NodGetChild(n Nod, edgeType int) Nod {
 	return n.Out[edgeType].Out
 }
 
+func NodHasChild(n Nod, edgeType int) bool {
+	_, ok := n.Out[edgeType]
+	return ok
+}
+
 func NodGetChildList(n Nod) []Nod {
 	rv := make([]Nod, 0)
 	li := NTR_LIST_0

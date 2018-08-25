@@ -1,5 +1,10 @@
 main func
-    x: 2
-    
+    sub
+
 sub func
-    y: 3
+    println 13
+    subsub
+    subsub
+
+subsub func
+    println 15

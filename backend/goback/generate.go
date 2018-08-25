@@ -25,18 +25,37 @@ func Generate(code Nod) string {
 
 func (g *Generator) genSourceFile(input Nod) {
 	g.buf.WriteString("package main\n\n")
-	g.genImperative(input)
+
+	units := NodGetChildList(input)
+
+	for _, unit := range units {
+		if unit.NodeType == NT_FUNCDEF {
+			g.genFuncDef(unit)
+		} else {
+			panic("unknown source unit type")
+		}
+	}
+}
+
+func (g *Generator) genFuncDef(n Nod) {
+	funcName := NodGetChild(n, NTR_FUNCDEF_NAME).Data.(string)
+	g.buf.WriteString("func ")
+	g.buf.WriteString(funcName)
+	g.buf.WriteString("() {\n")
+
+	g.genImperative(NodGetChild(n, NTR_FUNCDEF_CODE))
+
+	g.buf.WriteString("}\n")
+
 }
 
 func (g *Generator) genImperative(input Nod) {
-	g.buf.WriteString("func main() {\n")
 
 	statements := NodGetChildList(input)
 	for _, stmt := range statements {
 		g.genStatement(stmt)
 	}
 
-	g.buf.WriteString("}\n")
 }
 
 func (g *Generator) genStatement(input Nod) {
@@ -60,7 +79,9 @@ func (g *Generator) genReceiverCall(n Nod) {
 	rcvName := NodGetChild(n, NTR_RECEIVERCALL_NAME).Data.(string)
 	g.buf.WriteString(rcvName)
 	g.buf.WriteString("(")
-	g.genValue(NodGetChild(n, NTR_RECEIVERCALL_VALUE))
+	if NodHasChild(n, NTR_RECEIVERCALL_VALUE) {
+		g.genValue(NodGetChild(n, NTR_RECEIVERCALL_VALUE))
+	}
 	g.buf.WriteString(")")
 }
 

@@ -148,7 +148,6 @@ func (p *Parser) tryparse(parseFunc ParseFunc) (obj Nod, e error) {
 }
 
 func (p *Parser) parseStatement() Nod {
-	// expect variable assignment
 	rv := p.parseStatementBody()
 	p.parseEOL()
 	return rv
@@ -157,7 +156,7 @@ func (p *Parser) parseStatement() Nod {
 func (p *Parser) parseStatementBody() Nod {
 	return p.parseDisjunction([]ParseFunc{
 		func() Nod { return p.parseVarInit() },
-		func() Nod { return p.parseReceiverCall() },
+		func() Nod { return p.parseReceiverCallStatement() },
 	})
 }
 
@@ -265,13 +264,20 @@ func (p *Parser) parseDisjunction(funcs []ParseFunc) Nod {
 	return nil
 }
 
+func (p *Parser) parseReceiverCallStatement() Nod {
+	name := p.parseReceiverName()
+	val := p.parseAtMostOne(func() Nod { return p.parseValue() })
+	rv := NodNew(NT_RECEIVERCALL)
+	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
+	if val != nil {
+		NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
+	}
+	return rv
+}
+
 func (p *Parser) parseReceiverCall() Nod {
 	name := p.parseReceiverName()
 	val := p.parseValue()
-	// rv := &ReceiverCall{
-	// 	ReceiverName:    &name,
-	// 	ReceivedMessage: val,
-	// }
 	rv := NodNew(NT_RECEIVERCALL)
 	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
 	NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
