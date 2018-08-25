@@ -13,23 +13,27 @@ import (
 )
 
 func TestMain(t *testing.T) {
-	fmt.Println("running")
-	dat, err := ioutil.ReadFile("./srcexample/hello.pk")
+
+	inFile := "./srcexample/hello.pk"
+	fmt.Println("compiling input file", inFile)
+	dat, err := ioutil.ReadFile(inFile)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("input file:")
+	fmt.Println(string(dat))
 
 	tokens := tokenize.Tokenize(string(dat))
-	fmt.Println("final tokens", spew.Sdump(tokens))
+	fmt.Println("final tokens:\n", spew.Sdump(tokens))
 
 	parsed := parse.Parse(tokens)
-	fmt.Println("final parsed", parse.PrettyPrint(parsed))
+	fmt.Println("final parsed:\n", parse.PrettyPrint(parsed))
 
 	xformed := xform.Xform(parsed)
-	fmt.Println("final xformed:", parse.PrettyPrint(xformed))
+	fmt.Println("final xformed:\n", parse.PrettyPrint(xformed))
 
 	genned := goback.Generate(parsed)
-	fmt.Println("final generated", genned)
+	fmt.Println("final generated:\n", genned)
 
 	err = ioutil.WriteFile("./outcode/out.go", []byte(genned), 0644)
 	if err != nil {

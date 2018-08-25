@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"pocket-lang/types"
-	"strconv"
 )
 
 const (
@@ -29,21 +28,24 @@ type LiteralInt struct {
 }
 
 type Tokenizer struct {
-	input   string
-	pos     int
-	state   int
-	srcLoc  *types.SourceLocation
-	tokbuf  *bytes.Buffer
-	outtoks []types.Token
+	input       string
+	pos         int
+	state       int
+	isPreline   bool // whether we are in the "first whitespace" on a line
+	indentLevel int
+	srcLoc      *types.SourceLocation
+	tokbuf      *bytes.Buffer
+	outtoks     []types.Token
 }
 
 func Tokenize(input string) []types.Token {
-	fmt.Println("input", input)
 
 	tkzr := &Tokenizer{
-		input: input,
-		pos:   0,
-		state: 0,
+		input:       input,
+		pos:         0,
+		state:       0,
+		isPreline:   true,
+		indentLevel: 0,
 		srcLoc: &types.SourceLocation{
 			Char:   0,
 			Line:   0,
@@ -52,26 +54,91 @@ func Tokenize(input string) []types.Token {
 		tokbuf: &bytes.Buffer{},
 	}
 
-	for tkzr.pos < len(input) {
-		var crune rune = rune(input[tkzr.pos])
-		tkzr.process(crune)
+	for !tkzr.isEOF() {
+		tkzr.process()
 	}
+	tkzr.cleanUpDanglingIndents()
 
 	return tkzr.outtoks
 }
 
-func (tkzr *Tokenizer) process(input rune) {
-	fmt.Println("state " + strconv.Itoa(tkzr.state) + ". proc rune '" + string(input) + "'")
+func (tkzr *Tokenizer) process() {
+	// fmt.Println("state " + strconv.Itoa(tkzr.state) + ". proc rune '" + string(input) + "'")
+	if tkzr.isPreline {
+		tkzr.processPreline()
+		tkzr.isPreline = false
+		return
+	}
 	if tkzr.state == TKS_INIT {
-		tkzr.processInit(input)
+		tkzr.processInit()
 	} else if tkzr.state == TK_ALPHANUM {
-		tkzr.processAlphanum(input)
+		tkzr.processAlphanum()
+	} else if tkzr.state == TK_COMMENT {
+		tkzr.processComment()
 	} else {
 		panic("unknown state that i'm in")
 	}
 }
 
-func (tkzr *Tokenizer) processInit(input rune) {
+func (tkzr *Tokenizer) processPreline() {
+	// now indents must be 4 spaces
+	nspaces := 0
+	lineEmpty := true
+	for !tkzr.isEOF() {
+		chr := tkzr.getCurrRune()
+		if isSpace(chr) {
+			nspaces++
+			tkzr.incr()
+		} else if isEOL(chr) {
+			break
+		} else {
+			lineEmpty = false
+			break
+		}
+	}
+
+	if lineEmpty {
+		return
+	}
+	expectedSpaces := tkzr.indentLevel * 4
+	if nspaces%4 != 0 {
+		panic("Invalid indent")
+	}
+	if nspaces-expectedSpaces > 4 {
+		panic("Invalid indent")
+	}
+	if nspaces-expectedSpaces == 4 {
+		fmt.Println("Indented block")
+		tkzr.indentLevel++
+		tkzr.emitTokenNoData(TK_INCINDENT)
+	} else {
+		nDecIndents := (expectedSpaces - nspaces) / 4
+		tkzr.deindent(nDecIndents)
+	}
+}
+
+func (tkzr *Tokenizer) deindent(nDecIndents int) {
+	for i := 0; i < nDecIndents; i++ {
+		tkzr.emitTokenNoData(TK_DECINDENT)
+	}
+	tkzr.indentLevel -= nDecIndents
+	fmt.Println("Deindented (", nDecIndents, ") block(s)")
+}
+
+func (tkzr *Tokenizer) cleanUpDanglingIndents() {
+	tkzr.deindent(tkzr.indentLevel)
+}
+
+func (tkzr *Tokenizer) processComment() {
+	if isEOL(tkzr.getCurrRune()) {
+		tkzr.state = TKS_INIT
+		return
+	}
+	tkzr.incr()
+}
+
+func (tkzr *Tokenizer) processInit() {
+	input := tkzr.getCurrRune()
 	if isAlphic(input) {
 		tkzr.state = TK_ALPHANUM
 	} else if input == ':' {
@@ -83,7 +150,7 @@ func (tkzr *Tokenizer) processInit(input rune) {
 		tkzr.processSpace()
 	} else if input == '\t' {
 		tkzr.processTab()
-	} else if input == '\n' {
+	} else if isEOL(input) {
 		tkzr.processEOL()
 	} else if input == '+' {
 		tkzr.emitTokenRune(TK_ADDOP, input)
@@ -94,9 +161,16 @@ func (tkzr *Tokenizer) processInit(input rune) {
 	} else if input == ')' {
 		tkzr.emitTokenRune(TK_PARENR, input)
 		tkzr.incr()
+	} else if input == '#' {
+		tkzr.processPound()
 	} else {
 		tkzr.incr()
 	}
+}
+
+func (tkzr *Tokenizer) processPound() {
+	tkzr.state = TK_COMMENT
+	tkzr.incr()
 }
 
 func (tkzr *Tokenizer) processLiteralInt() {
@@ -127,19 +201,18 @@ func (tkzr *Tokenizer) processTab() {
 }
 
 func (tkzr *Tokenizer) processEOL() {
-	fmt.Println("process EOL")
 
-	lastTok := &tkzr.outtoks[len(tkzr.outtoks)-1]
-	if lastTok.Type == TK_EOL {
+	if len(tkzr.outtoks) == 0 || tkzr.outtoks[len(tkzr.outtoks)-1].Type == TK_EOL {
 		// skip token emission
-		fmt.Println("skipping EOL token emission")
 	} else {
 		tkzr.emitTokenRune(TK_EOL, '\n')
+		tkzr.isPreline = true
 	}
 	tkzr.incrLine()
 }
 
-func (tkzr *Tokenizer) processAlphanum(input rune) {
+func (tkzr *Tokenizer) processAlphanum() {
+	input := tkzr.getCurrRune()
 	fmt.Println("proc char '" + string(input) + "'")
 	if isAlphic(input) {
 		tkzr.tokbuf.WriteRune(input)
@@ -187,9 +260,20 @@ func (tkzr *Tokenizer) incrLine() {
 	tkzr.srcLoc.Line++
 }
 
+func (tkzr *Tokenizer) isEOF() bool {
+	return tkzr.pos >= len(tkzr.input)
+}
+
 func (tkzr *Tokenizer) emitAndEnd(token *types.Token) {
 	tkzr.outtoks = append(tkzr.outtoks, *token)
 	tkzr.state = TKS_INIT
+}
+
+func (tkzr *Tokenizer) emitTokenNoData(tokenType int) {
+	tkzr.outtoks = append(tkzr.outtoks, types.Token{
+		SourceLocation: tkzr.createCurrSourceLocation(),
+		Type:           tokenType,
+	})
 }
 
 func isAlphic(input rune) bool {
@@ -199,4 +283,12 @@ func isAlphic(input rune) bool {
 
 func isDigit(input rune) bool {
 	return (input >= '0' && input <= '9')
+}
+
+func isEOL(input rune) bool {
+	return input == '\n'
+}
+
+func isSpace(input rune) bool {
+	return input == ' '
 }

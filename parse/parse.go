@@ -1,12 +1,9 @@
 package parse
 
 import (
-	"fmt"
 	"pocket-lang/tokenize"
 	"pocket-lang/types"
 	"strconv"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 type Parser struct {
@@ -39,14 +36,56 @@ func Parse(tokens []types.Token) Nod {
 }
 
 func (p *Parser) parseImperative() Nod {
-	// expect list of Statements
-	stmts := make([]Nod, 0)
-	for !p.isEOF() {
-		stmt := p.parseStatement()
-		stmts = append(stmts, stmt)
-	}
-	rv := NodNewChildList(NT_IMPERATIVE, stmts)
+	units := p.parseAtLeastOneGreedy(func() Nod {
+		return p.parseImperativeUnit()
+	})
+	rv := NodNewChildList(NT_IMPERATIVE, units)
 	return rv
+}
+
+func (p *Parser) parseManyGreedy(f ParseFunc) []Nod {
+	rv := make([]Nod, 0)
+	for !p.isEOF() {
+		opos := p.pos
+		n, err := p.tryparse(f)
+		if err != nil {
+			p.pos = opos
+			break
+		}
+		rv = append(rv, n)
+	}
+	return rv
+}
+
+func (p *Parser) parseManyGreedyEnsureCount(f ParseFunc,
+	countCheck func(int) bool) []Nod {
+	rv := p.parseManyGreedy(f)
+	if !countCheck(len(rv)) {
+		p.raiseParseError("incorrect number of subelements")
+	}
+	return rv
+}
+
+func (p *Parser) parseAtLeastOneGreedy(f ParseFunc) []Nod {
+	return p.parseManyGreedyEnsureCount(f, func(n int) bool { return n >= 1 })
+}
+
+func (p *Parser) parseImperativeUnit() Nod {
+	return p.parseDisjunction([]ParseFunc{
+		func() Nod { return p.parseImperativeBlock() },
+		func() Nod { return p.parseStatement() },
+	})
+}
+
+func (p *Parser) getCurrToken() *types.Token {
+	return &p.input[p.pos]
+}
+
+func (p *Parser) parseImperativeBlock() Nod {
+	p.parseToken(tokenize.TK_INCINDENT)
+	imp := p.parseImperative()
+	p.parseToken(tokenize.TK_DECINDENT)
+	return imp
 }
 
 func (p *Parser) tryparse(parseFunc ParseFunc) (obj Nod, e error) {
@@ -112,7 +151,6 @@ func (p *Parser) parseValueInlineOpStream() Nod {
 	for {
 		if state {
 			aval, err := p.tryparse(func() Nod { return p.parseValueAtomic() })
-			fmt.Println(spew.Sdump(aval), spew.Sdump(err))
 			if err != nil {
 				p.raiseParseError("expected atomic value")
 				return nil
@@ -149,9 +187,7 @@ func (p *Parser) parseValueAtomic() Nod {
 }
 
 func (p *Parser) parseInlineOp() Nod {
-	fmt.Println("parsing inline op, currtoken=", spew.Sdump(p.currToken()))
 	p.parseToken(tokenize.TK_ADDOP)
-	fmt.Println("it worked...")
 	return NodNew(NT_ADDOP)
 }
 
