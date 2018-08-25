@@ -21,41 +21,74 @@ func Xform(root Nod) Nod {
 
 func (x *Xformer) Xform() {
 	x.buildVarDefTables()
+	// x.buildFuncDefTables()
 }
 
 func (x *Xformer) buildVarDefTables() {
 	// find all variable initializers
 	// TODO: add support for multiple IMPERATIVEs, each with their own vartable
-	varInits := x.searchFor(func(n Nod) bool { return n.NodeType == NT_VARINIT })
 
-	fmt.Println("pretty nodes:", len(varInits))
+	// first, add an explicit link from each var init to it's corresponding
+	// top-level imperative
+	varInits := x.searchRoot(func(n Nod) bool { return n.NodeType == NT_VARINIT })
+
+	fmt.Println("all variable initializers:", len(varInits))
 	fmt.Println(PrettyPrintNodes(varInits))
 
-	var varDefs = make([]Nod, 0)
+	for _, ele := range varInits {
+		tlImper := x.findTopLevelImperative(ele)
+		if tlImper == nil {
+			panic("failed to find top level imperative")
+		}
+		NodSetChild(ele, NTR_TOPLEVEL_IMPERATIVE, tlImper)
 
+	}
+
+	fmt.Println("after linking tl imperatives: var inits:\n", PrettyPrintNodes(varInits))
+
+	// next, generate the vartables for each tl imperative
+	impVartables := make(map[Nod][]Nod)
 	for _, ele := range varInits {
 		varNameNode := ele.Out[NTR_VARINIT_NAME].Out
 		varName := varNameNode.Data.(string)
 		fmt.Println("varName", varName)
 		varDef := NodNewChild(NT_VARDEF, NTR_VARDEF_NAME, varNameNode)
-		varDefs = append(varDefs, varDef)
+		tlImper := NodGetChild(ele, NTR_TOPLEVEL_IMPERATIVE)
+		// lazily initialize the tables
+		if _, ok := impVartables[tlImper]; !ok {
+			impVartables[tlImper] = make([]Nod, 0)
+		}
+		impVartables[tlImper] = append(impVartables[tlImper], varDef)
 	}
 
-	imperatives := x.searchForNodeType(NT_IMPERATIVE)
-
-	fmt.Println("imperatives", PrettyPrintNodes(imperatives))
-
-	if len(imperatives) != 1 {
-		panic("incorrect # of imperatives")
+	// last, explicitly put the vartables in the graph
+	for imp, varTable := range impVartables {
+		varTableNod := NodNewChildList(NT_VARTABLE, varTable)
+		NodSetChild(imp, NTR_VARTABLE, varTableNod)
 	}
+}
 
-	varTable := NodNewChildList(NT_VARTABLE, varDefs)
-	imperative := (*Node)(imperatives[0])
+func (x *Xformer) findTopLevelImperative(n Nod) Nod {
+	found := x.searchFor(n, func(n Nod) bool {
+		return n.NodeType == NT_IMPERATIVE && x.oneParentIs(n,
+			func(n Nod) bool {
+				return n.NodeType == NT_FUNCDEF
+			})
+	}, func(n Nod) []Nod {
+		return x.allInNodes(n)
+	})
 
-	NodSetChild(imperative, NTR_VARTABLE, varTable)
+	return found[0]
+}
 
-	fmt.Println("final imperative", PrettyPrint(imperative))
-
+func (x *Xformer) oneParentIs(n Nod, cond func(Nod) bool) bool {
+	for _, ele := range n.In {
+		parent := ele.In
+		if cond(parent) {
+			return true
+		}
+	}
+	return false
 }
 
 func (x *Xformer) XformTest() {
@@ -86,7 +119,7 @@ func (x *Xformer) XformTest() {
 }
 
 func (x *Xformer) searchReplaceAll(cond func(Nod) bool, with func(Nod) Nod) {
-	toReplace := x.searchFor(cond)
+	toReplace := x.searchRoot(cond)
 	fmt.Println("search results: ", PrettyPrintNodes(toReplace))
 	for _, ele := range toReplace {
 		x.replace(ele, with(ele))
@@ -101,9 +134,10 @@ func (x *Xformer) replace(what Nod, with Nod) {
 }
 
 type Searcher struct {
-	alreadySeen map[Nod]bool
-	output      []Nod
-	condition   func(Nod) bool // TODO: add more flexible condition mechanics
+	alreadySeen       map[Nod]bool
+	output            []Nod
+	condition         func(Nod) bool
+	nextNodEnumerator func(Nod) []Nod
 }
 
 func SearcherNew() *Searcher {
@@ -114,15 +148,40 @@ func SearcherNew() *Searcher {
 	return s
 }
 
-func (x *Xformer) searchFor(condition func(Nod) bool) []Nod {
+func (x *Xformer) searchRoot(condition func(Nod) bool) []Nod {
+	return x.searchFor(x.root,
+		condition,
+		func(n Nod) []Nod {
+			return x.allOutNodes(n)
+		})
+}
+
+func (x *Xformer) allOutNodes(n Nod) []Nod {
+	rv := make([]Nod, 0)
+	for _, ele := range n.Out {
+		rv = append(rv, ele.Out)
+	}
+	return rv
+}
+
+func (x *Xformer) allInNodes(n Nod) []Nod {
+	rv := make([]Nod, 0)
+	for _, ele := range n.In {
+		rv = append(rv, ele.In)
+	}
+	return rv
+}
+
+func (x *Xformer) searchFor(start Nod, condition func(Nod) bool, nextEnumerator func(Nod) []Nod) []Nod {
 	s := SearcherNew()
 	s.condition = condition
-	s.search(x.root)
+	s.nextNodEnumerator = nextEnumerator
+	s.search(start)
 	return s.output
 }
 
 func (x *Xformer) searchForNodeType(nodeType int) []Nod {
-	return x.searchFor(x.getNodeTypeCondition(nodeType))
+	return x.searchRoot(x.getNodeTypeCondition(nodeType))
 }
 
 func (x *Xformer) getNodeTypeCondition(nodeType int) func(Nod) bool {
@@ -137,7 +196,8 @@ func (s *Searcher) search(node Nod) {
 		s.output = append(s.output, node)
 	}
 	s.alreadySeen[node] = true
-	for _, edge := range node.Out {
-		s.search(edge.Out)
+	nextNodes := s.nextNodEnumerator(node)
+	for _, nextNode := range nextNodes {
+		s.search(nextNode)
 	}
 }

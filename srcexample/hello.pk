@@ -1,5 +1,5 @@
-
-
 main func
-    print 15
+    x: 2
     
+sub func
+    y: 3

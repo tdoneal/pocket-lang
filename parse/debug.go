@@ -39,6 +39,10 @@ func (d *Debug) initialize() {
 	ntl[NT_VARTABLE] = "VARTABLE"
 	ntl[NT_VARDEF] = "VARDEF"
 	ntl[NTR_VARDEF_NAME] = "VARNAME"
+	ntl[NT_TOPLEVEL] = "TOPLEVEL"
+	ntl[NT_FUNCDEF] = "FUNCDEF"
+	ntl[NTR_FUNCDEF_NAME] = "NAME"
+	ntl[NTR_FUNCDEF_CODE] = "BODY"
 	d.initialized = true
 }
 
@@ -80,6 +84,7 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 	if _, ok := d.alreadySeen[node]; ok {
 		seen = true
 	}
+	d.alreadySeen[node] = true
 	d.printNodeType(node.NodeType)
 	cnt := 0
 	if len(node.Out) > 0 && !seen {
@@ -110,7 +115,6 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 		d.buf.WriteString(" (SEEN)")
 	}
 
-	d.alreadySeen[node] = true
 }
 
 func (d *DebugPrinter) printEOL() {

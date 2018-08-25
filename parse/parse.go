@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"fmt"
 	"pocket-lang/tokenize"
 	"pocket-lang/types"
 	"strconv"
@@ -32,7 +33,42 @@ func Parse(tokens []types.Token) Nod {
 		pos:   0,
 	}
 
-	return parser.parseImperative()
+	return parser.parseTopLevel()
+}
+
+func (p *Parser) parseTopLevel() Nod {
+	units := p.parseManyGreedy(func() Nod {
+		return p.parseFuncDef()
+	})
+
+	fmt.Println("top level units:", PrettyPrintNodes(units))
+
+	if !p.isEOF() {
+		p.raiseParseError("failed to consume all input")
+	}
+
+	return NodNewChildList(NT_TOPLEVEL, units)
+}
+
+func (p *Parser) parseFuncDef() Nod {
+	funcName := p.parseToken(tokenize.TK_ALPHANUM).Data
+	funcWord := p.parseToken(tokenize.TK_ALPHANUM).Data
+	if funcWord != "func" {
+		p.raiseParseError("missing func keyword")
+	}
+	p.parseAtMostOne(func() Nod {
+		p.parseEOL()
+		return nil
+	})
+	p.parseToken(tokenize.TK_INCINDENT)
+	imp := p.parseImperative()
+	p.parseToken(tokenize.TK_DECINDENT)
+
+	funcNameNode := NodNewData(NT_IDENTIFIER, funcName)
+	rv := NodNew(NT_FUNCDEF)
+	NodSetChild(rv, NTR_FUNCDEF_NAME, funcNameNode)
+	NodSetChild(rv, NTR_FUNCDEF_CODE, imp)
+	return rv
 }
 
 func (p *Parser) parseImperative() Nod {
@@ -41,6 +77,18 @@ func (p *Parser) parseImperative() Nod {
 	})
 	rv := NodNewChildList(NT_IMPERATIVE, units)
 	return rv
+}
+
+// returns nil if zero parsed, node if one parsed
+func (p *Parser) parseAtMostOne(f ParseFunc) Nod {
+	opos := p.pos
+	nod, err := p.tryparse(f)
+	if err == nil {
+		return nod
+	} else {
+		p.pos = opos
+		return nil
+	}
 }
 
 func (p *Parser) parseManyGreedy(f ParseFunc) []Nod {

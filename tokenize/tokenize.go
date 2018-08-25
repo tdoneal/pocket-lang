@@ -57,6 +57,8 @@ func Tokenize(input string) []types.Token {
 	for !tkzr.isEOF() {
 		tkzr.process()
 	}
+
+	tkzr.addFinalEOLIfMissing()
 	tkzr.cleanUpDanglingIndents()
 
 	return tkzr.outtoks
@@ -80,23 +82,30 @@ func (tkzr *Tokenizer) process() {
 	}
 }
 
+func (tkzr *Tokenizer) addFinalEOLIfMissing() {
+	if len(tkzr.outtoks) > 0 && tkzr.outtoks[len(tkzr.outtoks)-1].Type != TK_EOL {
+		tkzr.emitTokenNoData(TK_EOL)
+	}
+}
+
 func (tkzr *Tokenizer) processPreline() {
 	// now indents must be 4 spaces
 	nspaces := 0
 	lineEmpty := true
 	for !tkzr.isEOF() {
 		chr := tkzr.getCurrRune()
-		if isSpace(chr) {
+		if isSpace(chr) || chr == '\r' {
 			nspaces++
 			tkzr.incr()
 		} else if isEOL(chr) {
 			break
 		} else {
+			fmt.Println("offending character:", chr)
 			lineEmpty = false
 			break
 		}
 	}
-
+	fmt.Println("preline line", tkzr.createCurrSourceLocation().Line, "lineEmpty", lineEmpty)
 	if lineEmpty {
 		return
 	}
@@ -140,7 +149,7 @@ func (tkzr *Tokenizer) processComment() {
 func (tkzr *Tokenizer) processInit() {
 	input := tkzr.getCurrRune()
 	if isAlphic(input) {
-		tkzr.state = TK_ALPHANUM
+		tkzr.processAlphanum()
 	} else if input == ':' {
 		tkzr.emitTokenRune(TK_COLON, input)
 		tkzr.incr()
@@ -175,7 +184,7 @@ func (tkzr *Tokenizer) processPound() {
 
 func (tkzr *Tokenizer) processLiteralInt() {
 	tkzr.state = TK_LITERALINT
-	for {
+	for !tkzr.isEOF() {
 		chr := tkzr.getCurrRune()
 		if isDigit(chr) {
 			tkzr.tokbuf.WriteRune(chr)
@@ -206,20 +215,23 @@ func (tkzr *Tokenizer) processEOL() {
 		// skip token emission
 	} else {
 		tkzr.emitTokenRune(TK_EOL, '\n')
-		tkzr.isPreline = true
 	}
+	tkzr.isPreline = true
 	tkzr.incrLine()
 }
 
 func (tkzr *Tokenizer) processAlphanum() {
-	input := tkzr.getCurrRune()
-	fmt.Println("proc char '" + string(input) + "'")
-	if isAlphic(input) {
-		tkzr.tokbuf.WriteRune(input)
-		tkzr.incr()
-	} else {
-		tkzr.endBufedToken()
+	tkzr.state = TK_ALPHANUM
+	for !tkzr.isEOF() {
+		chr := tkzr.getCurrRune()
+		if isAlphic(chr) {
+			tkzr.tokbuf.WriteRune(chr)
+			tkzr.incr()
+		} else {
+			break
+		}
 	}
+	tkzr.endBufedToken()
 }
 func (tkzr *Tokenizer) endBufedToken() {
 	tkzr.emitAndEnd(&types.Token{
