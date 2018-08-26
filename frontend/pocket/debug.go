@@ -1,7 +1,8 @@
-package parse
+package pocket
 
 import (
 	"bytes"
+	. "pocket-lang/parse"
 	"strconv"
 )
 
@@ -43,15 +44,17 @@ func (d *Debug) initialize() {
 	ntl[NT_FUNCDEF] = "FUNCDEF"
 	ntl[NTR_FUNCDEF_NAME] = "NAME"
 	ntl[NTR_FUNCDEF_CODE] = "BODY"
+	ntl[NT_LIT_LIST] = "LIST"
+	ntl[NTR_TYPE] = "TYPE"
+	ntl[NT_TYPE] = "TYPE"
+	ntl[NTR_VARINIT_NAME] = "VARNAME"
+	ntl[NTR_VARINIT_VALUE] = "INITVAL"
 	d.initialized = true
 }
 
-func (n *Node) String() string {
-	return n.PrettyPrint()
-}
-
 func PrettyPrint(n Nod) string {
-	return ((*Node)(n)).PrettyPrint()
+	dp := &DebugPrinter{}
+	return dp.PrettyPrint(n)
 }
 
 func PrettyPrintNodes(nodes []Nod) string {
@@ -63,11 +66,6 @@ func PrettyPrintNodes(nodes []Nod) string {
 	}
 	buf.WriteString("]\n")
 	return buf.String()
-}
-
-func (n *Node) PrettyPrint() string {
-	dp := &DebugPrinter{}
-	return dp.PrettyPrint(n)
 }
 
 func (d *DebugPrinter) PrettyPrint(node *Node) string {
@@ -86,6 +84,18 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 	}
 	d.alreadySeen[node] = true
 	d.printNodeType(node.NodeType)
+
+	// print local data if extant
+	if val, ok := node.Data.(int); ok {
+		d.buf.WriteString(": ")
+		d.buf.WriteString(strconv.Itoa(val))
+	} else if val, ok := node.Data.(string); ok {
+		d.buf.WriteString(": \"")
+		d.buf.WriteString(val)
+		d.buf.WriteString("\"")
+	}
+
+	// print children
 	cnt := 0
 	if len(node.Out) > 0 && !seen {
 		d.incIndent(1)
@@ -100,15 +110,6 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 			cnt++
 		}
 		d.incIndent(-1)
-	} else {
-		if val, ok := node.Data.(int); ok {
-			d.buf.WriteString(": ")
-			d.buf.WriteString(strconv.Itoa(val))
-		} else if val, ok := node.Data.(string); ok {
-			d.buf.WriteString(": \"")
-			d.buf.WriteString(val)
-			d.buf.WriteString("\"")
-		}
 	}
 
 	if seen {

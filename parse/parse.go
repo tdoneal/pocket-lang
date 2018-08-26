@@ -1,103 +1,47 @@
 package parse
 
 import (
-	"fmt"
-	"pocket-lang/tokenize"
 	"pocket-lang/types"
-	"strconv"
 )
 
 type Parser struct {
-	input  []types.Token
-	pos    int
-	output *Node
+	Input  []types.Token
+	Pos    int
+	Output *Node
 }
 
 type ParseFunc func() Nod
 
 type ParseError struct {
-	msg      string
-	location *types.SourceLocation
+	Msg      string
+	Location *types.SourceLocation
 }
 
 var _ error = ParseError{}
 
 func (p ParseError) Error() string {
-	return "At " + p.location.StringDebug() + ": " + p.msg
-}
-
-func Parse(tokens []types.Token) Nod {
-
-	parser := &Parser{
-		input: tokens,
-		pos:   0,
-	}
-
-	return parser.parseTopLevel()
-}
-
-func (p *Parser) parseTopLevel() Nod {
-	units := p.parseManyGreedy(func() Nod {
-		return p.parseFuncDef()
-	})
-
-	fmt.Println("top level units:", PrettyPrintNodes(units))
-
-	if !p.isEOF() {
-		p.raiseParseError("failed to consume all input")
-	}
-
-	return NodNewChildList(NT_TOPLEVEL, units)
-}
-
-func (p *Parser) parseFuncDef() Nod {
-	funcName := p.parseToken(tokenize.TK_ALPHANUM).Data
-	funcWord := p.parseToken(tokenize.TK_ALPHANUM).Data
-	if funcWord != "func" {
-		p.raiseParseError("missing func keyword")
-	}
-	p.parseAtMostOne(func() Nod {
-		p.parseEOL()
-		return nil
-	})
-	p.parseToken(tokenize.TK_INCINDENT)
-	imp := p.parseImperative()
-	p.parseToken(tokenize.TK_DECINDENT)
-
-	funcNameNode := NodNewData(NT_IDENTIFIER, funcName)
-	rv := NodNew(NT_FUNCDEF)
-	NodSetChild(rv, NTR_FUNCDEF_NAME, funcNameNode)
-	NodSetChild(rv, NTR_FUNCDEF_CODE, imp)
-	return rv
-}
-
-func (p *Parser) parseImperative() Nod {
-	units := p.parseAtLeastOneGreedy(func() Nod {
-		return p.parseImperativeUnit()
-	})
-	rv := NodNewChildList(NT_IMPERATIVE, units)
-	return rv
+	return "At " + p.Location.StringDebug() + ": " + p.Msg
 }
 
 // returns nil if zero parsed, node if one parsed
-func (p *Parser) parseAtMostOne(f ParseFunc) Nod {
-	opos := p.pos
-	nod, err := p.tryparse(f)
+func (p *Parser) ParseAtMostOne(f ParseFunc) Nod {
+	opos := p.Pos
+	nod, err := p.Tryparse(f)
 	if err == nil {
 		return nod
 	} else {
-		p.pos = opos
+		p.Pos = opos
 		return nil
 	}
 }
 
-func (p *Parser) parseManyGreedy(f ParseFunc) []Nod {
+func (p *Parser) ParseManyGreedy(f ParseFunc) []Nod {
 	rv := make([]Nod, 0)
-	for !p.isEOF() {
-		opos := p.pos
-		n, err := p.tryparse(f)
+	for !p.IsEOF() {
+		opos := p.Pos
+		n, err := p.Tryparse(f)
 		if err != nil {
-			p.pos = opos
+			p.Pos = opos
 			break
 		}
 		rv = append(rv, n)
@@ -105,41 +49,27 @@ func (p *Parser) parseManyGreedy(f ParseFunc) []Nod {
 	return rv
 }
 
-func (p *Parser) parseManyGreedyEnsureCount(f ParseFunc,
+func (p *Parser) ParseManyGreedyEnsureCount(f ParseFunc,
 	countCheck func(int) bool) []Nod {
-	rv := p.parseManyGreedy(f)
+	rv := p.ParseManyGreedy(f)
 	if !countCheck(len(rv)) {
-		p.raiseParseError("incorrect number of subelements")
+		p.RaiseParseError("incorrect number of subelements")
 	}
 	return rv
 }
 
-func (p *Parser) parseAtLeastOneGreedy(f ParseFunc) []Nod {
-	return p.parseManyGreedyEnsureCount(f, func(n int) bool { return n >= 1 })
+func (p *Parser) ParseAtLeastOneGreedy(f ParseFunc) []Nod {
+	return p.ParseManyGreedyEnsureCount(f, func(n int) bool { return n >= 1 })
 }
 
-func (p *Parser) parseImperativeUnit() Nod {
-	return p.parseDisjunction([]ParseFunc{
-		func() Nod { return p.parseImperativeBlock() },
-		func() Nod { return p.parseStatement() },
-	})
+func (p *Parser) GetCurrToken() *types.Token {
+	return &p.Input[p.Pos]
 }
 
-func (p *Parser) getCurrToken() *types.Token {
-	return &p.input[p.pos]
-}
-
-func (p *Parser) parseImperativeBlock() Nod {
-	p.parseToken(tokenize.TK_INCINDENT)
-	imp := p.parseImperative()
-	p.parseToken(tokenize.TK_DECINDENT)
-	return imp
-}
-
-func (p *Parser) tryparse(parseFunc ParseFunc) (obj Nod, e error) {
+func (p *Parser) Tryparse(parseFunc ParseFunc) (obj Nod, e error) {
 	defer func() {
 		if r := recover(); r != nil {
-			e = r.(error)
+			e = r.(*ParseError)
 		}
 	}()
 	e = nil
@@ -147,188 +77,44 @@ func (p *Parser) tryparse(parseFunc ParseFunc) (obj Nod, e error) {
 	return
 }
 
-func (p *Parser) parseStatement() Nod {
-	rv := p.parseStatementBody()
-	p.parseEOL()
-	return rv
-}
-
-func (p *Parser) parseStatementBody() Nod {
-	return p.parseDisjunction([]ParseFunc{
-		func() Nod { return p.parseVarInit() },
-		func() Nod { return p.parseReceiverCallStatement() },
-	})
-}
-
-func (p *Parser) parseVarInit() Nod {
-	name := p.parseVarName()
-	p.parseColon()
-	val := p.parseValue()
-	rv := NodNew(NT_VARINIT)
-	NodSetChild(rv, NTR_VARINIT_NAME, name)
-	NodSetChild(rv, NTR_VARINIT_VALUE, val)
-	return rv
-}
-
-func (p *Parser) parseVarName() Nod {
-	return p.parseIdentifier()
-}
-
-func (p *Parser) parseValue() Nod {
-	return p.parseDisjunction([]ParseFunc{
-		func() Nod { return p.parseValueInlineOpStream() },
-		func() Nod { return p.parseValueParenthetical() },
-		func() Nod { return p.parseLiteralInt() },
-		func() Nod { return p.parseReceiverCall() },
-		func() Nod { return p.parseVarGetter() },
-	})
-}
-
-func (p *Parser) parseValueParenthetical() Nod {
-	p.parseToken(tokenize.TK_PARENL)
-	innerVal := p.parseValue()
-	p.parseToken(tokenize.TK_PARENR)
-	return innerVal
-}
-
-func (p *Parser) parseValueInlineOpStream() Nod {
-	state := true // true: parsing non-stream ("atomic" value), false: parsing inline operator
-	totalOps := 0
-	elements := make([]Nod, 0)
-	for {
-		if state {
-			aval, err := p.tryparse(func() Nod { return p.parseValueAtomic() })
-			if err != nil {
-				p.raiseParseError("expected atomic value")
-				return nil
-			}
-			state = false
-			elements = append(elements, aval)
-		} else {
-			oldpos := p.pos
-			aval, err := p.tryparse(func() Nod { return p.parseInlineOp() })
-			if err != nil {
-				if totalOps == 0 {
-					p.raiseParseError("expected inline op")
-					return nil
-				}
-				// if here, we've simply reached the end of the inline op stream normally
-				p.pos = oldpos
-				break
-			}
-			state = true
-			elements = append(elements, aval)
-			totalOps++
-		}
-	}
-	return NodNewChildList(NT_INLINEOPSTREAM, elements)
-}
-
-func (p *Parser) parseValueAtomic() Nod {
-	return p.parseDisjunction([]ParseFunc{
-		func() Nod { return p.parseValueParenthetical() },
-		func() Nod { return p.parseLiteralInt() },
-		func() Nod { return p.parseReceiverCall() },
-		func() Nod { return p.parseVarGetter() },
-	})
-}
-
-func (p *Parser) parseInlineOp() Nod {
-	p.parseToken(tokenize.TK_ADDOP)
-	return NodNew(NT_ADDOP)
-}
-
-func (p *Parser) parseVarGetter() Nod {
-	return NodNewChild(NT_VAR_GETTER, NTR_VAR_GETTER_NAME, p.parseIdentifier())
-}
-
-func (p *Parser) parseTokenAlphanumeric() *types.Token {
-	return p.parseToken(tokenize.TK_ALPHANUM)
-}
-
-func (p *Parser) parseIdentifier() Nod {
-	return NodNewData(NT_IDENTIFIER, p.parseTokenAlphanumeric().Data)
-}
-
-func (p *Parser) parseDisjunction(funcs []ParseFunc) Nod {
+func (p *Parser) ParseDisjunction(funcs []ParseFunc) Nod {
 	for i := 0; i < len(funcs); i++ {
 		cfunc := funcs[i]
-		oldpos := p.pos
-		val, err := p.tryparse(cfunc)
+		oldpos := p.Pos
+		val, err := p.Tryparse(cfunc)
 		if err == nil {
 			return val
 		}
-		p.pos = oldpos // backtrack
+		p.Pos = oldpos // backtrack
 	}
-	p.raiseParseError("parse error")
+	p.RaiseParseError("parse error")
 	return nil
 }
 
-func (p *Parser) parseReceiverCallStatement() Nod {
-	name := p.parseReceiverName()
-	val := p.parseAtMostOne(func() Nod { return p.parseValue() })
-	rv := NodNew(NT_RECEIVERCALL)
-	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
-	if val != nil {
-		NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
-	}
-	return rv
-}
-
-func (p *Parser) parseReceiverCall() Nod {
-	name := p.parseReceiverName()
-	val := p.parseValue()
-	rv := NodNew(NT_RECEIVERCALL)
-	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
-	NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
-	return rv
-}
-
-func (p *Parser) parseReceiverName() Nod {
-	return p.parseIdentifier()
-}
-
-func (p *Parser) parseLiteralInt() Nod {
-	tok := p.parseToken(tokenize.TK_LITERALINT)
-	ival, err := strconv.Atoi(tok.Data)
-	if err != nil {
-		p.raiseParseError("in int literal")
-	}
-	return NodNewData(NT_LIT_INT, ival)
-}
-
-func (p *Parser) raiseParseError(msg string) {
-	tok := p.currToken()
+func (p *Parser) RaiseParseError(msg string) {
+	tok := p.CurrToken()
 	pe := &ParseError{
-		msg:      msg,
-		location: tok.SourceLocation,
+		Msg:      msg,
+		Location: tok.SourceLocation,
 	}
 	panic(pe)
 }
 
-func (p *Parser) parseColon() {
-	p.parseToken(tokenize.TK_COLON)
-}
-
-func (p *Parser) parseEOL() {
-	p.parseToken(tokenize.TK_EOL)
-}
-
-func (p *Parser) parseToken(tokenType int) *types.Token {
-	cval := p.currToken()
+func (p *Parser) ParseToken(tokenType int) *types.Token {
+	cval := p.CurrToken()
 	if cval.Type == tokenType {
-		p.pos++
+		p.Pos++
 		return cval
 	} else {
-		p.raiseParseError("unexpected token")
+		p.RaiseParseError("unexpected token")
 		return nil
 	}
 }
 
-func (p *Parser) currToken() *types.Token {
-	return &p.input[p.pos]
+func (p *Parser) CurrToken() *types.Token {
+	return &p.Input[p.Pos]
 }
 
-func (p *Parser) isEOF() bool {
-	return p.pos >= len(p.input)
+func (p *Parser) IsEOF() bool {
+	return p.Pos >= len(p.Input)
 }

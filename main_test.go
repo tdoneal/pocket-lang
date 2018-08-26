@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"pocket-lang/backend/goback"
-	"pocket-lang/parse"
+	"pocket-lang/frontend/pocket"
 	"pocket-lang/tokenize"
-	"pocket-lang/xform"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -26,11 +25,11 @@ func TestMain(t *testing.T) {
 	tokens := tokenize.Tokenize(string(dat))
 	fmt.Println("final tokens:\n", spew.Sdump(tokens))
 
-	parsed := parse.Parse(tokens)
-	fmt.Println("final parsed:\n", parse.PrettyPrint(parsed))
+	parsed := pocket.Parse(tokens)
+	fmt.Println("final parsed:\n", pocket.PrettyPrint(parsed))
 
-	xformed := xform.Xform(parsed)
-	fmt.Println("final xformed:\n", parse.PrettyPrint(xformed))
+	xformed := pocket.Xform(parsed)
+	fmt.Println("final xformed:\n", pocket.PrettyPrint(xformed))
 
 	genned := goback.Generate(parsed)
 	fmt.Println("final generated:\n", genned)

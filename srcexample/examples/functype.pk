@@ -1,0 +1,9 @@
+### syntax is func <paramtype> <returntype>
+func [int, bool] bool # func takes ordered int and bool and returns bool
+func {x:int, y:bool} # func takes unordered named int and bool
+func [int {x: float, y:bool}] #
+func int bool # func takes int and returns bool
+func void int # func takes nothing and returns int
+func [] int # func takes nothing and returns int
+func int void # func takes int and returns nothing
+func int # func that either takes int and returns unspecified or takes unspecified and returns int

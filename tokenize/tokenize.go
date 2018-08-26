@@ -20,6 +20,12 @@ const (
 	TK_COMMENT    = 50
 	TK_PARENL     = 60
 	TK_PARENR     = 61
+	TK_BRACKL     = 62
+	TK_BRACKR     = 63
+	TK_COMMA      = 66
+	TK_RETURN     = 100
+	TK_VOID       = 110
+	TK_INT        = 120
 )
 
 type LiteralInt struct {
@@ -73,8 +79,6 @@ func (tkzr *Tokenizer) process() {
 	}
 	if tkzr.state == TKS_INIT {
 		tkzr.processInit()
-	} else if tkzr.state == TK_ALPHANUM {
-		tkzr.processAlphanum()
 	} else if tkzr.state == TK_COMMENT {
 		tkzr.processComment()
 	} else {
@@ -170,6 +174,15 @@ func (tkzr *Tokenizer) processInit() {
 	} else if input == ')' {
 		tkzr.emitTokenRune(TK_PARENR, input)
 		tkzr.incr()
+	} else if input == '[' {
+		tkzr.emitTokenRune(TK_BRACKL, input)
+		tkzr.incr()
+	} else if input == ']' {
+		tkzr.emitTokenRune(TK_BRACKR, input)
+		tkzr.incr()
+	} else if input == ',' {
+		tkzr.emitTokenRune(TK_COMMA, input)
+		tkzr.incr()
 	} else if input == '#' {
 		tkzr.processPound()
 	} else {
@@ -231,8 +244,30 @@ func (tkzr *Tokenizer) processAlphanum() {
 			break
 		}
 	}
-	tkzr.endBufedToken()
+
+	keywordType := tkzr.checkKeyword(tkzr.tokbuf.String())
+
+	if keywordType == -1 {
+		tkzr.emitToken(TK_ALPHANUM, tkzr.tokbuf.String())
+	} else {
+		tkzr.emitToken(keywordType, tkzr.tokbuf.String())
+	}
+	tkzr.tokbuf.Reset()
+	tkzr.state = TKS_INIT
 }
+
+func (tkzr *Tokenizer) checkKeyword(word string) int {
+	// returns TK_TYPE if keyword, -1 otherwise
+	if word == "return" {
+		return TK_RETURN
+	} else if word == "void" {
+		return TK_VOID
+	} else if word == "int" {
+		return TK_INT
+	}
+	return -1
+}
+
 func (tkzr *Tokenizer) endBufedToken() {
 	tkzr.emitAndEnd(&types.Token{
 		Data:           tkzr.tokbuf.String(),
@@ -282,15 +317,20 @@ func (tkzr *Tokenizer) emitAndEnd(token *types.Token) {
 }
 
 func (tkzr *Tokenizer) emitTokenNoData(tokenType int) {
+	tkzr.emitToken(tokenType, "")
+}
+
+func (tkzr *Tokenizer) emitToken(tokenType int, data string) {
 	tkzr.outtoks = append(tkzr.outtoks, types.Token{
 		SourceLocation: tkzr.createCurrSourceLocation(),
 		Type:           tokenType,
+		Data:           data,
 	})
 }
 
 func isAlphic(input rune) bool {
 	return (input >= 'a' && input <= 'z') ||
-		(input >= 'A' && input <= 'Z')
+		(input >= 'A' && input <= 'Z') || input == '$' || input == '_'
 }
 
 func isDigit(input rune) bool {

@@ -1,10 +1,5 @@
+
 main func
-    sub
+    x : $li [[1,2,3],0]
+    print x
 
-sub func
-    println 13
-    subsub
-    subsub
-
-subsub func
-    println 15
