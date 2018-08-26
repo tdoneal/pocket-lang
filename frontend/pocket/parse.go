@@ -3,7 +3,6 @@ package pocket
 import (
 	"fmt"
 	. "pocket-lang/parse"
-	"pocket-lang/tokenize"
 	"pocket-lang/types"
 	"strconv"
 
@@ -27,8 +26,8 @@ func Parse(tokens []types.Token) Nod {
 }
 
 func (p *ParserPocket) parseFuncDef() Nod {
-	funcName := p.ParseToken(tokenize.TK_ALPHANUM).Data
-	funcWord := p.ParseToken(tokenize.TK_ALPHANUM).Data
+	funcName := p.ParseToken(TK_ALPHANUM).Data
+	funcWord := p.ParseToken(TK_ALPHANUM).Data
 	rv := NodNew(NT_FUNCDEF)
 	if funcWord != "func" {
 		p.RaiseParseError("missing func keyword")
@@ -45,9 +44,9 @@ func (p *ParserPocket) parseFuncDef() Nod {
 	}
 
 	p.parseEOL()
-	p.ParseToken(tokenize.TK_INCINDENT)
+	p.ParseToken(TK_INCINDENT)
 	imp := p.parseImperative()
-	p.ParseToken(tokenize.TK_DECINDENT)
+	p.ParseToken(TK_DECINDENT)
 
 	funcNameNode := NodNewData(NT_IDENTIFIER, funcName)
 	NodSetChild(rv, NTR_FUNCDEF_NAME, funcNameNode)
@@ -74,13 +73,13 @@ func (p *ParserPocket) parseImperativeUnit() Nod {
 }
 
 func (p *ParserPocket) parseBreak() Nod {
-	p.ParseToken(tokenize.TK_BREAK)
+	p.ParseToken(TK_BREAK)
 	p.parseEOL()
 	return NodNew(NT_BREAK)
 }
 
 func (p *ParserPocket) parseIf() Nod {
-	p.ParseToken(tokenize.TK_IF)
+	p.ParseToken(TK_IF)
 	cond := p.parseValue()
 	p.parseEOL()
 	body := p.parseImperativeBlock()
@@ -91,7 +90,7 @@ func (p *ParserPocket) parseIf() Nod {
 }
 
 func (p *ParserPocket) parseLoop() Nod {
-	p.ParseToken(tokenize.TK_LOOP)
+	p.ParseToken(TK_LOOP)
 	p.parseEOL()
 	body := p.parseImperativeBlock()
 	return NodNewChild(NT_LOOP, NTR_LOOP_BODY, body)
@@ -126,7 +125,7 @@ func (p *ParserPocket) parseStatementBody() Nod {
 }
 
 func (p *ParserPocket) parseReturnStatement() Nod {
-	p.ParseToken(tokenize.TK_RETURN)
+	p.ParseToken(TK_RETURN)
 	rv := NodNew(NT_RETURN)
 	val := p.ParseAtMostOne(func() Nod { return p.parseValue() })
 	if val != nil {
@@ -160,9 +159,9 @@ func (p *ParserPocket) parseValue() Nod {
 }
 
 func (p *ParserPocket) parseValueParenthetical() Nod {
-	p.ParseToken(tokenize.TK_PARENL)
+	p.ParseToken(TK_PARENL)
 	innerVal := p.parseValue()
-	p.ParseToken(tokenize.TK_PARENR)
+	p.ParseToken(TK_PARENR)
 	return innerVal
 }
 
@@ -204,12 +203,12 @@ func (p *ParserPocket) parseLiteral() Nod {
 }
 
 func (p *ParserPocket) parseLiteralMap() Nod {
-	p.ParseToken(tokenize.TK_CURLYL)
+	p.ParseToken(TK_CURLYL)
 
 	kvpairs := p.parseManyOptDelimited(func() Nod { return p.parseMapKeyValuePair() },
 		func() Nod { return p.parseComma() })
 
-	p.ParseToken(tokenize.TK_CURLYR)
+	p.ParseToken(TK_CURLYR)
 
 	return NodNewChildList(NT_LIT_MAP, kvpairs)
 }
@@ -225,19 +224,19 @@ func (p *ParserPocket) parseMapKeyValuePair() Nod {
 }
 
 func (p *ParserPocket) parseLiteralList() Nod {
-	p.ParseToken(tokenize.TK_BRACKL)
+	p.ParseToken(TK_BRACKL)
 	elements := p.parseManyOptDelimited(
 		func() Nod { return p.parseValue() },
 		func() Nod { return p.parseComma() },
 	)
-	p.ParseToken(tokenize.TK_BRACKR)
+	p.ParseToken(TK_BRACKR)
 	return NodNewChildList(NT_LIT_LIST, elements)
 }
 
 func (p *ParserPocket) parseLiteralKeyword() Nod {
 	return p.ParseDisjunction([]ParseFunc{
-		func() Nod { return p.parseKeywordLitPrimitive(tokenize.TK_VOID, "void") },
-		func() Nod { return p.parseKeywordLitPrimitive(tokenize.TK_INT, "int") },
+		func() Nod { return p.parseKeywordLitPrimitive(TK_VOID, "void") },
+		func() Nod { return p.parseKeywordLitPrimitive(TK_INT, "int") },
 	})
 }
 
@@ -261,17 +260,17 @@ func (p *ParserPocket) parseType() Nod {
 }
 
 func (p *ParserPocket) parseParameterList() Nod {
-	p.ParseToken(tokenize.TK_BRACKL)
+	p.ParseToken(TK_BRACKL)
 	parameters := p.parseManyOptDelimited(
 		func() Nod { return p.parseParameterSingle() },
 		func() Nod { return p.parseComma() },
 	)
-	p.ParseToken(tokenize.TK_BRACKR)
+	p.ParseToken(TK_BRACKR)
 	return NodNewChildList(NT_LIT_LIST, parameters)
 }
 
 func (p *ParserPocket) parseComma() Nod {
-	p.ParseToken(tokenize.TK_COMMA)
+	p.ParseToken(TK_COMMA)
 	return nil
 }
 
@@ -301,9 +300,9 @@ func (p *ParserPocket) parseParameterSingle() Nod {
 }
 
 func (p *ParserPocket) parseParameterParenthetical() Nod {
-	p.ParseToken(tokenize.TK_PARENL)
+	p.ParseToken(TK_PARENL)
 	rv := p.parseParameterSingle()
-	p.ParseToken(tokenize.TK_PARENR)
+	p.ParseToken(TK_PARENR)
 	return rv
 }
 
@@ -323,11 +322,11 @@ func (p *ParserPocket) parseInlineOp() Nod {
 }
 
 func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {
-	if tokenType == tokenize.TK_ADDOP {
+	if tokenType == TK_ADDOP {
 		return NT_ADDOP
-	} else if tokenType == tokenize.TK_LT {
+	} else if tokenType == TK_LT {
 		return NT_LTOP
-	} else if tokenType == tokenize.TK_GT {
+	} else if tokenType == TK_GT {
 		return NT_GTOP
 	} else {
 		return -1
@@ -339,7 +338,7 @@ func (p *ParserPocket) parseVarGetter() Nod {
 }
 
 func (p *ParserPocket) parseTokenAlphanumeric() *types.Token {
-	return p.ParseToken(tokenize.TK_ALPHANUM)
+	return p.ParseToken(TK_ALPHANUM)
 }
 
 func (p *ParserPocket) parseIdentifier() Nod {
@@ -371,7 +370,7 @@ func (p *ParserPocket) parseReceiverName() Nod {
 }
 
 func (p *ParserPocket) parseLiteralInt() Nod {
-	tok := p.ParseToken(tokenize.TK_LITERALINT)
+	tok := p.ParseToken(TK_LITERALINT)
 	ival, err := strconv.Atoi(tok.Data)
 	if err != nil {
 		p.RaiseParseError("in int literal")
@@ -380,16 +379,16 @@ func (p *ParserPocket) parseLiteralInt() Nod {
 }
 
 func (p *ParserPocket) parseColon() {
-	p.ParseToken(tokenize.TK_COLON)
+	p.ParseToken(TK_COLON)
 }
 
 func (p *ParserPocket) parseEOL() {
-	p.ParseToken(tokenize.TK_EOL)
+	p.ParseToken(TK_EOL)
 }
 
 func (p *ParserPocket) parseImperativeBlock() Nod {
-	p.ParseToken(tokenize.TK_INCINDENT)
+	p.ParseToken(TK_INCINDENT)
 	imp := p.parseImperative()
-	p.ParseToken(tokenize.TK_DECINDENT)
+	p.ParseToken(TK_DECINDENT)
 	return imp
 }

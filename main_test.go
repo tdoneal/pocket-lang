@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"pocket-lang/backend/goback"
 	"pocket-lang/frontend/pocket"
-	"pocket-lang/tokenize"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -22,7 +21,7 @@ func TestMain(t *testing.T) {
 	fmt.Println("input file:")
 	fmt.Println(string(dat))
 
-	tokens := tokenize.Tokenize(string(dat))
+	tokens := pocket.Tokenize(string(dat))
 	fmt.Println("final tokens:\n", spew.Sdump(tokens))
 
 	parsed := pocket.Parse(tokens)
