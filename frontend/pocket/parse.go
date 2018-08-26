@@ -119,7 +119,7 @@ func (p *ParserPocket) parseStatement() Nod {
 func (p *ParserPocket) parseStatementBody() Nod {
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseReturnStatement() },
-		func() Nod { return p.parseVarInit() },
+		func() Nod { return p.parseVarAssign() },
 		func() Nod { return p.parseReceiverCallStatement() },
 	})
 }
@@ -134,13 +134,13 @@ func (p *ParserPocket) parseReturnStatement() Nod {
 	return rv
 }
 
-func (p *ParserPocket) parseVarInit() Nod {
+func (p *ParserPocket) parseVarAssign() Nod {
 	name := p.parseVarName()
 	p.parseColon()
 	val := p.parseValue()
-	rv := NodNew(NT_VARINIT)
-	NodSetChild(rv, NTR_VARINIT_NAME, name)
-	NodSetChild(rv, NTR_VARINIT_VALUE, val)
+	rv := NodNew(NT_VARASSIGN)
+	NodSetChild(rv, NTR_VAR_NAME, name)
+	NodSetChild(rv, NTR_VARASSIGN_VALUE, val)
 	return rv
 }
 

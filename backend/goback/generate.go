@@ -131,6 +131,10 @@ func (g *Generator) genArgUnpacking(inTypeDef Nod) {
 
 func (g *Generator) genImperative(input Nod) {
 
+	if varTable := NodGetChildOrNil(input, NTR_VARTABLE); varTable != nil {
+		g.genVarTable(varTable)
+	}
+
 	statements := NodGetChildList(input)
 	for _, stmt := range statements {
 		g.genImperativeUnit(stmt)
@@ -138,9 +142,23 @@ func (g *Generator) genImperative(input Nod) {
 
 }
 
+func (g *Generator) genVarTable(n Nod) {
+	varDefs := NodGetChildList(n)
+	for _, varDef := range varDefs {
+		g.genVarDef(varDef)
+	}
+}
+
+func (g *Generator) genVarDef(n Nod) {
+	varName := NodGetChild(n, NTR_VARDEF_NAME).Data.(string)
+	g.WS("var ")
+	g.WS(varName)
+	g.WS("\n")
+}
+
 func (g *Generator) genImperativeUnit(n Nod) {
-	if n.NodeType == NT_VARINIT {
-		g.genVarInit(n)
+	if n.NodeType == NT_VARASSIGN {
+		g.genVarAssign(n)
 	} else if n.NodeType == NT_RECEIVERCALL {
 		g.genReceiverCall(n)
 	} else if n.NodeType == NT_RETURN {
@@ -184,21 +202,23 @@ func (g *Generator) genReturn(input Nod) {
 	}
 }
 
-func (g *Generator) genVarInit(n Nod) {
-	varName := NodGetChild(n, NTR_VARINIT_NAME).Data.(string)
+func (g *Generator) genVarAssign(n Nod) {
+	varName := NodGetChild(n, NTR_VAR_NAME).Data.(string)
 
-	if ntype := NodGetChildOrNil(n, NTR_TYPE); ntype != nil {
-		g.WS("var ")
-		g.WS(varName)
-		g.WS(" ")
-		g.WS(ntype.Data.(string))
-		g.WS(" = ")
-	} else {
-		g.WS(varName)
-		g.WS(" := ")
-	}
+	// if ntype := NodGetChildOrNil(n, NTR_TYPE); ntype != nil {
+	// 	g.WS("var ")
+	// 	g.WS(varName)
+	// 	g.WS(" ")
+	// 	g.WS(ntype.Data.(string))
+	// 	g.WS(" = ")
+	// } else {
+	// 	g.WS(varName)
+	// 	g.WS(" := ")
+	// }
+	g.WS(varName)
+	g.WS(" = ")
 	g.WS("(")
-	g.genValue(NodGetChild(n, NTR_VARINIT_VALUE))
+	g.genValue(NodGetChild(n, NTR_VARASSIGN_VALUE))
 	g.WS(")")
 }
 

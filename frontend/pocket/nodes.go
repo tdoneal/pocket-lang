@@ -3,8 +3,9 @@ package pocket
 const (
 	NT_IMPERATIVE           = 10
 	NT_VARINIT              = 20
-	NTR_VARINIT_NAME        = 21
-	NTR_VARINIT_VALUE       = 22
+	NT_VARASSIGN            = 21
+	NTR_VAR_NAME            = 22
+	NTR_VARASSIGN_VALUE     = 23
 	NT_VARDEF               = 25
 	NTR_VARDEF_NAME         = 26
 	NT_RECEIVERCALL         = 30
@@ -34,6 +35,8 @@ const (
 	NT_ADDOP                = 100
 	NT_GTOP                 = 105
 	NT_LTOP                 = 106
+	NTR_BINOP_LEFT          = 118
+	NTR_BINOP_RIGHT         = 119
 	NT_INLINEOPSTREAM       = 150
 	NTR_LIT_VALUE           = 201
 	NT_LIT_INT              = 210

@@ -25,79 +25,117 @@ func Xform(root Nod) Nod {
 func (x *XformerPocket) Xform() {
 	x.buildVarDefTables()
 	// x.buildFuncDefTables()
+
+	x.applyRewrite(&RewriteRule{
+		condition: func(n Nod) bool {
+			return n.NodeType == NT_INLINEOPSTREAM
+		},
+		action: func(n Nod) {
+			x.Replace(n, x.parseInlineOpStream(n))
+		},
+	})
+
 	x.annotateTypes()
 }
 
-func (x *XformerPocket) annotateTypes() {
-	x.applyTAR(func(n Nod) bool { return n.NodeType == NT_LIT_INT },
-		func(n Nod) {
-			NodSetChild(n, NTR_TYPE, NodNewData(NT_TYPE, "int"))
-		})
-
-	// TODO: only update annotated type if new type carries additional information
-	x.applyTAR(
-		func(n Nod) bool {
-			if n.NodeType == NT_VARINIT {
-				if viv := NodGetChildOrNil(n, NTR_VARINIT_VALUE); viv != nil {
-					return NodHasChild(viv, NTR_TYPE)
-				}
-			}
-			return false
-		},
-		func(n Nod) {
-			NodSetChild(n, NTR_TYPE,
-				NodGetChild(NodGetChild(n, NTR_VARINIT_VALUE), NTR_TYPE))
-		},
-	)
+type RewriteRule struct {
+	condition func(n Nod) bool
+	action    func(n Nod)
 }
 
-func (x *XformerPocket) applyTAR(condition func(Nod) bool, action func(Nod)) {
-	found := x.SearchRoot(condition)
-	for _, ele := range found {
-		action(ele)
+func (x *XformerPocket) annotateTypes() {
+
+	TARs := []*RewriteRule{
+		&RewriteRule{
+			condition: func(n Nod) bool {
+				return n.NodeType == NT_LIT_INT && !NodHasChild(n, NTR_TYPE)
+			},
+			action: func(n Nod) {
+				NodSetChild(n, NTR_TYPE, NodNewData(NT_TYPE, "int"))
+			},
+		},
+		// propagate var assign values to the var's assignment
+		&RewriteRule{
+			condition: func(n Nod) bool {
+				if n.NodeType == NT_VARASSIGN && !NodHasChild(n, NTR_TYPE) {
+					if viv := NodGetChildOrNil(n, NTR_VARASSIGN_VALUE); viv != nil {
+						return NodHasChild(viv, NTR_TYPE)
+					}
+				}
+				return false
+			},
+			action: func(n Nod) {
+				NodSetChild(n, NTR_TYPE,
+					NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_TYPE))
+			},
+		},
 	}
-	fmt.Println("applied TAR to", len(found), "elements")
+
+	x.applyRewritesUntilStable(TARs)
+
+}
+
+func (x *XformerPocket) applyRewritesUntilStable(rules []*RewriteRule) {
+	for {
+		maxApplied := 0
+		for _, rule := range rules {
+			nApplied := x.applyRewrite(rule)
+			if nApplied > maxApplied {
+				maxApplied = nApplied
+			}
+		}
+		if maxApplied == 0 {
+			break
+		}
+	}
+}
+
+func (x *XformerPocket) applyRewrite(rule *RewriteRule) int {
+	found := x.SearchRoot(rule.condition)
+	for _, ele := range found {
+		rule.action(ele)
+	}
+	fmt.Println("applied rewrite rule to", len(found), "elements")
+	return len(found)
 }
 
 func (x *XformerPocket) buildVarDefTables() {
-	// find all variable initializers
-	// TODO: add support for multiple IMPERATIVEs, each with their own vartable
+	// find all variable assignments and construct
+	// the canonical union of variables
 
-	// first, add an explicit link from each var init to it's corresponding
-	// top-level imperative
-	varInits := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARINIT })
-
+	// determine which (top-level) imperatives have which vars
+	varInits := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARASSIGN })
 	fmt.Println("all variable initializers:", len(varInits))
-
+	impVarInits := make(map[Nod][]Nod)
 	for _, ele := range varInits {
 		tlImper := x.findTopLevelImperative(ele)
 		if tlImper == nil {
 			panic("failed to find top level imperative")
 		}
-		NodSetChild(ele, NTR_TOPLEVEL_IMPERATIVE, tlImper)
-
+		impVarInits[tlImper] = append(impVarInits[tlImper], ele)
 	}
 
-	// next, generate the vartables for each tl imperative
-	impVartables := make(map[Nod][]Nod)
-	for _, ele := range varInits {
-		varNameNode := ele.Out[NTR_VARINIT_NAME].Out
-		varName := varNameNode.Data.(string)
-		fmt.Println("varName", varName)
-		varDef := NodNewChild(NT_VARDEF, NTR_VARDEF_NAME, varNameNode)
-		tlImper := NodGetChild(ele, NTR_TOPLEVEL_IMPERATIVE)
-		// lazily initialize the tables
-		if _, ok := impVartables[tlImper]; !ok {
-			impVartables[tlImper] = make([]Nod, 0)
-		}
-		impVartables[tlImper] = append(impVartables[tlImper], varDef)
+	// next, generate the vartables for each imperative
+	for imper, varInits := range impVarInits {
+		varTable := x.generateVarTableFromVarInits(varInits)
+		NodSetChild(imper, NTR_VARTABLE, varTable)
 	}
 
-	// last, explicitly put the vartables in the graph
-	for imp, varTable := range impVartables {
-		varTableNod := NodNewChildList(NT_VARTABLE, varTable)
-		NodSetChild(imp, NTR_VARTABLE, varTableNod)
+}
+
+func (x *XformerPocket) generateVarTableFromVarInits(varInits []Nod) Nod {
+	varDefsByName := make(map[string]Nod)
+	for _, varInit := range varInits {
+		varName := NodGetChild(varInit, NTR_VAR_NAME).Data.(string)
+		varDef := NodNew(NT_VARDEF)
+		NodSetChild(varDef, NTR_VARDEF_NAME, NodNewData(NT_IDENTIFIER, varName))
+		varDefsByName[varName] = varDef
 	}
+	varDefsList := make([]Nod, 0)
+	for _, varDef := range varDefsByName {
+		varDefsList = append(varDefsList, varDef)
+	}
+	return NodNewChildList(NT_VARTABLE, varDefsList)
 }
 
 func (x *XformerPocket) findTopLevelImperative(n Nod) Nod {
@@ -111,4 +149,28 @@ func (x *XformerPocket) findTopLevelImperative(n Nod) Nod {
 	})
 
 	return found[0]
+}
+
+func (x *XformerPocket) parseInlineOpStream(opStream Nod) Nod {
+	// converts an inline op stream to a proper prioritized tree representation
+	// for now assume all elements are same priority and group left to right
+	opStreamNodes := NodGetChildList(opStream)
+	streamNodes := make([]Nod, len(opStreamNodes))
+	copy(streamNodes, opStreamNodes)
+	output := streamNodes[0]
+	i := 1
+	for {
+		if i+1 >= len(streamNodes) {
+			break
+		}
+		op := streamNodes[i]
+		right := streamNodes[i+1]
+		opCopy := NodNew(op.NodeType)
+		opCopy.Data = op.Data
+		NodSetChild(opCopy, NTR_BINOP_LEFT, output)
+		NodSetChild(opCopy, NTR_BINOP_RIGHT, right)
+		output = opCopy
+		i += 2
+	}
+	return output
 }
