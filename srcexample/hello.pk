@@ -1,5 +1,8 @@
 
 main func
-    x : $li [[1,2,3],0]
-    print x
-
+    i : 0
+    loop
+        print i
+        if i > 5
+            break
+        i : i + 1

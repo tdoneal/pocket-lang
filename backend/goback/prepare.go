@@ -1,19 +1,30 @@
 package goback
 
 import (
+	. "pocket-lang/frontend/pocket"
 	. "pocket-lang/parse"
 	"pocket-lang/xform"
 )
 
 const (
-	PN_GOIMPORTS = 200000
+	PNR_GOIMPORTS = 200000
 )
 
 type Preparer struct {
-	xformer *xform.Xformer
+	*xform.Xformer
 }
 
 func (p *Preparer) Prepare(code Nod) {
-	panic("preparing code")
+	p.Root = code
+	p.checkForPrintStatements()
+}
 
+func (p *Preparer) checkForPrintStatements() {
+	rcs := p.SearchRoot(func(n Nod) bool {
+		return n.NodeType == NT_RECEIVERCALL && NodGetChild(n, NTR_RECEIVERCALL_NAME).Data.(string) == "print"
+	})
+
+	if len(rcs) > 0 {
+		NodSetChild(p.Root, PNR_GOIMPORTS, NodNewData(NT_IDENTIFIER, "fmt"))
+	}
 }

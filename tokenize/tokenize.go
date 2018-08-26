@@ -17,12 +17,28 @@ const (
 	TK_ALPHANUM   = 20
 	TK_COLON      = 30
 	TK_ADDOP      = 40
+	TK_SUBOP      = 41
+	TK_MULTOP     = 42
+	TK_DIVOP      = 43
+	TK_LT         = 45
+	TK_LTEQ       = 46
+	TK_GT         = 47
+	TK_GTEQ       = 48
+	TK_EQ         = 49
 	TK_COMMENT    = 50
 	TK_PARENL     = 60
 	TK_PARENR     = 61
 	TK_BRACKL     = 62
 	TK_BRACKR     = 63
+	TK_CURLYL     = 64
+	TK_CURLYR     = 65
 	TK_COMMA      = 66
+	TK_IF         = 75
+	TK_ELSE       = 76
+	TK_LOOP       = 80
+	TK_FOR        = 81
+	TK_WHILE      = 82
+	TK_BREAK      = 85
 	TK_RETURN     = 100
 	TK_VOID       = 110
 	TK_INT        = 120
@@ -166,28 +182,35 @@ func (tkzr *Tokenizer) processInit() {
 	} else if isEOL(input) {
 		tkzr.processEOL()
 	} else if input == '+' {
-		tkzr.emitTokenRune(TK_ADDOP, input)
-		tkzr.incr()
+		tkzr.emitTokenRuneAndIncr(TK_ADDOP)
 	} else if input == '(' {
-		tkzr.emitTokenRune(TK_PARENL, input)
-		tkzr.incr()
+		tkzr.emitTokenRuneAndIncr(TK_PARENL)
 	} else if input == ')' {
-		tkzr.emitTokenRune(TK_PARENR, input)
-		tkzr.incr()
+		tkzr.emitTokenRuneAndIncr(TK_PARENR)
 	} else if input == '[' {
-		tkzr.emitTokenRune(TK_BRACKL, input)
-		tkzr.incr()
+		tkzr.emitTokenRuneAndIncr(TK_BRACKL)
 	} else if input == ']' {
-		tkzr.emitTokenRune(TK_BRACKR, input)
-		tkzr.incr()
+		tkzr.emitTokenRuneAndIncr(TK_BRACKR)
+	} else if input == '{' {
+		tkzr.emitTokenRuneAndIncr(TK_CURLYL)
+	} else if input == '}' {
+		tkzr.emitTokenRuneAndIncr(TK_CURLYR)
+	} else if input == '>' {
+		tkzr.emitTokenRuneAndIncr(TK_GT)
+	} else if input == '<' {
+		tkzr.emitTokenRuneAndIncr(TK_LT)
 	} else if input == ',' {
-		tkzr.emitTokenRune(TK_COMMA, input)
-		tkzr.incr()
+		tkzr.emitTokenRuneAndIncr(TK_COMMA)
 	} else if input == '#' {
 		tkzr.processPound()
 	} else {
 		tkzr.incr()
 	}
+}
+
+func (tkzr *Tokenizer) emitTokenRuneAndIncr(tokenType int) {
+	tkzr.emitTokenRune(tokenType, tkzr.getCurrRune())
+	tkzr.incr()
 }
 
 func (tkzr *Tokenizer) processPound() {
@@ -264,6 +287,18 @@ func (tkzr *Tokenizer) checkKeyword(word string) int {
 		return TK_VOID
 	} else if word == "int" {
 		return TK_INT
+	} else if word == "loop" {
+		return TK_LOOP
+	} else if word == "for" {
+		return TK_FOR
+	} else if word == "while" {
+		return TK_WHILE
+	} else if word == "if" {
+		return TK_IF
+	} else if word == "else" {
+		return TK_ELSE
+	} else if word == "break" {
+		return TK_BREAK
 	}
 	return -1
 }

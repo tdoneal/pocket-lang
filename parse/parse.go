@@ -62,6 +62,21 @@ func (p *Parser) ParseAtLeastOneGreedy(f ParseFunc) []Nod {
 	return p.ParseManyGreedyEnsureCount(f, func(n int) bool { return n >= 1 })
 }
 
+func (p *Parser) ParseUnrolledSequenceGreedy(seq []ParseFunc) []Nod {
+	seqNdx := 0
+	rv := make([]Nod, 0)
+	for {
+		pf := seq[seqNdx]
+		ele, err := p.Tryparse(pf)
+		if err != nil {
+			break
+		}
+		rv = append(rv, ele)
+		seqNdx = (seqNdx + 1) % len(seq)
+	}
+	return rv
+}
+
 func (p *Parser) GetCurrToken() *types.Token {
 	return &p.Input[p.Pos]
 }

@@ -27,17 +27,12 @@ func Parse(tokens []types.Token) Nod {
 }
 
 func (p *ParserPocket) parseFuncDef() Nod {
-	fmt.Println("parsing func def at ", spew.Sdump(p.CurrToken()))
 	funcName := p.ParseToken(tokenize.TK_ALPHANUM).Data
-	fmt.Println("parsing potential func kw")
 	funcWord := p.ParseToken(tokenize.TK_ALPHANUM).Data
-	fmt.Println("gotit")
 	rv := NodNew(NT_FUNCDEF)
 	if funcWord != "func" {
-		fmt.Println("missing func keyword")
 		p.RaiseParseError("missing func keyword")
 	}
-	fmt.Println("got func keyw")
 
 	// parse function type declarations if extant
 	// for now, if they are extant, require an explicit in type and explicit out type
@@ -70,9 +65,36 @@ func (p *ParserPocket) parseImperative() Nod {
 
 func (p *ParserPocket) parseImperativeUnit() Nod {
 	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseIf() },
+		func() Nod { return p.parseLoop() },
+		func() Nod { return p.parseBreak() },
 		func() Nod { return p.parseImperativeBlock() },
 		func() Nod { return p.parseStatement() },
 	})
+}
+
+func (p *ParserPocket) parseBreak() Nod {
+	p.ParseToken(tokenize.TK_BREAK)
+	p.parseEOL()
+	return NodNew(NT_BREAK)
+}
+
+func (p *ParserPocket) parseIf() Nod {
+	p.ParseToken(tokenize.TK_IF)
+	cond := p.parseValue()
+	p.parseEOL()
+	body := p.parseImperativeBlock()
+	rv := NodNew(NT_IF)
+	NodSetChild(rv, NTR_IF_COND, cond)
+	NodSetChild(rv, NTR_IF_BODY, body)
+	return rv
+}
+
+func (p *ParserPocket) parseLoop() Nod {
+	p.ParseToken(tokenize.TK_LOOP)
+	p.parseEOL()
+	body := p.parseImperativeBlock()
+	return NodNewChild(NT_LOOP, NTR_LOOP_BODY, body)
 }
 
 func (p *ParserPocket) parseTopLevel() Nod {
@@ -145,35 +167,21 @@ func (p *ParserPocket) parseValueParenthetical() Nod {
 }
 
 func (p *ParserPocket) parseValueInlineOpStream() Nod {
-	state := true // true: parsing non-stream ("atomic" value), false: parsing inline operator
-	totalOps := 0
-	elements := make([]Nod, 0)
-	for {
-		if state {
-			aval, err := p.Tryparse(func() Nod { return p.parseValueAtomic() })
-			if err != nil {
-				p.RaiseParseError("expected atomic value")
-				return nil
-			}
-			state = false
-			elements = append(elements, aval)
-		} else {
-			oldpos := p.Pos
-			aval, err := p.Tryparse(func() Nod { return p.parseInlineOp() })
-			if err != nil {
-				if totalOps == 0 {
-					p.RaiseParseError("expected inline op")
-					return nil
-				}
-				// if here, we've simply reached the end of the inline op stream normally
-				p.Pos = oldpos
-				break
-			}
-			state = true
-			elements = append(elements, aval)
-			totalOps++
-		}
+	elements := p.ParseUnrolledSequenceGreedy([]ParseFunc{
+		func() Nod { return p.parseValueAtomic() },
+		func() Nod { return p.parseInlineOp() },
+	})
+
+	fmt.Println("value inline op stream: got", len(elements), "elements:")
+	fmt.Println(PrettyPrintNodes(elements))
+
+	if len(elements) < 3 {
+		p.RaiseParseError("invalid op stream")
 	}
+	if len(elements)%2 != 1 {
+		p.RaiseParseError("invalid op stream")
+	}
+
 	return NodNewChildList(NT_INLINEOPSTREAM, elements)
 }
 
@@ -190,29 +198,43 @@ func (p *ParserPocket) parseLiteral() Nod {
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseLiteralKeyword() },
 		func() Nod { return p.parseLiteralList() },
+		func() Nod { return p.parseLiteralMap() },
 		func() Nod { return p.parseLiteralInt() },
 	})
 }
 
-func (p *ParserPocket) parseLiteralList() Nod {
-	p.ParseToken(tokenize.TK_BRACKL)
-	values := make([]Nod, 0)
-	for {
-		value := p.ParseAtMostOne(func() Nod { return p.parseValue() })
-		if value == nil {
-			break
-		}
-		values = append(values, value)
-		p.ParseAtMostOne(func() Nod { p.ParseToken(tokenize.TK_COMMA); return nil })
-	}
-	p.ParseToken(tokenize.TK_BRACKR)
+func (p *ParserPocket) parseLiteralMap() Nod {
+	p.ParseToken(tokenize.TK_CURLYL)
 
-	rv := NodNewChildList(NT_LIT_LIST, values)
+	kvpairs := p.parseManyOptDelimited(func() Nod { return p.parseMapKeyValuePair() },
+		func() Nod { return p.parseComma() })
+
+	p.ParseToken(tokenize.TK_CURLYR)
+
+	return NodNewChildList(NT_LIT_MAP, kvpairs)
+}
+
+func (p *ParserPocket) parseMapKeyValuePair() Nod {
+	key := p.parseValue()
+	p.parseColon()
+	val := p.parseValue()
+	rv := NodNew(NT_LIT_MAP_KVPAIR)
+	NodSetChild(rv, NTR_KVPAIR_KEY, key)
+	NodSetChild(rv, NTR_KVPAIR_VAL, val)
 	return rv
 }
 
+func (p *ParserPocket) parseLiteralList() Nod {
+	p.ParseToken(tokenize.TK_BRACKL)
+	elements := p.parseManyOptDelimited(
+		func() Nod { return p.parseValue() },
+		func() Nod { return p.parseComma() },
+	)
+	p.ParseToken(tokenize.TK_BRACKR)
+	return NodNewChildList(NT_LIT_LIST, elements)
+}
+
 func (p *ParserPocket) parseLiteralKeyword() Nod {
-	fmt.Println("parseLiteralKeyword @ ", spew.Sdump(p.CurrToken()))
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseKeywordLitPrimitive(tokenize.TK_VOID, "void") },
 		func() Nod { return p.parseKeywordLitPrimitive(tokenize.TK_INT, "int") },
@@ -226,15 +248,90 @@ func (p *ParserPocket) parseKeywordLitPrimitive(tokenType int, data string) Nod 
 
 func (p *ParserPocket) parseFuncDefTypeValue() Nod {
 	return p.ParseDisjunction([]ParseFunc{
-		// func() Nod { return p.parseValueParenthetical() },
-		// func() Nod { return p.parseVarGetter() },
+		func() Nod { return p.parseParameterParenthetical() },
+		func() Nod { return p.parseParameterList() },
 		func() Nod { return p.parseLiteralKeyword() },
 	})
 }
 
+func (p *ParserPocket) parseType() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseLiteralKeyword() },
+	})
+}
+
+func (p *ParserPocket) parseParameterList() Nod {
+	p.ParseToken(tokenize.TK_BRACKL)
+	parameters := p.parseManyOptDelimited(
+		func() Nod { return p.parseParameterSingle() },
+		func() Nod { return p.parseComma() },
+	)
+	p.ParseToken(tokenize.TK_BRACKR)
+	return NodNewChildList(NT_LIT_LIST, parameters)
+}
+
+func (p *ParserPocket) parseComma() Nod {
+	p.ParseToken(tokenize.TK_COMMA)
+	return nil
+}
+
+func (p *ParserPocket) parseManyOptDelimited(elementParser func() Nod,
+	delimiter func() Nod) []Nod {
+	values := make([]Nod, 0)
+	for {
+		value := p.ParseAtMostOne(elementParser)
+		if value == nil {
+			break
+		}
+		values = append(values, value)
+		p.ParseAtMostOne(delimiter)
+	}
+	return values
+}
+
+func (p *ParserPocket) parseParameterSingle() Nod {
+	varname := p.parseVarName()
+	vartype := p.ParseAtMostOne(func() Nod { return p.parseType() })
+	rv := NodNew(NT_PARAMETER)
+	NodSetChild(rv, NTR_VARDEF_NAME, varname)
+	if vartype != nil {
+		NodSetChild(rv, NTR_TYPE, vartype)
+	}
+	return rv
+}
+
+func (p *ParserPocket) parseParameterParenthetical() Nod {
+	p.ParseToken(tokenize.TK_PARENL)
+	rv := p.parseParameterSingle()
+	p.ParseToken(tokenize.TK_PARENR)
+	return rv
+}
+
 func (p *ParserPocket) parseInlineOp() Nod {
-	p.ParseToken(tokenize.TK_ADDOP)
-	return NodNew(NT_ADDOP)
+	ctok := p.CurrToken().Type
+	fmt.Println("checking if inline op: ", spew.Sdump(p.CurrToken()))
+	nt := p.inlineOpTokenToNT(ctok)
+	if nt != -1 {
+		p.ParseToken(ctok)
+		rv := NodNew(nt)
+		return rv
+	}
+	fmt.Println("wasn't an inline op")
+	p.RaiseParseError("invalid inline op")
+	return nil
+
+}
+
+func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {
+	if tokenType == tokenize.TK_ADDOP {
+		return NT_ADDOP
+	} else if tokenType == tokenize.TK_LT {
+		return NT_LTOP
+	} else if tokenType == tokenize.TK_GT {
+		return NT_GTOP
+	} else {
+		return -1
+	}
 }
 
 func (p *ParserPocket) parseVarGetter() Nod {

@@ -68,7 +68,6 @@ func (x *XformerPocket) buildVarDefTables() {
 	varInits := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARINIT })
 
 	fmt.Println("all variable initializers:", len(varInits))
-	fmt.Println(PrettyPrintNodes(varInits))
 
 	for _, ele := range varInits {
 		tlImper := x.findTopLevelImperative(ele)
@@ -78,8 +77,6 @@ func (x *XformerPocket) buildVarDefTables() {
 		NodSetChild(ele, NTR_TOPLEVEL_IMPERATIVE, tlImper)
 
 	}
-
-	fmt.Println("after linking tl imperatives: var inits:\n", PrettyPrintNodes(varInits))
 
 	// next, generate the vartables for each tl imperative
 	impVartables := make(map[Nod][]Nod)

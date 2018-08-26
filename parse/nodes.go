@@ -1,7 +1,8 @@
 package parse
 
 const (
-	NTR_LIST_0 = 100000 // 100000<->0th element, 100001<->1st element, etc
+	NTR_LIST_0   = 100000 // 100000<->0th element, 100001<->1st element, etc
+	NTR_LIST_MAX = 200000
 )
 
 type NodeType struct {

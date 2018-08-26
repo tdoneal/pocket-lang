@@ -49,6 +49,14 @@ func (d *Debug) initialize() {
 	ntl[NT_TYPE] = "TYPE"
 	ntl[NTR_VARINIT_NAME] = "VARNAME"
 	ntl[NTR_VARINIT_VALUE] = "INITVAL"
+	ntl[NTR_KVPAIR_KEY] = "KEY"
+	ntl[NTR_KVPAIR_VAL] = "VALUE"
+	ntl[NT_LOOP] = "LOOP"
+	ntl[NTR_LOOP_BODY] = "BODY"
+	ntl[NT_IF] = "IF"
+	ntl[NTR_IF_COND] = "COND"
+	ntl[NTR_IF_BODY] = "BODY"
+	ntl[NT_BREAK] = "BREAK"
 	d.initialized = true
 }
 
@@ -132,7 +140,7 @@ func (d *DebugPrinter) incIndent(by int) {
 func (d *DebugPrinter) printNodeType(nodeType int) {
 	if val, ok := DEBUG.nodeTypeLookup[nodeType]; ok {
 		d.buf.WriteString(val)
-	} else if nodeType >= NTR_LIST_0 {
+	} else if nodeType >= NTR_LIST_0 && nodeType < NTR_LIST_MAX {
 		ndx := nodeType - NTR_LIST_0
 		d.buf.WriteString("[")
 		d.buf.WriteString(strconv.Itoa(ndx))
