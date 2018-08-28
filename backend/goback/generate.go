@@ -153,7 +153,24 @@ func (g *Generator) genVarDef(n Nod) {
 	varName := NodGetChild(n, NTR_VARDEF_NAME).Data.(string)
 	g.WS("var ")
 	g.WS(varName)
+	if nType := NodGetChildOrNil(n, NTR_TYPE); nType != nil {
+		g.WS(" ")
+		g.genType(NodGetChild(n, NTR_TYPE))
+	}
 	g.WS("\n")
+}
+
+func (g *Generator) genType(n Nod) {
+	lut := map[int]string{
+		TY_INT:    "int",
+		TY_FLOAT:  "float",
+		TY_NUMBER: "number",
+	}
+	if val, ok := lut[n.Data.(int)]; ok {
+		g.WS(val)
+	} else {
+		g.WS("<type>")
+	}
 }
 
 func (g *Generator) genImperativeUnit(n Nod) {
@@ -263,9 +280,19 @@ func (g *Generator) genValue(n Nod) {
 		g.genLiteralMap(n)
 	} else if nt == NT_RECEIVERCALL {
 		g.genReceiverCall(n)
+	} else if n.NodeType == NT_ADDOP {
+		g.genAddOp(n)
 	} else {
 		g.WS("value")
 	}
+}
+
+func (g *Generator) genAddOp(n Nod) {
+	g.WS("(")
+	g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
+	g.WS("+")
+	g.genValue(NodGetChild(n, NTR_BINOP_RIGHT))
+	g.WS(")")
 }
 
 func (g *Generator) genLiteralMap(n Nod) {

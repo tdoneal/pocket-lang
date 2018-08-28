@@ -1,8 +1,4 @@
 
 main func
     i : 0
-    loop
-        print i
-        if i > 5
-            break
-        i : i + 1
+    i : i + 1

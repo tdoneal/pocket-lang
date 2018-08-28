@@ -47,6 +47,8 @@ func (d *Debug) initialize() {
 	ntl[NT_LIT_LIST] = "LIST"
 	ntl[NTR_TYPE] = "TYPE"
 	ntl[NT_TYPE] = "TYPE"
+	ntl[NT_MYPE] = "MYPE"
+	ntl[NTR_MYPE] = "MYPE"
 	ntl[NT_VARASSIGN] = "VARASSIGN"
 	ntl[NTR_VAR_NAME] = "VARNAME"
 	ntl[NTR_VARASSIGN_VALUE] = "ASSIGNVAL"
@@ -58,12 +60,19 @@ func (d *Debug) initialize() {
 	ntl[NTR_IF_COND] = "COND"
 	ntl[NTR_IF_BODY] = "BODY"
 	ntl[NT_BREAK] = "BREAK"
+	ntl[NT_VAR_GETTER] = "VARGET"
 	d.initialized = true
 }
 
+func DebugPrinterNew() *DebugPrinter {
+	DEBUG.ensureInitialized()
+	return &DebugPrinter{}
+}
+
 func PrettyPrint(n Nod) string {
-	dp := &DebugPrinter{}
-	return dp.PrettyPrint(n)
+	dp := DebugPrinterNew()
+	dp.PrettyPrint(n)
+	return dp.String()
 }
 
 func PrettyPrintNodes(nodes []Nod) string {
@@ -77,12 +86,14 @@ func PrettyPrintNodes(nodes []Nod) string {
 	return buf.String()
 }
 
-func (d *DebugPrinter) PrettyPrint(node *Node) string {
-	DEBUG.ensureInitialized()
+func (d *DebugPrinter) PrettyPrint(node *Node) {
 	d.buf = bytes.Buffer{}
 	d.alreadySeen = make(map[*Node]bool)
 	d.indent = 0
 	d.internalPrettyPrint(node)
+}
+
+func (d *DebugPrinter) String() string {
 	return d.buf.String()
 }
 
@@ -92,17 +103,9 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 		seen = true
 	}
 	d.alreadySeen[node] = true
-	d.printNodeType(node.NodeType)
+	d.PrintNodeType(node.NodeType)
 
-	// print local data if extant
-	if val, ok := node.Data.(int); ok {
-		d.buf.WriteString(": ")
-		d.buf.WriteString(strconv.Itoa(val))
-	} else if val, ok := node.Data.(string); ok {
-		d.buf.WriteString(": \"")
-		d.buf.WriteString(val)
-		d.buf.WriteString("\"")
-	}
+	d.PrintLocalDataIfExtant(node)
 
 	// print children
 	cnt := 0
@@ -110,7 +113,7 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 		d.incIndent(1)
 		d.printEOL()
 		for _, edge := range node.Out {
-			d.printNodeType(edge.EdgeType)
+			d.PrintNodeType(edge.EdgeType)
 			d.buf.WriteString("->")
 			d.internalPrettyPrint(edge.Out)
 			if cnt < (len(node.Out) - 1) {
@@ -127,6 +130,24 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 
 }
 
+func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
+	if val, ok := node.Data.(int); ok {
+		d.buf.WriteString(": ")
+		d.buf.WriteString(strconv.Itoa(val))
+	} else if val, ok := node.Data.(string); ok {
+		d.buf.WriteString(": \"")
+		d.buf.WriteString(val)
+		d.buf.WriteString("\"")
+	} else if val, ok := node.Data.(*MypeExplicit); ok {
+		d.buf.WriteString("{")
+		for key := range val.types {
+			d.PrintNodeType(key)
+			d.buf.WriteString(", ")
+		}
+		d.buf.WriteString("}")
+	}
+}
+
 func (d *DebugPrinter) printEOL() {
 	d.buf.WriteString("\n")
 	for i := 0; i < d.indent; i++ {
@@ -138,7 +159,7 @@ func (d *DebugPrinter) incIndent(by int) {
 	d.indent += by
 }
 
-func (d *DebugPrinter) printNodeType(nodeType int) {
+func (d *DebugPrinter) PrintNodeType(nodeType int) {
 	if val, ok := DEBUG.nodeTypeLookup[nodeType]; ok {
 		d.buf.WriteString(val)
 	} else if nodeType >= NTR_LIST_0 && nodeType < NTR_LIST_MAX {
@@ -149,4 +170,42 @@ func (d *DebugPrinter) printNodeType(nodeType int) {
 	} else {
 		d.buf.WriteString(strconv.Itoa(nodeType))
 	}
+}
+
+func (d *DebugPrinter) PrettyPrintMypes(nods []Nod) {
+	for _, ele := range nods {
+		d.PrettyPrintMype(ele)
+	}
+}
+
+func (d *DebugPrinter) PrettyPrintMype(nod Nod) {
+	d.PrintNodeType(nod.NodeType)
+	d.PrintLocalDataIfExtant(nod)
+	if NodHasChild(nod, NTR_MYPE) {
+		d.buf.WriteString(" <")
+		mypeNod := NodGetChild(nod, NTR_MYPE)
+		d.PrintNodeType(mypeNod.NodeType)
+		d.PrintLocalDataIfExtant(mypeNod)
+		d.buf.WriteString(">")
+	} else if NodHasChild(nod, NTR_TYPE) {
+		d.buf.WriteString(" :: ")
+		typeNod := NodGetChild(nod, NTR_TYPE)
+		d.PrintNodeType(typeNod.NodeType)
+		d.PrintLocalDataIfExtant(typeNod)
+	}
+	d.buf.WriteString("\n")
+}
+
+func PrettyPrintOp(printOp func(*DebugPrinter)) string {
+	d := DebugPrinterNew()
+	printOp(d)
+	return d.String()
+}
+
+func PrettyPrintMype(nod Nod) string {
+	return PrettyPrintOp(func(d *DebugPrinter) { d.PrettyPrintMype(nod) })
+}
+
+func PrettyPrintMypes(nods []Nod) string {
+	return PrettyPrintOp(func(d *DebugPrinter) { d.PrettyPrintMypes(nods) })
 }

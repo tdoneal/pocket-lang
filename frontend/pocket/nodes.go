@@ -16,6 +16,8 @@ const (
 	NTR_VARTABLE            = 51
 	NT_TYPE                 = 55
 	NTR_TYPE                = 56
+	NT_MYPE                 = 57
+	NTR_MYPE                = 58
 	NT_TOPLEVEL             = 60
 	NTR_TOPLEVEL_IMPERATIVE = 61
 	NT_FUNCDEF              = 63

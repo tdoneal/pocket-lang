@@ -101,3 +101,25 @@ func NodSetChild(n Nod, edgeType int, child Nod) {
 	n.Out[edgeType] = newEdge
 	child.In = append(child.In, newEdge)
 }
+
+func NodRemoveChild(n Nod, edgeType int) {
+	edge := n.Out[edgeType]
+	child := edge.Out
+	childInEdgeNdx := sliceIndex(len(child.In), func(i int) bool { return child.In[i] == edge })
+	delete(n.Out, edgeType)
+	slicePEdgeRemove(child.In, childInEdgeNdx)
+}
+
+func sliceIndex(limit int, predicate func(int) bool) int {
+	for i := 0; i < limit; i++ {
+		if predicate(i) {
+			return i
+		}
+	}
+	return -1
+}
+
+func slicePEdgeRemove(s []*Edge, i int) []*Edge {
+	s[len(s)-1], s[i] = s[i], s[len(s)-1]
+	return s[:len(s)-1]
+}

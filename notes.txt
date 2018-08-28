@@ -96,4 +96,188 @@ tree (graph) rewriting rule:
      Node out
  }
 
- need way to represent the allowable "field names" (edge names) for each node type
+ need way to represent the allowable "field names" (edge names) for each node type (done)
+
+ a var's inferred type is equal to: the tightest type compatible with all assignments
+ type inference phase: tightening only or mixture of tighten/loosen?
+    - pretty sure iterative tightening will work
+
+for example:
+
+i : 0 (any)
+i : i + 1 (any)
+
+i : 0 [int, any]
+i : i + 1 (any)
+
+i : 0 [int, any]
+i : i[int,any] + 1[int] -> i : (i + 1)[int, any]
+
+satisfiability problem:
+trying to find a type for each expression that satisfies the rules:
+ltype : rtype -> (rtype < ltype)
+typesum = (typea + typeb) -> (typesum==int & typea==int & typeb==int)
+
+approach:
+phase 1: compute the type constraints on each expression (the narrowest and widest each node can be)
+phase 2: assign the tightest possible type to each expression
+
+how to represent the type constraints:
+idea: set of (min, max) tuples on the abstract type hierarchy.
+
+going back to the earlier example:
+phase 1:
+i[0,any] : 0[0,any]
+i : (i[0,any] + 1[0,any])[0,any]
+
+i[0,any] : 0[int] # integer literals are exactly [int]
+i : (i[0,any] + 1[int])[0,any] # integer literals are exactly [int]
+
+i[int,any] : 0[int] # left-hand side must be > than right-hand side
+i : (i[0,int] + 1[int])[0,int] # ops and result of add must be <int
+
+i[int,any] : 0[int]
+i : (i[0,int] + 1[int])[int] # result of add must be >max(args)
+
+i[int] : 0[int] # intersection of independent constraints
+i : (i[int] + 1[int])[int] # intersection of independent constraints
+
+### no more rules to apply
+### phase 2: pick tightest type available from each constraints
+# in this case all nodes ended up on a single type already, so we're done
+
+i[int] : 0[int] # intersection of independent constraints
+i : (i[int] + 1[int])[int] # intersection of independent constraints
+
+concept of "mypes" (metatypes)
+a "mype" refers to a set of types.  I.e., there is a quickly computeable
+function mype.contains(t Type) that computes whether t "satisfies" the mype
+
+example mypes:
+{/0} # the empty set of types
+any # the set of all types
+
+mypes can be compound
+betweenFloatNumber = myperange[float, number]
+
+mype propagation rules:
+variable assignment: no information can be gleaned
+add op: all arguments and result must be exactly int
+
+new phases:
+phase 1: compute all rvalue mype rules until quiescence
+phase 2: compute variable mypes as union of all potential rvalues
+
+i : 0
+i : i + 1
+
+i[any] : 0[int]
+i[any] : [i[any] + 1[int]][any]
+
+generate list of explicit "directions to search" (i.e., steps)
+steps can have two types of static guarantees:
+G1) increased specifity. the step will always make a mype more specific
+G2) validity.  the step will always result in a valid type graph after running.
+a step can either be 1) guaranteed to progress towards a solution (i.e., 0[any] -> 0[int])
+or 2) speculative (i.e., i[any] : 0[int] -> i[int])
+algorithm:
+phase 1: compute list of steps with G1 and G2 (low-hanging fruit).  execute all of them 
+phase 2: 
+    compute list of speculative steps. 
+    for each step, execute and evaluate G1 and G2
+    if both G1 and G2 are satisfied, keep the result, otherwise backtrack
+        In certain cases it is possible to compute G1 and/or G2 without actually performing
+        any graph replacements.
+repeat phases 1 and 2 until no more steps are generated
+
+guaranteed steps examples:
+literal integer -> [int]
+
+speculative steps examples:
+varRValueUnion:
+    take all rvalues to a given named variable
+    variable.mype = variable.mype & Union(rvalue.mype for rvalue in rvalues)
+        G1: needs computing (may be idempotent assignment)
+        G2: always
+arithOpClosure:
+    take all arguments to an add operation
+    if all argument.mype are identical, then op.mype = argument[any].mype
+        G1: needs computing (may be idempotent assignment)
+        G2: always
+varRValueAggressive:
+    take a rvalue to a named variable
+    variable.mype = rvalue.mype
+        G1: needs computing (may be idempotent assignment)
+        G2: needs computing 
+
+i[any] : 0[any]
+i : (i + 1[any])[any]
+after phase 1: (guaranteed steps):
+i[any] : 0[int]
+i : (i + 1[int])[any]
+
+after varRValueAggressive
+i[int] : 0[int]
+i : (i + 1[int])
+
+i : 0 -> [unknown] : [int]
+i : i + 1 -> [unknown] : [unknown] + [int]
+
+[float, int, string] : [int]
+[float, int, string] : [float, int, string] + [int]
+
+# now need heuristic to choose among these options:
+i[float], i[int], i[string]
+
+# we want the one that would generate the least # of conversion code 
+# and in general the least amount of B.S.
+# as a human the best answer is clearly i[int], but how to decide this algorithmically?
+
+answer 1: "killer heuristics":  e.g., find the first assignment's rvalue and use that, done
+
+example type inference test cases:
+
+prog:
+i : 0
+i : i + 1
+want:
+i[int]
+
+prog:
+i : 0
+i : 3.4
+want:
+i[number]
+
+i[any]: 0[int]
+i : 3.4[float]
+--> rvalue lca
+i[LCA[int, float]]: 0
+i : 3.4
+--> lca evaluation
+i[number]: 0
+
+
+i[any]: 0[int]
+i: (i + 1[int])[any]
+--> add op compatibility
+i[Disj[float, int, string]] : 0
+--> add op result
+i : 0
+i: (i + 1)[Disj[float, int, string]]
+--> var disj first assignment heuristic
+i[int] : 0
+i: (i + 1)
+--> add op compatibility + result
+i : 0
+i: (i + 1)[int]
+
+
+
+i : 0
+i : i + 1
+key: unknown is not the same as any
+any is the set of all types, whereas unknown represents the power set of types (the set of all subsets of types)
+mypes are elements of the power set of types
+types are elements of the set of types
+values are elements of a type
