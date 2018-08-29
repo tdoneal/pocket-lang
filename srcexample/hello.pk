@@ -1,8 +1,5 @@
 
 main func
-    i : 0
-    loop
-        if i > 5
-            break
-        print i
-        i : i + 1
+    print 'Hello, world!'
+
+    

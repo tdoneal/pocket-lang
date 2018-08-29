@@ -196,10 +196,16 @@ func (p *ParserPocket) parseValueAtomic() Nod {
 func (p *ParserPocket) parseLiteral() Nod {
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseLiteralKeyword() },
+		func() Nod { return p.parseLiteralString() },
 		func() Nod { return p.parseLiteralList() },
 		func() Nod { return p.parseLiteralMap() },
 		func() Nod { return p.parseLiteralInt() },
 	})
+}
+
+func (p *ParserPocket) parseLiteralString() Nod {
+	tkn := p.ParseToken(TK_LITERALSTRING)
+	return NodNewData(NT_LIT_STRING, tkn.Data)
 }
 
 func (p *ParserPocket) parseLiteralMap() Nod {

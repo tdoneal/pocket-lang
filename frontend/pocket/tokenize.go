@@ -14,39 +14,40 @@ type TokenizerPocket struct {
 }
 
 const (
-	TKS_INIT      = 0
-	TK_EOL        = 1
-	TK_INCINDENT  = 2
-	TK_DECINDENT  = 3
-	TK_LITERALINT = 10
-	TK_ALPHANUM   = 20
-	TK_COLON      = 30
-	TK_ADDOP      = 40
-	TK_SUBOP      = 41
-	TK_MULTOP     = 42
-	TK_DIVOP      = 43
-	TK_LT         = 45
-	TK_LTEQ       = 46
-	TK_GT         = 47
-	TK_GTEQ       = 48
-	TK_EQ         = 49
-	TK_COMMENT    = 50
-	TK_PARENL     = 60
-	TK_PARENR     = 61
-	TK_BRACKL     = 62
-	TK_BRACKR     = 63
-	TK_CURLYL     = 64
-	TK_CURLYR     = 65
-	TK_COMMA      = 66
-	TK_IF         = 75
-	TK_ELSE       = 76
-	TK_LOOP       = 80
-	TK_FOR        = 81
-	TK_WHILE      = 82
-	TK_BREAK      = 85
-	TK_RETURN     = 100
-	TK_VOID       = 110
-	TK_INT        = 120
+	TKS_INIT         = 0
+	TK_EOL           = 1
+	TK_INCINDENT     = 2
+	TK_DECINDENT     = 3
+	TK_LITERALINT    = 10
+	TK_LITERALSTRING = 15
+	TK_ALPHANUM      = 20
+	TK_COLON         = 30
+	TK_ADDOP         = 40
+	TK_SUBOP         = 41
+	TK_MULTOP        = 42
+	TK_DIVOP         = 43
+	TK_LT            = 45
+	TK_LTEQ          = 46
+	TK_GT            = 47
+	TK_GTEQ          = 48
+	TK_EQ            = 49
+	TK_COMMENT       = 50
+	TK_PARENL        = 60
+	TK_PARENR        = 61
+	TK_BRACKL        = 62
+	TK_BRACKR        = 63
+	TK_CURLYL        = 64
+	TK_CURLYR        = 65
+	TK_COMMA         = 66
+	TK_IF            = 75
+	TK_ELSE          = 76
+	TK_LOOP          = 80
+	TK_FOR           = 81
+	TK_WHILE         = 82
+	TK_BREAK         = 85
+	TK_RETURN        = 100
+	TK_VOID          = 110
+	TK_INT           = 120
 )
 
 func Tokenize(input string) []types.Token {
@@ -111,12 +112,10 @@ func (tkzr *TokenizerPocket) processPreline() {
 		} else if isEOL(chr) {
 			break
 		} else {
-			fmt.Println("offending character:", chr)
 			lineEmpty = false
 			break
 		}
 	}
-	fmt.Println("preline line", tkzr.CreateCurrSourceLocation().Line, "lineEmpty", lineEmpty)
 	if lineEmpty {
 		return
 	}
@@ -166,6 +165,8 @@ func (tkzr *TokenizerPocket) processInit() {
 		tkzr.Incr()
 	} else if isDigit(input) {
 		tkzr.processLiteralInt()
+	} else if isStringDelim(input) {
+		tkzr.processLiteralString()
 	} else if input == ' ' {
 		tkzr.processSpace()
 	} else if input == '\t' {
@@ -262,6 +263,29 @@ func (tkzr *TokenizerPocket) processAlphanum() {
 	tkzr.State = TKS_INIT
 }
 
+func (tkzr *TokenizerPocket) processLiteralString() {
+	// skip initial quote
+	tkzr.Incr()
+	terminated := false
+	for !tkzr.IsEOF() {
+		chr := tkzr.CurrRune()
+		if isStringDelim(chr) {
+			terminated = true
+			tkzr.Incr()
+			break
+		} else {
+			tkzr.Tokbuf.WriteRune(chr)
+			tkzr.Incr()
+		}
+	}
+	if !terminated {
+		panic("unterminated string literal")
+	}
+	tkzr.EmitToken(TK_LITERALSTRING, tkzr.Tokbuf.String())
+	tkzr.Tokbuf.Reset()
+	tkzr.State = TKS_INIT
+}
+
 func (tkzr *TokenizerPocket) checkKeyword(word string) int {
 	// returns TK_TYPE if keyword, -1 otherwise
 	if word == "return" {
@@ -301,4 +325,8 @@ func isEOL(input rune) bool {
 
 func isSpace(input rune) bool {
 	return input == ' '
+}
+
+func isStringDelim(input rune) bool {
+	return input == '\''
 }

@@ -165,6 +165,7 @@ func (g *Generator) genType(n Nod) {
 		TY_INT:    "int",
 		TY_FLOAT:  "float",
 		TY_NUMBER: "number",
+		TY_STRING: "string",
 	}
 	if val, ok := lut[n.Data.(int)]; ok {
 		g.WS(val)
@@ -270,6 +271,8 @@ func (g *Generator) genValue(n Nod) {
 	nt := n.NodeType
 	if nt == NT_LIT_INT {
 		g.WS(strconv.Itoa(n.Data.(int)))
+	} else if nt == NT_LIT_STRING {
+		g.genLiteralString(n)
 	} else if nt == NT_INLINEOPSTREAM {
 		g.genOpStream(n)
 	} else if nt == NT_VAR_GETTER {
@@ -285,6 +288,12 @@ func (g *Generator) genValue(n Nod) {
 	} else {
 		g.WS("value")
 	}
+}
+
+func (g *Generator) genLiteralString(n Nod) {
+	g.WS("\"")
+	g.WS(n.Data.(string))
+	g.WS("\"")
 }
 
 func (g *Generator) isBinaryInlineOpType(nType int) bool {

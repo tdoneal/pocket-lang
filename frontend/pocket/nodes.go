@@ -43,6 +43,7 @@ const (
 	NT_INLINEOPSTREAM       = 150
 	NTR_LIT_VALUE           = 201
 	NT_LIT_INT              = 210
+	NT_LIT_STRING           = 215
 	NT_LIT_LIST             = 230
 	NT_LIT_MAP              = 235
 	NT_LIT_MAP_KVPAIR       = 236

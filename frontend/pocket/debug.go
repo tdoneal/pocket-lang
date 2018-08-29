@@ -31,7 +31,8 @@ func (d *Debug) initialize() {
 	ntl[NT_IDENTIFIER] = "IDENTIFIER"
 	ntl[NT_IMPERATIVE] = "IMPERATIVE"
 	ntl[NT_RECEIVERCALL] = "CALL"
-	ntl[NT_LIT_INT] = "LIT_INT"
+	ntl[NT_LIT_INT] = "INT"
+	ntl[NT_LIT_STRING] = "STRING"
 	ntl[NT_INLINEOPSTREAM] = "OPSTREAM"
 	ntl[NTR_RECEIVERCALL_NAME] = "NAME"
 	ntl[NTR_RECEIVERCALL_VALUE] = "ARG"
@@ -184,6 +185,9 @@ func (d *DebugPrinter) PrettyPrintMype(nod Nod) {
 	if nod.NodeType == NT_VAR_GETTER {
 		d.buf.WriteString(" ")
 		d.buf.WriteString(NodGetChild(nod, NTR_VAR_GETTER_NAME).Data.(string))
+	} else if nod.NodeType == NT_VARDEF {
+		d.buf.WriteString(" ")
+		d.buf.WriteString(NodGetChild(nod, NTR_VARDEF_NAME).Data.(string))
 	}
 
 	if NodHasChild(nod, NTR_MYPE) {

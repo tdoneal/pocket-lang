@@ -11,6 +11,10 @@ const (
 	TY_NUMBER = 2
 	TY_INT    = 3
 	TY_FLOAT  = 4
+	TY_STRING = 5
+	TY_SET    = 6
+	TY_MAP    = 7
+	TY_LIST   = 8
 )
 
 type Mype interface{}
@@ -71,6 +75,22 @@ func (x *XformerPocket) getInitMype() Nod {
 	return NodNewData(NT_MYPE, md)
 }
 
+func isLiteralNodeType(nt int) bool {
+	return nt == NT_LIT_INT || nt == NT_LIT_STRING
+}
+
+func getLiteralTypeAnnDataFromNT(nt int) int {
+	lut := map[int]int{
+		NT_LIT_INT:    TY_INT,
+		NT_LIT_STRING: TY_STRING,
+	}
+	return lut[nt]
+}
+
+func isBinaryOpType(nt int) bool {
+	return nt == NT_ADDOP || nt == NT_GTOP || nt == NT_LTOP
+}
+
 func (x *XformerPocket) solveTypes() {
 	// // assign a concrete type to every node
 
@@ -84,7 +104,7 @@ func (x *XformerPocket) solveTypes() {
 	// TODO: multi-function support
 	values := x.SearchRoot(func(n Nod) bool {
 		nt := n.NodeType
-		return nt == NT_LIT_INT || nt == NT_ADDOP || nt == NT_VAR_GETTER || nt == NT_VARASSIGN
+		return isLiteralNodeType(nt) || isBinaryOpType(nt) || nt == NT_VAR_GETTER || nt == NT_VARASSIGN
 	})
 
 	// assign an initial mype to all value nodes
@@ -102,7 +122,7 @@ func (x *XformerPocket) solveTypes() {
 
 	// apply repeated solve rules until convergence (for system 1 semantics)
 	x.applyRewritesUntilStable(values, []*RewriteRule{
-		marLitIntsBase(),
+		marLiterals(),
 		marVarAssign(),
 		marAddOp(),
 	})
@@ -111,9 +131,10 @@ func (x *XformerPocket) solveTypes() {
 	// TODO: support uncertainty here followed by an explicit search over the possible types
 	// followed by static type verification (the verification is a different set of rules)
 	allResolved := true
-	for _, ele := range values {
+	allToCheck := append(values, varDefs...)
+	for _, ele := range allToCheck {
 		if NodGetChild(ele, NTR_MYPE).NodeType != NT_TYPE {
-			fmt.Println("mypes after applying heuristics:", PrettyPrintMypes(values))
+			fmt.Println("mypes after applying heuristics:", PrettyPrintMype(ele))
 			allResolved = false
 			break
 		}
@@ -155,8 +176,7 @@ func marVarAssign() *RewriteRule {
 			return false
 		},
 		action: func(n Nod) {
-			NodSetChild(n, NTR_MYPE,
-				NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE))
+			writeTypeAndData(NodGetChild(n, NTR_MYPE), NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE))
 			fmt.Println("Applied MAR: VarAssign")
 		},
 	}
@@ -194,10 +214,10 @@ func writeTypeAndData(dst Nod, src Nod) {
 	dst.Data = src.Data
 }
 
-func marLitIntsBase() *RewriteRule {
+func marLiterals() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_LIT_INT {
+			if isLiteralNodeType(n.NodeType) {
 				if NodGetChild(n, NTR_MYPE).NodeType != NT_TYPE {
 					return true
 				}
@@ -205,7 +225,8 @@ func marLitIntsBase() *RewriteRule {
 			return false
 		},
 		action: func(n Nod) {
-			NodSetChild(n, NTR_MYPE, NodNewData(NT_TYPE, TY_INT))
+			ty := getLiteralTypeAnnDataFromNT(n.NodeType)
+			NodSetChild(n, NTR_MYPE, NodNewData(NT_TYPE, ty))
 			fmt.Println("Applied marLitIntsBase to", PrettyPrintMype(n))
 		},
 	}
@@ -311,6 +332,9 @@ func (x *XformerPocket) linkVarsToVarTables() {
 				matchedVarDef = varDef
 				break
 			}
+		}
+		if matchedVarDef == nil {
+			panic("unknown var: '" + varName + "'")
 		}
 		// finally, store a reference to the definition
 		NodSetChild(varRef, NTR_VARDEF, matchedVarDef)
