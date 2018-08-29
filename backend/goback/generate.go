@@ -280,17 +280,30 @@ func (g *Generator) genValue(n Nod) {
 		g.genLiteralMap(n)
 	} else if nt == NT_RECEIVERCALL {
 		g.genReceiverCall(n)
-	} else if n.NodeType == NT_ADDOP {
-		g.genAddOp(n)
+	} else if g.isBinaryInlineOpType(n.NodeType) {
+		g.genBinaryInlineOp(n)
 	} else {
 		g.WS("value")
 	}
 }
 
-func (g *Generator) genAddOp(n Nod) {
+func (g *Generator) isBinaryInlineOpType(nType int) bool {
+	return nType == NT_ADDOP || nType == NT_GTOP || nType == NT_LTOP
+}
+
+func (g *Generator) getBinaryInlineOpSymbol(nType int) string {
+	lut := map[int]string{
+		NT_ADDOP: "+",
+		NT_GTOP:  ">",
+		NT_LTOP:  "<",
+	}
+	return lut[nType]
+}
+
+func (g *Generator) genBinaryInlineOp(n Nod) {
 	g.WS("(")
 	g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
-	g.WS("+")
+	g.WS(g.getBinaryInlineOpSymbol(n.NodeType))
 	g.genValue(NodGetChild(n, NTR_BINOP_RIGHT))
 	g.WS(")")
 }

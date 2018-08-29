@@ -181,6 +181,11 @@ func (d *DebugPrinter) PrettyPrintMypes(nods []Nod) {
 func (d *DebugPrinter) PrettyPrintMype(nod Nod) {
 	d.PrintNodeType(nod.NodeType)
 	d.PrintLocalDataIfExtant(nod)
+	if nod.NodeType == NT_VAR_GETTER {
+		d.buf.WriteString(" ")
+		d.buf.WriteString(NodGetChild(nod, NTR_VAR_GETTER_NAME).Data.(string))
+	}
+
 	if NodHasChild(nod, NTR_MYPE) {
 		d.buf.WriteString(" <")
 		mypeNod := NodGetChild(nod, NTR_MYPE)

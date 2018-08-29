@@ -8,6 +8,7 @@ const (
 	NTR_VARASSIGN_VALUE     = 23
 	NT_VARDEF               = 25
 	NTR_VARDEF_NAME         = 26
+	NTR_VARDEF              = 28
 	NT_RECEIVERCALL         = 30
 	NTR_RECEIVERCALL_NAME   = 31
 	NTR_RECEIVERCALL_VALUE  = 32
