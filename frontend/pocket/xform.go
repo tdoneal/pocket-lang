@@ -18,12 +18,6 @@ const (
 	TY_DUCK   = 30
 )
 
-type Mype interface{}
-
-type MypeExplicit struct {
-	types map[int]bool
-}
-
 type XformerPocket struct {
 	*Xformer
 }
@@ -67,12 +61,7 @@ type RewriteRule struct {
 }
 
 func (x *XformerPocket) getInitMype() Nod {
-	md := &MypeExplicit{
-		types: map[int]bool{
-			TY_OBJECT: true,
-			TY_INT:    true,
-		},
-	}
+	md := MypeExplicitNewFull()
 	return NodNewData(NT_MYPE, md)
 }
 
@@ -132,6 +121,7 @@ func (x *XformerPocket) solveTypes() {
 		marLiterals(),
 		marVarAssign(),
 		marAddOp(),
+		marEnforceDeclaredTypes(),
 	})
 
 	// for now: enforce that all type must be fully resolved by now
@@ -195,6 +185,23 @@ func marVarAssign() *RewriteRule {
 		action: func(n Nod) {
 			writeTypeAndData(NodGetChild(n, NTR_MYPE), NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE))
 			fmt.Println("Applied MAR: VarAssign")
+		},
+	}
+}
+
+func marEnforceDeclaredTypes() *RewriteRule {
+	// propagate var assign values from rhs -> lhs
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_VARASSIGN {
+				if NodHasChild(n, NTR_TYPE_DECL) {
+					return true
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			panic("encountered type decl")
 		},
 	}
 }

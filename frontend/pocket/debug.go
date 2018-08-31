@@ -144,7 +144,7 @@ func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 		d.buf.WriteString("\"")
 	} else if val, ok := node.Data.(*MypeExplicit); ok {
 		d.buf.WriteString("{")
-		for key := range val.types {
+		for key := range val.Types {
 			d.PrintNodeType(key)
 			d.buf.WriteString(", ")
 		}

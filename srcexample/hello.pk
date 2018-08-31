@@ -1,6 +1,5 @@
 
 main func
-    fib 3
-
-fib func(x) void
+    x int : 'hello world'
     print x
+

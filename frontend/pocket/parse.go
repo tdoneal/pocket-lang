@@ -136,11 +136,15 @@ func (p *ParserPocket) parseReturnStatement() Nod {
 
 func (p *ParserPocket) parseVarAssign() Nod {
 	name := p.parseVarName()
+	varType := p.ParseAtMostOne(func() Nod { return p.parseType() })
 	p.parseColon()
 	val := p.parseValue()
 	rv := NodNew(NT_VARASSIGN)
 	NodSetChild(rv, NTR_VAR_NAME, name)
 	NodSetChild(rv, NTR_VARASSIGN_VALUE, val)
+	if varType != nil {
+		NodSetChild(rv, NTR_TYPE_DECL, varType)
+	}
 	return rv
 }
 
@@ -300,7 +304,7 @@ func (p *ParserPocket) parseParameterSingle() Nod {
 	rv := NodNew(NT_PARAMETER)
 	NodSetChild(rv, NTR_VARDEF_NAME, varname)
 	if vartype != nil {
-		NodSetChild(rv, NTR_TYPE, vartype)
+		NodSetChild(rv, NTR_TYPE_DECL, vartype)
 	}
 	return rv
 }

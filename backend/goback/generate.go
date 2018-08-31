@@ -125,10 +125,22 @@ func (g *Generator) genArgUnpacking(inTypeDef Nod) {
 	}
 }
 
+func (g *Generator) getContainingFuncDefOrNil(n Nod) Nod {
+	for _, inEdge := range n.In {
+		parent := inEdge.In
+		if parent.NodeType == NT_FUNCDEF {
+			return parent
+		}
+	}
+	return nil
+}
+
 func (g *Generator) genImperative(input Nod) {
 
-	if varTable := NodGetChildOrNil(input, NTR_VARTABLE); varTable != nil {
-		g.genVarTable(varTable)
+	if containingFuncDef := g.getContainingFuncDefOrNil(input); containingFuncDef != nil {
+		if varTable := NodGetChildOrNil(containingFuncDef, NTR_VARTABLE); varTable != nil {
+			g.genVarTable(varTable)
+		}
 	}
 
 	statements := NodGetChildList(input)
