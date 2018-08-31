@@ -1,5 +1,6 @@
 
 main func
-    print 'Hello, world!'
+    fib 3
 
-    
+fib func(x) void
+    print x

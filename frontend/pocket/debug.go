@@ -62,6 +62,9 @@ func (d *Debug) initialize() {
 	ntl[NTR_IF_BODY] = "BODY"
 	ntl[NT_BREAK] = "BREAK"
 	ntl[NT_VAR_GETTER] = "VARGET"
+	ntl[NT_PARAMETER] = "PARAM"
+	ntl[NTR_FUNCDEF_INTYPE] = "IN"
+	ntl[NTR_FUNCDEF_OUTTYPE] = "OUT"
 	d.initialized = true
 }
 

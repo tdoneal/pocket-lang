@@ -15,6 +15,7 @@ const (
 	TY_SET    = 6
 	TY_MAP    = 7
 	TY_LIST   = 8
+	TY_DUCK   = 30
 )
 
 type Mype interface{}
@@ -91,6 +92,10 @@ func isBinaryOpType(nt int) bool {
 	return nt == NT_ADDOP || nt == NT_GTOP || nt == NT_LTOP
 }
 
+func isVarReferenceNT(nt int) bool {
+	return nt == NT_VAR_GETTER || nt == NT_VARASSIGN || nt == NT_PARAMETER
+}
+
 func (x *XformerPocket) solveTypes() {
 	// // assign a concrete type to every node
 
@@ -104,14 +109,14 @@ func (x *XformerPocket) solveTypes() {
 	// TODO: multi-function support
 	values := x.SearchRoot(func(n Nod) bool {
 		nt := n.NodeType
-		return isLiteralNodeType(nt) || isBinaryOpType(nt) || nt == NT_VAR_GETTER || nt == NT_VARASSIGN
+		return isLiteralNodeType(nt) || isBinaryOpType(nt) || isVarReferenceNT(nt)
 	})
 
 	// assign an initial mype to all value nodes
 	for _, value := range values {
 		// special case of variables: we don't want a mype per *instance* of a variable accessor,
 		// we want a single mype per *definition* of a variable, so we point it as such
-		if value.NodeType == NT_VAR_GETTER || value.NodeType == NT_VARASSIGN {
+		if isVarReferenceNT(value.NodeType) {
 			// we implement this by pointing the type to the unified variable table
 			varDef := NodGetChild(value, NTR_VARDEF)
 			NodSetChild(value, NTR_MYPE, NodGetChild(varDef, NTR_MYPE))
@@ -119,6 +124,8 @@ func (x *XformerPocket) solveTypes() {
 			NodSetChild(value, NTR_MYPE, x.getInitMype())
 		}
 	}
+
+	fmt.Println("after initial mype assignments:", PrettyPrintMypes(values))
 
 	// apply repeated solve rules until convergence (for system 1 semantics)
 	x.applyRewritesUntilStable(values, []*RewriteRule{
@@ -142,7 +149,7 @@ func (x *XformerPocket) solveTypes() {
 
 	if !allResolved {
 		// TODO: don't panic here
-		panic("Unable to resolve types, ambiguity existed in at least one mype")
+		fmt.Println("Unable to resolve all types, ambiguity existed in at least one mype")
 	}
 	// explicitly convert mypes to types (and remove the mypes in the process)
 	x.applyRewriteOnGraph(&RewriteRule{
@@ -151,7 +158,17 @@ func (x *XformerPocket) solveTypes() {
 		},
 		action: func(n Nod) {
 			mype := NodGetChild(n, NTR_MYPE)
-			NodSetChild(n, NTR_TYPE, mype)
+			var assignType Nod
+			if _, ok := mype.Data.(int); ok {
+				assignType = mype
+			}
+			if _, ok := mype.Data.(*MypeExplicit); ok {
+				assignType = NodNewData(NT_TYPE, TY_DUCK)
+			}
+			if assignType == nil {
+				panic("unhandled mype type")
+			}
+			NodSetChild(n, NTR_TYPE, assignType)
 			NodRemoveChild(n, NTR_MYPE)
 		},
 	})
@@ -281,22 +298,27 @@ func (x *XformerPocket) buildVarDefTables() {
 	// find all variable assignments and construct
 	// the canonical union of variables
 
+	// TODO: support function parameters as well as just varassigns
 	// determine which (top-level) imperatives have which vars
-	varAssigns := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARASSIGN })
-	impVarAssigns := make(map[Nod][]Nod)
-	for _, ele := range varAssigns {
+	varReferences := x.SearchRoot(func(n Nod) bool {
+		return n.NodeType == NT_VARASSIGN || n.NodeType == NT_PARAMETER
+	})
+	impToVarRef := make(map[Nod][]Nod)
+	for _, ele := range varReferences {
 		tlImper := x.findTopLevelImperative(ele)
 		if tlImper == nil {
 			panic("failed to find top level imperative")
 		}
-		impVarAssigns[tlImper] = append(impVarAssigns[tlImper], ele)
+		impToVarRef[tlImper] = append(impToVarRef[tlImper], ele)
 	}
 
 	// next, generate the vartables for each imperative
-	for imper, varAssigns := range impVarAssigns {
-		varTable := x.generateVarTableFromVarAssigns(varAssigns)
+	for imper, varRefs := range impToVarRef {
+		varTable := x.generateVarTableFromVarRefs(varRefs)
 		NodSetChild(imper, NTR_VARTABLE, varTable)
 	}
+
+	fmt.Println("right before lvtovt", PrettyPrint(x.Root))
 
 	x.linkVarsToVarTables()
 
@@ -305,23 +327,22 @@ func (x *XformerPocket) buildVarDefTables() {
 func (x *XformerPocket) linkVarsToVarTables() {
 
 	// link up all var assignments and var getters to refer to this unified table
-	varRefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARASSIGN || n.NodeType == NT_VAR_GETTER })
+	varRefs := x.SearchRoot(func(n Nod) bool {
+		return isVarReferenceNT(n.NodeType)
+	})
 	for _, varRef := range varRefs {
 		// get the var table associated with this var reference
 		tlImper := x.findTopLevelImperative(varRef)
 		if tlImper == nil {
 			panic("failed to find top level imperative")
 		}
-		varTable := NodGetChild(tlImper, NTR_VARTABLE)
+		varTable := NodGetChildOrNil(tlImper, NTR_VARTABLE)
+		if varTable == nil {
+			panic("failed to find vartable for top level imperative")
+		}
 
 		// get the var name as a string, which serves as the lookup key in the var table
-		var varNameNod Nod
-		if varRef.NodeType == NT_VARASSIGN {
-			varNameNod = NodGetChild(varRef, NTR_VAR_NAME)
-		} else {
-			varNameNod = NodGetChild(varRef, NTR_VAR_GETTER_NAME)
-		}
-		varName := varNameNod.Data.(string)
+		varName := x.getVarNameFromVarRef(varRef)
 
 		// search the varTable for the name (naive linear search but should always be small list)
 		varDefs := NodGetChildList(varTable)
@@ -342,14 +363,26 @@ func (x *XformerPocket) linkVarsToVarTables() {
 
 }
 
-func (x *XformerPocket) generateVarTableFromVarAssigns(varAssigns []Nod) Nod {
+func (x *XformerPocket) getVarNameFromVarRef(varRef Nod) string {
+	if varRef.NodeType == NT_PARAMETER {
+		return NodGetChild(varRef, NTR_VARDEF_NAME).Data.(string)
+	} else if varRef.NodeType == NT_VAR_GETTER {
+		return NodGetChild(varRef, NTR_VAR_GETTER_NAME).Data.(string)
+	} else if varRef.NodeType == NT_VARASSIGN {
+		return NodGetChild(varRef, NTR_VAR_NAME).Data.(string)
+	} else {
+		panic("unhandled var ref type")
+	}
+}
+
+func (x *XformerPocket) generateVarTableFromVarRefs(varRefs []Nod) Nod {
 	varDefsByName := make(map[string]Nod)
-	for _, varAssign := range varAssigns {
-		varName := NodGetChild(varAssign, NTR_VAR_NAME).Data.(string)
+	for _, varRef := range varRefs {
+		varName := x.getVarNameFromVarRef(varRef)
 		varDef := NodNew(NT_VARDEF)
 		NodSetChild(varDef, NTR_VARDEF_NAME, NodNewData(NT_IDENTIFIER, varName))
-		if NodHasChild(varAssign, NTR_TYPE) {
-			NodSetChild(varDef, NTR_TYPE, NodGetChild(varAssign, NTR_TYPE))
+		if NodHasChild(varRef, NTR_TYPE) {
+			NodSetChild(varDef, NTR_TYPE, NodGetChild(varRef, NTR_TYPE))
 		}
 		varDefsByName[varName] = varDef
 
@@ -364,10 +397,7 @@ func (x *XformerPocket) generateVarTableFromVarAssigns(varAssigns []Nod) Nod {
 
 func (x *XformerPocket) findTopLevelImperative(n Nod) Nod {
 	found := x.SearchFor(n, func(n Nod) bool {
-		return n.NodeType == NT_IMPERATIVE && x.OneParentIs(n,
-			func(n Nod) bool {
-				return n.NodeType == NT_FUNCDEF
-			})
+		return n.NodeType == NT_FUNCDEF
 	}, func(n Nod) []Nod {
 		return x.AllInNodes(n)
 	})

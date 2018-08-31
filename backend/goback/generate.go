@@ -64,11 +64,7 @@ func (g *Generator) genParameterList(n Nod) {
 func (g *Generator) genParameter(n Nod) {
 	g.WS(NodGetChild(n, NTR_VARDEF_NAME).Data.(string))
 	g.WS(" ")
-	if paramType := NodGetChildOrNil(n, NTR_TYPE); paramType != nil {
-		g.WS(paramType.Data.(string))
-	} else {
-		g.WS("interface{}")
-	}
+	g.genType(NodGetChild(n, NTR_TYPE))
 }
 
 func (g *Generator) genFuncDef(n Nod) {
@@ -166,6 +162,7 @@ func (g *Generator) genType(n Nod) {
 		TY_FLOAT:  "float",
 		TY_NUMBER: "number",
 		TY_STRING: "string",
+		TY_DUCK:   "interface{}",
 	}
 	if val, ok := lut[n.Data.(int)]; ok {
 		g.WS(val)
@@ -223,16 +220,6 @@ func (g *Generator) genReturn(input Nod) {
 func (g *Generator) genVarAssign(n Nod) {
 	varName := NodGetChild(n, NTR_VAR_NAME).Data.(string)
 
-	// if ntype := NodGetChildOrNil(n, NTR_TYPE); ntype != nil {
-	// 	g.WS("var ")
-	// 	g.WS(varName)
-	// 	g.WS(" ")
-	// 	g.WS(ntype.Data.(string))
-	// 	g.WS(" = ")
-	// } else {
-	// 	g.WS(varName)
-	// 	g.WS(" := ")
-	// }
 	g.WS(varName)
 	g.WS(" = ")
 	g.WS("(")

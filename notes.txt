@@ -281,3 +281,16 @@ any is the set of all types, whereas unknown represents the power set of types (
 mypes are elements of the power set of types
 types are elements of the set of types
 values are elements of a type
+
+
+the previous type inference algorithm is valid, as long as the type checking rules assert
+that unspecified parameter types work for any possible argument type
+
+the philosophy is this:
+the tie assumes each variable will have a runtime (static) type.  a mype is the set of all possible 
+runtime types that a variable could be.
+the tie tries to find assignments to these types that are guaranteed not to cause type runtime errors if
+all the variables were instead duck typed
+
+we need to ensure that the output program will work for all (oracle-wise) valid combinations of runtime variable values
+so solution: after type narrowing, if any node is still left as mype(all), convert those to ducked types at runtime
