@@ -351,7 +351,8 @@ func (g *Generator) genLiteralString(n Nod) {
 func (g *Generator) isBinaryInlineOpType(nType int) bool {
 	return nType == NT_ADDOP || nType == NT_GTOP || nType == NT_LTOP ||
 		nType == NT_GTEQOP || nType == NT_LTEQOP || nType == NT_EQOP ||
-		nType == NT_SUBOP || nType == NT_MULOP || nType == NT_DIVOP
+		nType == NT_SUBOP || nType == NT_MULOP || nType == NT_DIVOP ||
+		nType == NT_OROP || nType == NT_ANDOP || nType == NT_MODOP
 
 }
 
@@ -366,6 +367,9 @@ func (g *Generator) getBinaryInlineOpSymbol(nType int) string {
 		NT_GTEQOP: ">=",
 		NT_LTEQOP: "<=",
 		NT_EQOP:   "==",
+		NT_OROP:   "||",
+		NT_ANDOP:  "&&",
+		NT_MODOP:  "%",
 	}
 	return lut[nType]
 }

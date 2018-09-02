@@ -28,12 +28,15 @@ const (
 	TK_SUBOP         = 41
 	TK_MULTOP        = 42
 	TK_DIVOP         = 43
+	TK_MOD           = 44
 	TK_LT            = 45
 	TK_LTEQ          = 46
 	TK_GT            = 47
 	TK_GTEQ          = 48
 	TK_EQ            = 49
-	TK_COMMENT       = 50
+	TK_OR            = 50
+	TK_AND           = 51
+	TK_COMMENT       = 55
 	TK_PARENL        = 60
 	TK_PARENR        = 61
 	TK_BRACKL        = 62
@@ -207,6 +210,12 @@ func (tkzr *TokenizerPocket) processInit() {
 		tkzr.processLT()
 	} else if input == ',' {
 		tkzr.EmitTokenRuneAndIncr(TK_COMMA)
+	} else if input == '|' {
+		tkzr.EmitTokenRuneAndIncr(TK_OR)
+	} else if input == '&' {
+		tkzr.EmitTokenRuneAndIncr(TK_AND)
+	} else if input == '%' {
+		tkzr.EmitTokenRuneAndIncr(TK_MOD)
 	} else if input == '#' {
 		tkzr.processPound()
 	} else {

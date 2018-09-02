@@ -126,6 +126,17 @@ func (p *Parser) ParseToken(tokenType int) *types.Token {
 	}
 }
 
+func (p *Parser) ParseTokenOnCondition(cond func(t *types.Token) bool) *types.Token {
+	cval := p.CurrToken()
+	if cond(cval) {
+		p.Pos++
+		return cval
+	} else {
+		p.RaiseParseError("unexpected token")
+		return nil
+	}
+}
+
 func (p *Parser) CurrToken() *types.Token {
 	return &p.Input[p.Pos]
 }

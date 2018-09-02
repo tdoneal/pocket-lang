@@ -57,6 +57,9 @@ const (
 	NT_LTOP                 = 107
 	NT_LTEQOP               = 108
 	NT_EQOP                 = 109
+	NT_OROP                 = 110
+	NT_ANDOP                = 111
+	NT_MODOP                = 112
 	NTR_BINOP_LEFT          = 118
 	NTR_BINOP_RIGHT         = 119
 	NT_INLINEOPSTREAM       = 150

@@ -5,8 +5,6 @@ import (
 	. "pocket-lang/parse"
 	"pocket-lang/types"
 	"strconv"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 type ParserPocket struct {
@@ -201,9 +199,6 @@ func (p *ParserPocket) parseValueInlineOpStream() Nod {
 		func() Nod { return p.parseInlineOp() },
 	})
 
-	fmt.Println("value inline op stream: got", len(elements), "elements:")
-	fmt.Println(PrettyPrintNodes(elements))
-
 	if len(elements) < 3 {
 		p.RaiseParseError("invalid op stream")
 	}
@@ -385,14 +380,12 @@ func (p *ParserPocket) parseParameterParenthetical() Nod {
 
 func (p *ParserPocket) parseInlineOp() Nod {
 	ctok := p.CurrToken().Type
-	fmt.Println("checking if inline op: ", spew.Sdump(p.CurrToken()))
 	nt := p.inlineOpTokenToNT(ctok)
 	if nt != -1 {
 		p.ParseToken(ctok)
 		rv := NodNew(nt)
 		return rv
 	}
-	fmt.Println("wasn't an inline op")
 	p.RaiseParseError("invalid inline op")
 	return nil
 
@@ -417,6 +410,12 @@ func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {
 		return NT_GTEQOP
 	} else if tokenType == TK_EQOP {
 		return NT_EQOP
+	} else if tokenType == TK_OR {
+		return NT_OROP
+	} else if tokenType == TK_AND {
+		return NT_ANDOP
+	} else if tokenType == TK_MOD {
+		return NT_MODOP
 	} else {
 		return -1
 	}
@@ -466,11 +465,20 @@ func (p *ParserPocket) parseReceiverCallCommandStyle() Nod {
 
 func (p *ParserPocket) parseReceiverCallParentheticalStyle() Nod {
 	name := p.parseReceiverName()
-	val := p.parseValueParenthetical()
+	p.parseOpenParenlikeToken()
+	p.Pos--
+	val := p.parseValueAtomic()
 	rv := NodNew(NT_RECEIVERCALL)
 	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
 	NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
 	return rv
+}
+
+func (p *ParserPocket) parseOpenParenlikeToken() *types.Token {
+	tk := p.ParseTokenOnCondition(func(t *types.Token) bool {
+		return t.Type == TK_PARENL || t.Type == TK_BRACKL || t.Type == TK_CURLYL
+	})
+	return tk
 }
 
 func (p *ParserPocket) parseReceiverName() Nod {

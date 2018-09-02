@@ -135,7 +135,8 @@ func getLiteralTypeAnnDataFromNT(nt int) int {
 func isBinaryOpType(nt int) bool {
 	return nt == NT_ADDOP || nt == NT_GTOP || nt == NT_LTOP ||
 		nt == NT_GTEQOP || nt == NT_LTEQOP || nt == NT_EQOP ||
-		nt == NT_SUBOP || nt == NT_DIVOP || nt == NT_MULOP
+		nt == NT_SUBOP || nt == NT_DIVOP || nt == NT_MULOP ||
+		nt == NT_OROP || nt == NT_ANDOP || nt == NT_MODOP
 }
 
 func isVarReferenceNT(nt int) bool {
@@ -397,6 +398,8 @@ func marGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
 		&MypeOpEvaluateRule{NT_MULOP, TY_FLOAT, TY_FLOAT},
 		&MypeOpEvaluateRule{NT_DIVOP, TY_INT, TY_INT},
 		&MypeOpEvaluateRule{NT_DIVOP, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_MODOP, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_MODOP, TY_FLOAT, TY_FLOAT},
 		&MypeOpEvaluateRule{NT_GTOP, TY_INT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_GTOP, TY_FLOAT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_LTOP, TY_INT, TY_BOOL},
@@ -409,6 +412,8 @@ func marGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
 		&MypeOpEvaluateRule{NT_EQOP, TY_FLOAT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_EQOP, TY_STRING, TY_BOOL},
 		&MypeOpEvaluateRule{NT_EQOP, TY_BOOL, TY_BOOL},
+		&MypeOpEvaluateRule{NT_OROP, TY_BOOL, TY_BOOL},
+		&MypeOpEvaluateRule{NT_ANDOP, TY_BOOL, TY_BOOL},
 	}
 }
 
