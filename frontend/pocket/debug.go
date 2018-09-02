@@ -37,6 +37,9 @@ func (d *Debug) initialize() {
 	ntl[NTR_RECEIVERCALL_NAME] = "NAME"
 	ntl[NTR_RECEIVERCALL_VALUE] = "ARG"
 	ntl[NT_ADDOP] = "ADD"
+	ntl[NT_GTOP] = "GT"
+	ntl[NT_LTOP] = "LT"
+
 	ntl[NT_VARINIT] = "VARINIT"
 	ntl[NT_VARTABLE] = "VARTABLE"
 	ntl[NT_VARDEF] = "VARDEF"
@@ -49,7 +52,9 @@ func (d *Debug) initialize() {
 	ntl[NTR_TYPE] = "TYPE"
 	ntl[NT_TYPE] = "TYPE"
 	ntl[NT_MYPE] = "MYPE"
-	ntl[NTR_MYPE] = "MYPE"
+	ntl[NTR_MYPE_POS] = "MYPE_POS"
+	ntl[NTR_MYPE_NEG] = "MYPE_NEG"
+	ntl[NTR_MYPE_VALID] = "MYPE_VALID"
 	ntl[NT_VARASSIGN] = "VARASSIGN"
 	ntl[NTR_VAR_NAME] = "VARNAME"
 	ntl[NTR_VARASSIGN_VALUE] = "ASSIGNVAL"
@@ -193,13 +198,28 @@ func (d *DebugPrinter) PrettyPrintMype(nod Nod) {
 		d.buf.WriteString(NodGetChild(nod, NTR_VARDEF_NAME).Data.(string))
 	}
 
-	if NodHasChild(nod, NTR_MYPE) {
-		d.buf.WriteString(" <")
-		mypeNod := NodGetChild(nod, NTR_MYPE)
+	if NodHasChild(nod, NTR_MYPE_POS) {
+		d.buf.WriteString(" +<")
+		mypeNod := NodGetChild(nod, NTR_MYPE_POS)
 		d.PrintNodeType(mypeNod.NodeType)
 		d.PrintLocalDataIfExtant(mypeNod)
 		d.buf.WriteString(">")
-	} else if NodHasChild(nod, NTR_TYPE) {
+	}
+	if NodHasChild(nod, NTR_MYPE_NEG) {
+		d.buf.WriteString(" -~<")
+		mypeNod := NodGetChild(nod, NTR_MYPE_NEG)
+		d.PrintNodeType(mypeNod.NodeType)
+		d.PrintLocalDataIfExtant(mypeNod)
+		d.buf.WriteString(">")
+	}
+	if NodHasChild(nod, NTR_MYPE_VALID) {
+		d.buf.WriteString(" =<")
+		mypeNod := NodGetChild(nod, NTR_MYPE_VALID)
+		d.PrintNodeType(mypeNod.NodeType)
+		d.PrintLocalDataIfExtant(mypeNod)
+		d.buf.WriteString(">")
+	}
+	if NodHasChild(nod, NTR_TYPE) {
 		d.buf.WriteString(" :: ")
 		typeNod := NodGetChild(nod, NTR_TYPE)
 		d.PrintNodeType(typeNod.NodeType)

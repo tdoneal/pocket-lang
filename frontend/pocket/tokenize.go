@@ -48,6 +48,8 @@ const (
 	TK_RETURN        = 100
 	TK_VOID          = 110
 	TK_INT           = 120
+	TK_FALSE         = 130
+	TK_TRUE          = 131
 )
 
 func Tokenize(input string) []types.Token {
@@ -306,6 +308,10 @@ func (tkzr *TokenizerPocket) checkKeyword(word string) int {
 		return TK_ELSE
 	} else if word == "break" {
 		return TK_BREAK
+	} else if word == "true" {
+		return TK_TRUE
+	} else if word == "false" {
+		return TK_FALSE
 	}
 	return -1
 }

@@ -1,5 +1,3 @@
 
 main func
-    x int : 'hello world'
-    print x
-
+    x: true

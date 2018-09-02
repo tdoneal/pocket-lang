@@ -294,3 +294,70 @@ all the variables were instead duck typed
 
 we need to ensure that the output program will work for all (oracle-wise) valid combinations of runtime variable values
 so solution: after type narrowing, if any node is still left as mype(all), convert those to ducked types at runtime
+
+taking away all non-examples is not the same thing as adding an example
+two types of rules: those that restrict (negative rules), and those that add a possibility (positive rules)
+positive rules:
+initialization: all expressions <- {empty set}
+var assignment: lhs = rhs -> union(lhs,rhs) = rhs
+public untyped parameter: param -> union(all)
+literals: l -> basetype(l)
+expression evaluation: (a+b) = c -> (a+b) = union(c, (a+b))
+
+negative rules:
+initialization: all expressions <- {full universe}
+var type declaration: var -> xsect(var, typedec)
+use in expression: x + y -> xsect(x, int) + xsect(y, int)
+
+new algorithm: 
+1) apply all positive rules until convergence
+2) apply all negative rules until convergence
+3) perform positive checks: subtract converse of negative rules from positive rules to get the "actual possibilities".
+      if actual posses is empty set and at least one positive poss, raise typeerror(no possible type assignment for (expr))
+4) infer types: if exactly one actual poss, assign type to that, if more than one, assign duck 
+    (in future maybe a third option: assign lca supertype)
+
+positive pass:
+i(nil) : 0(nil)
+i : (i(nil) + 1(nil))(nil)
+-> literal base types
+i : 0(int)
+i : (i + 1(int))
+-> assignment
+i(int) : 0
+i : (i + 1)
+-> expression evaluation
+i : (i + 1)(int)
+
+negative pass:
+i(univ) : 0(univ)
+i: (i + 1(univ))(univ)
+-> use in expression
+i : 0
+i(int): (i + 1(int))(int)
+
+final positive:
+i(int) : 0(int)
+i : (i + 1(int))(int)
+
+final negative:
+i(int) : 0(univ)
+i : (i + 1(int))(int)
+
+final actual:
+i(int) : 0(int)
+i : (i + 1(int))(int)
+
+final inferred:
+i(int) : 0(int)
+i : (i + 1(int))(int)
+
+need concise way to represent positive mype rules of the form:
+int + int -> int
+int > int -> bool
+
+type MypePosOpEvaluateRule {
+    operatorType: int <nodetype>
+    operandType: int <type>
+    result: int <type> // if trigger, replace the result with a single mype of this type
+} 

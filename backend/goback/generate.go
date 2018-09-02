@@ -170,6 +170,7 @@ func (g *Generator) genVarDef(n Nod) {
 
 func (g *Generator) genType(n Nod) {
 	lut := map[int]string{
+		TY_BOOL:   "bool",
 		TY_INT:    "int",
 		TY_FLOAT:  "float",
 		TY_NUMBER: "number",
@@ -272,6 +273,8 @@ func (g *Generator) genValue(n Nod) {
 		g.WS(strconv.Itoa(n.Data.(int)))
 	} else if nt == NT_LIT_STRING {
 		g.genLiteralString(n)
+	} else if nt == NT_LIT_BOOL {
+		g.genLiteralBool(n)
 	} else if nt == NT_INLINEOPSTREAM {
 		g.genOpStream(n)
 	} else if nt == NT_VAR_GETTER {
@@ -286,6 +289,15 @@ func (g *Generator) genValue(n Nod) {
 		g.genBinaryInlineOp(n)
 	} else {
 		g.WS("value")
+	}
+}
+
+func (g *Generator) genLiteralBool(n Nod) {
+	lv := n.Data.(bool)
+	if lv {
+		g.WS("true")
+	} else {
+		g.WS("false")
 	}
 }
 

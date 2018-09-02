@@ -4,17 +4,19 @@ import (
 	"fmt"
 	. "pocket-lang/parse"
 	. "pocket-lang/xform"
+	"strconv"
 )
 
 const (
-	TY_OBJECT = 1
-	TY_NUMBER = 2
-	TY_INT    = 3
-	TY_FLOAT  = 4
-	TY_STRING = 5
-	TY_SET    = 6
-	TY_MAP    = 7
-	TY_LIST   = 8
+	TY_BOOL   = 1
+	TY_INT    = 2
+	TY_FLOAT  = 3
+	TY_STRING = 4
+	TY_SET    = 5
+	TY_MAP    = 6
+	TY_LIST   = 7
+	TY_OBJECT = 20
+	TY_NUMBER = 22
 	TY_DUCK   = 30
 )
 
@@ -60,21 +62,31 @@ type RewriteRule struct {
 	action    func(n Nod)
 }
 
-func (x *XformerPocket) getInitMype() Nod {
+func (x *XformerPocket) getInitMypeNodFull() Nod {
 	md := MypeExplicitNewFull()
 	return NodNewData(NT_MYPE, md)
 }
 
+func (x *XformerPocket) getInitMypeNodEmpty() Nod {
+	md := MypeExplicitNewEmpty()
+	return NodNewData(NT_MYPE, md)
+}
+
 func isLiteralNodeType(nt int) bool {
-	return nt == NT_LIT_INT || nt == NT_LIT_STRING
+	return nt == NT_LIT_INT || nt == NT_LIT_STRING || nt == NT_LIT_BOOL
 }
 
 func getLiteralTypeAnnDataFromNT(nt int) int {
 	lut := map[int]int{
 		NT_LIT_INT:    TY_INT,
 		NT_LIT_STRING: TY_STRING,
+		NT_LIT_BOOL:   TY_BOOL,
 	}
-	return lut[nt]
+	if rv, ok := lut[nt]; ok {
+		return rv
+	} else {
+		panic("unknown literal type: " + strconv.Itoa(nt))
+	}
 }
 
 func isBinaryOpType(nt int) bool {
@@ -85,13 +97,18 @@ func isVarReferenceNT(nt int) bool {
 	return nt == NT_VAR_GETTER || nt == NT_VARASSIGN || nt == NT_PARAMETER
 }
 
-func (x *XformerPocket) solveTypes() {
-	// // assign a concrete type to every node
+func (x *XformerPocket) initializeMypes(n Nod) {
+	NodSetChild(n, NTR_MYPE_NEG, x.getInitMypeNodFull())
+	NodSetChild(n, NTR_MYPE_POS, x.getInitMypeNodEmpty())
+}
 
-	// first: initialize all mypes in the vartable
+func (x *XformerPocket) initializeAllMypes() []Nod {
+	// initializes all mypes and returns a list of myped nodes
+
+	// first: initialize all positive and negative in the vartable
 	varDefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARDEF })
 	for _, value := range varDefs {
-		NodSetChild(value, NTR_MYPE, x.getInitMype())
+		x.initializeMypes(value)
 	}
 
 	// next gather all value nodes
@@ -108,89 +125,110 @@ func (x *XformerPocket) solveTypes() {
 		if isVarReferenceNT(value.NodeType) {
 			// we implement this by pointing the type to the unified variable table
 			varDef := NodGetChild(value, NTR_VARDEF)
-			NodSetChild(value, NTR_MYPE, NodGetChild(varDef, NTR_MYPE))
+			NodSetChild(value, NTR_MYPE_NEG, NodGetChild(varDef, NTR_MYPE_NEG))
+			NodSetChild(value, NTR_MYPE_POS, NodGetChild(varDef, NTR_MYPE_POS))
 		} else {
-			NodSetChild(value, NTR_MYPE, x.getInitMype())
+			x.initializeMypes(value)
 		}
 	}
 
-	fmt.Println("after initial mype assignments:", PrettyPrintMypes(values))
+	return append(values, varDefs...)
+}
+
+func (x *XformerPocket) solveTypes() {
+	// // assign a concrete type to every node
+	nodes := x.initializeAllMypes()
+
+	fmt.Println("after initial mype assignments:", PrettyPrintMypes(nodes))
 
 	// apply repeated solve rules until convergence (for system 1 semantics)
-	x.applyRewritesUntilStable(values, []*RewriteRule{
-		marLiterals(),
-		marVarAssign(),
-		marAddOp(),
-		marEnforceDeclaredTypes(),
-	})
+	// apply positive rules
+	positiveRules := x.getAllPositiveMARRules()
+	x.applyRewritesUntilStable(nodes, positiveRules)
+	// apply negative rules
+	negativeRules := x.getAllNegativeMARRules()
+	x.applyRewritesUntilStable(nodes, negativeRules)
 
-	// for now: enforce that all type must be fully resolved by now
-	// TODO: support uncertainty here followed by an explicit search over the possible types
-	// followed by static type verification (the verification is a different set of rules)
-	allResolved := true
-	allToCheck := append(values, varDefs...)
-	for _, ele := range allToCheck {
-		if NodGetChild(ele, NTR_MYPE).NodeType != NT_TYPE {
-			fmt.Println("mypes after applying heuristics:", PrettyPrintMype(ele))
-			allResolved = false
-			break
+	fmt.Println("after positive and negative rules:", PrettyPrintMypes(nodes))
+
+	// general the "valid" mypes by subtracting the converse of the negative from the positive
+	for _, node := range nodes {
+		posMype := NodGetChild(node, NTR_MYPE_POS).Data.(Mype)
+		negMype := NodGetChild(node, NTR_MYPE_NEG).Data.(Mype)
+		validMype := posMype.Subtract(negMype.Converse())
+		if validMype.IsEmpty() {
+			panic("couldn't find a valid type for node: " + PrettyPrintMype(node))
 		}
+		NodSetChild(node, NTR_MYPE_VALID, NodNewData(NT_MYPE, validMype))
+		NodRemoveChild(node, NTR_MYPE_POS)
+		NodRemoveChild(node, NTR_MYPE_NEG)
 	}
 
-	if !allResolved {
-		// TODO: don't panic here
-		fmt.Println("Unable to resolve all types, ambiguity existed in at least one mype")
-	}
+	fmt.Println("after generating valid mypes:", PrettyPrintMypes(nodes))
+
 	// explicitly convert mypes to types (and remove the mypes in the process)
 	x.applyRewriteOnGraph(&RewriteRule{
 		condition: func(n Nod) bool {
-			return NodHasChild(n, NTR_MYPE)
+			return NodHasChild(n, NTR_MYPE_VALID)
 		},
 		action: func(n Nod) {
-			mype := NodGetChild(n, NTR_MYPE)
+			mype := NodGetChild(n, NTR_MYPE_VALID).Data.(Mype)
 			var assignType Nod
-			if _, ok := mype.Data.(int); ok {
-				assignType = mype
-			}
-			if _, ok := mype.Data.(*MypeExplicit); ok {
+			if mype.IsSingle() {
+				assignType = NodNewData(NT_TYPE, mype.GetSingleType())
+			} else if mype.IsPlural() {
 				assignType = NodNewData(NT_TYPE, TY_DUCK)
-			}
-			if assignType == nil {
-				panic("unhandled mype type")
+			} else {
+				panic("should never be here")
 			}
 			NodSetChild(n, NTR_TYPE, assignType)
-			NodRemoveChild(n, NTR_MYPE)
+			NodRemoveChild(n, NTR_MYPE_VALID)
 		},
 	})
 
-	fmt.Println("Final type assignments:", PrettyPrintMypes(values))
+	fmt.Println("Final type assignments:", PrettyPrintMypes(nodes))
 
 }
 
-func marVarAssign() *RewriteRule {
+func (x *XformerPocket) getAllNegativeMARRules() []*RewriteRule {
+	return []*RewriteRule{
+		marNegUseInOp(),
+		marNegDeclaredType(),
+	}
+}
+
+func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
+	rv := []*RewriteRule{
+		marPosLiterals(),
+		marPosVarAssign(),
+	}
+	rv = append(rv, marPosOpEvaluateRules()...)
+	return rv
+}
+
+func marPosVarAssign() *RewriteRule {
 	// propagate var assign values from rhs -> lhs
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if n.NodeType == NT_VARASSIGN {
-				mypeLHS := NodGetChild(n, NTR_MYPE)
-				mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE)
-				lhsIsConcrete := mypeLHS.NodeType == NT_TYPE
-				rhsIsConcrete := mypeRHS.NodeType == NT_TYPE
-				if rhsIsConcrete && !lhsIsConcrete {
+				mypeLHS := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+				mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE_POS).Data.(Mype)
+				if mypeLHS.WouldChangeFromUnionWith(mypeRHS) {
 					return true
 				}
 			}
 			return false
 		},
 		action: func(n Nod) {
-			writeTypeAndData(NodGetChild(n, NTR_MYPE), NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE))
-			fmt.Println("Applied MAR: VarAssign")
+			mypeLHS := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+			mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE_POS).Data.(Mype)
+			newLHS := mypeLHS.Union(mypeRHS)
+			NodGetChild(n, NTR_MYPE_POS).Data = newLHS
 		},
 	}
 }
 
-func marEnforceDeclaredTypes() *RewriteRule {
-	// propagate var assign values from rhs -> lhs
+func marNegDeclaredType() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if n.NodeType == NT_VARASSIGN {
@@ -206,29 +244,78 @@ func marEnforceDeclaredTypes() *RewriteRule {
 	}
 }
 
-func marAddOp() *RewriteRule {
-	// for now, say that all add ops force all involved mypes (both args and result) to int
+type MypeOpEvaluateRule struct {
+	operator int
+	operand  int
+	result   int
+}
+
+func marPosGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
+	// define type propagation rules of the form (int + int) -> int
+	return []*MypeOpEvaluateRule{
+		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_GTOP, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_LTOP, TY_INT, TY_BOOL},
+	}
+}
+
+func marPosOpEvaluateRules() []*RewriteRule {
+	oers := marPosGetCompactOpEvaluateRules()
+	rv := []*RewriteRule{}
+	for _, oer := range oers {
+		rv = append(rv, createRewriteRuleFromOpEvaluateRule(oer))
+	}
+	return rv
+}
+
+func createRewriteRuleFromOpEvaluateRule(oer *MypeOpEvaluateRule) *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_ADDOP {
-				resultMype := NodGetChild(n, NTR_MYPE)
-				argMypes := []Nod{
-					NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE),
-					NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE),
+			if n.NodeType == oer.operator {
+				resultMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+				argMypes := []Mype{
+					NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_POS).Data.(Mype),
+					NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE_POS).Data.(Mype),
 				}
-				if resultMype.NodeType != NT_TYPE || argMypes[0].NodeType != NT_TYPE ||
-					argMypes[1].NodeType != NT_TYPE {
+				if resultMype.IsEmpty() && argMypes[0].IsSingleType(oer.operand) &&
+					argMypes[1].IsSingleType(oer.operand) {
 					return true
 				}
 			}
 			return false
 		},
 		action: func(n Nod) {
-			intType := NodNewData(NT_TYPE, TY_INT)
-			writeTypeAndData(NodGetChild(n, NTR_MYPE), intType)
-			writeTypeAndData(NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE), intType)
-			writeTypeAndData(NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE), intType)
-			fmt.Println("Applied add op int forcer to", PrettyPrintMype(n))
+			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewSingle(oer.result)
+		},
+	}
+}
+
+func marNegUseInOp() *RewriteRule {
+	// for now, say that all add ops force all involved mypes (both args and result) to int
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_ADDOP {
+				resultMype := NodGetChild(n, NTR_MYPE_NEG).Data.(Mype)
+				argMypes := []Mype{
+					NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_NEG).Data.(Mype),
+					NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE_NEG).Data.(Mype),
+				}
+				if resultMype.IsPlural() || argMypes[0].IsPlural() ||
+					argMypes[1].IsPlural() {
+					return true
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			intMype := MypeExplicitNewSingle(TY_INT)
+			resultMypeNod := NodGetChild(n, NTR_MYPE_NEG)
+			leftMypeNod := NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_NEG)
+			rightMypeNod := NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE_NEG)
+
+			resultMypeNod.Data = intMype.Intersection(resultMypeNod.Data.(Mype))
+			leftMypeNod.Data = intMype.Intersection(leftMypeNod.Data.(Mype))
+			rightMypeNod.Data = intMype.Intersection(rightMypeNod.Data.(Mype))
 		},
 	}
 }
@@ -238,11 +325,11 @@ func writeTypeAndData(dst Nod, src Nod) {
 	dst.Data = src.Data
 }
 
-func marLiterals() *RewriteRule {
+func marPosLiterals() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if isLiteralNodeType(n.NodeType) {
-				if NodGetChild(n, NTR_MYPE).NodeType != NT_TYPE {
+				if NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsEmpty() {
 					return true
 				}
 			}
@@ -250,8 +337,7 @@ func marLiterals() *RewriteRule {
 		},
 		action: func(n Nod) {
 			ty := getLiteralTypeAnnDataFromNT(n.NodeType)
-			NodSetChild(n, NTR_MYPE, NodNewData(NT_TYPE, ty))
-			fmt.Println("Applied marLitIntsBase to", PrettyPrintMype(n))
+			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewSingle(ty)
 		},
 	}
 }
