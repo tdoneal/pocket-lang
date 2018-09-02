@@ -1,16 +1,5 @@
 
 main func
-    a : 0
-    b : 1
-    c : 0
-    while b <= 1000
-        t : a + b
-        a : b
-        b : t
-        print 'iter'
-        print a
-        print b
-        c : c + 1
-    print 'done'
-
+    x int : '3'
+    print x
 

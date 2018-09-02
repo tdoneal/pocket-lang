@@ -47,7 +47,10 @@ const (
 	TK_BREAK         = 85
 	TK_RETURN        = 100
 	TK_VOID          = 110
-	TK_INT           = 120
+	TK_BOOL          = 120
+	TK_INT           = 121
+	TK_FLOAT         = 122
+	TK_STRING        = 123
 	TK_FALSE         = 130
 	TK_TRUE          = 131
 )
@@ -317,8 +320,14 @@ func (tkzr *TokenizerPocket) checkKeyword(word string) int {
 		return TK_RETURN
 	} else if word == "void" {
 		return TK_VOID
+	} else if word == "bool" {
+		return TK_BOOL
 	} else if word == "int" {
 		return TK_INT
+	} else if word == "float" {
+		return TK_FLOAT
+	} else if word == "string" {
+		return TK_STRING
 	} else if word == "loop" {
 		return TK_LOOP
 	} else if word == "for" {

@@ -8,16 +8,22 @@ import (
 )
 
 const (
-	TY_BOOL   = 1
-	TY_INT    = 2
-	TY_FLOAT  = 3
-	TY_STRING = 4
-	TY_SET    = 5
-	TY_MAP    = 6
-	TY_LIST   = 7
+	TY_VOID   = 1
+	TY_BOOL   = 2
+	TY_INT    = 3
+	TY_FLOAT  = 4
+	TY_STRING = 5
+	TY_SET    = 6
+	TY_MAP    = 7
+	TY_LIST   = 8
 	TY_OBJECT = 20
 	TY_NUMBER = 22
 	TY_DUCK   = 30
+)
+
+const (
+	VSCOPE_FUNCLOCAL = 1
+	VSCOPE_FUNCPARAM = 2
 )
 
 type XformerPocket struct {
@@ -138,9 +144,7 @@ func (x *XformerPocket) initializeAllMypes() []Nod {
 func (x *XformerPocket) solveTypes() {
 	// // assign a concrete type to every node
 	nodes := x.initializeAllMypes()
-
 	fmt.Println("after initial mype assignments:", PrettyPrintMypes(nodes))
-
 	// apply repeated solve rules until convergence (for system 1 semantics)
 	// apply positive rules
 	positiveRules := x.getAllPositiveMARRules()
@@ -148,10 +152,15 @@ func (x *XformerPocket) solveTypes() {
 	// apply negative rules
 	negativeRules := x.getAllNegativeMARRules()
 	x.applyRewritesUntilStable(nodes, negativeRules)
-
 	fmt.Println("after positive and negative rules:", PrettyPrintMypes(nodes))
+	// generate the "valid" mypes by subtracting the converse of the negative from the positive
+	x.generateValidMypes(nodes)
+	fmt.Println("after generating valid mypes:", PrettyPrintMypes(nodes))
+	x.convertValidMypesToFinalTypes()
+	fmt.Println("Final type assignments:", PrettyPrintMypes(nodes))
+}
 
-	// general the "valid" mypes by subtracting the converse of the negative from the positive
+func (x *XformerPocket) generateValidMypes(nodes []Nod) {
 	for _, node := range nodes {
 		posMype := NodGetChild(node, NTR_MYPE_POS).Data.(Mype)
 		negMype := NodGetChild(node, NTR_MYPE_NEG).Data.(Mype)
@@ -163,9 +172,9 @@ func (x *XformerPocket) solveTypes() {
 		NodRemoveChild(node, NTR_MYPE_POS)
 		NodRemoveChild(node, NTR_MYPE_NEG)
 	}
+}
 
-	fmt.Println("after generating valid mypes:", PrettyPrintMypes(nodes))
-
+func (x *XformerPocket) convertValidMypesToFinalTypes() {
 	// explicitly convert mypes to types (and remove the mypes in the process)
 	x.applyRewriteOnGraph(&RewriteRule{
 		condition: func(n Nod) bool {
@@ -185,9 +194,6 @@ func (x *XformerPocket) solveTypes() {
 			NodRemoveChild(n, NTR_MYPE_VALID)
 		},
 	})
-
-	fmt.Println("Final type assignments:", PrettyPrintMypes(nodes))
-
 }
 
 func (x *XformerPocket) getAllNegativeMARRules() []*RewriteRule {
@@ -201,9 +207,28 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 	rv := []*RewriteRule{
 		marPosLiterals(),
 		marPosVarAssign(),
+		marPosPublicParameter(),
 	}
 	rv = append(rv, marPosOpEvaluateRules()...)
 	return rv
+}
+
+func marPosPublicParameter() *RewriteRule {
+	// assume that assignments to this parameter can be of any possible type
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_PARAMETER {
+				paramMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+				if paramMype.IsEmpty() {
+					return true
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewFull()
+		},
+	}
 }
 
 func marPosVarAssign() *RewriteRule {
@@ -232,14 +257,21 @@ func marNegDeclaredType() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if n.NodeType == NT_VARASSIGN {
-				if NodHasChild(n, NTR_TYPE_DECL) {
-					return true
+				if typeDeclNod := NodGetChildOrNil(n, NTR_TYPE_DECL); typeDeclNod != nil {
+					negMype := NodGetChild(n, NTR_MYPE_NEG).Data.(Mype)
+					declMype := MypeExplicitNewSingle(typeDeclNod.Data.(int))
+					if negMype.WouldChangeFromIntersectionWith(declMype) {
+						return true
+					}
 				}
 			}
 			return false
 		},
 		action: func(n Nod) {
-			panic("encountered type decl")
+			typeDeclNod := NodGetChild(n, NTR_TYPE_DECL)
+			declMype := MypeExplicitNewSingle(typeDeclNod.Data.(int))
+			currNegMypeNod := NodGetChild(n, NTR_MYPE_NEG)
+			currNegMypeNod.Data = declMype.Intersection(currNegMypeNod.Data.(Mype))
 		},
 	}
 }
@@ -414,6 +446,7 @@ func (x *XformerPocket) buildVarDefTables() {
 	fmt.Println("right before lvtovt", PrettyPrint(x.Root))
 
 	x.linkVarsToVarTables()
+	x.computeVariableScopes()
 
 }
 
@@ -456,6 +489,26 @@ func (x *XformerPocket) linkVarsToVarTables() {
 
 }
 
+func (x *XformerPocket) computeVariableScopes() {
+	varTables := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARTABLE })
+	for _, varTable := range varTables {
+		varDefs := NodGetChildList(varTable)
+		for _, varDef := range varDefs {
+			varScope := VSCOPE_FUNCLOCAL
+			incomingNods := varDef.In
+			for _, inEdge := range incomingNods {
+				inNod := inEdge.In
+				if inNod.NodeType == NT_PARAMETER {
+					varScope = VSCOPE_FUNCPARAM
+					break
+				}
+			}
+			// scope has been computed, now save it
+			NodSetChild(varDef, NTR_VARDEF_SCOPE, NodNewData(NT_VARDEF_SCOPE, varScope))
+		}
+	}
+}
+
 func (x *XformerPocket) getVarNameFromVarRef(varRef Nod) string {
 	if varRef.NodeType == NT_PARAMETER {
 		return NodGetChild(varRef, NTR_VARDEF_NAME).Data.(string)
@@ -474,11 +527,7 @@ func (x *XformerPocket) generateVarTableFromVarRefs(varRefs []Nod) Nod {
 		varName := x.getVarNameFromVarRef(varRef)
 		varDef := NodNew(NT_VARDEF)
 		NodSetChild(varDef, NTR_VARDEF_NAME, NodNewData(NT_IDENTIFIER, varName))
-		if NodHasChild(varRef, NTR_TYPE) {
-			NodSetChild(varDef, NTR_TYPE, NodGetChild(varRef, NTR_TYPE))
-		}
 		varDefsByName[varName] = varDef
-
 	}
 
 	varDefsList := make([]Nod, 0)

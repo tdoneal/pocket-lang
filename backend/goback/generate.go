@@ -139,7 +139,7 @@ func (g *Generator) genImperative(input Nod) {
 
 	if containingFuncDef := g.getContainingFuncDefOrNil(input); containingFuncDef != nil {
 		if varTable := NodGetChildOrNil(containingFuncDef, NTR_VARTABLE); varTable != nil {
-			g.genVarTable(varTable)
+			g.genLocalVarTable(varTable)
 		}
 	}
 
@@ -150,10 +150,13 @@ func (g *Generator) genImperative(input Nod) {
 
 }
 
-func (g *Generator) genVarTable(n Nod) {
+func (g *Generator) genLocalVarTable(n Nod) {
 	varDefs := NodGetChildList(n)
 	for _, varDef := range varDefs {
-		g.genVarDef(varDef)
+		vds := NodGetChild(varDef, NTR_VARDEF_SCOPE).Data.(int)
+		if vds == VSCOPE_FUNCLOCAL {
+			g.genVarDef(varDef)
+		}
 	}
 }
 

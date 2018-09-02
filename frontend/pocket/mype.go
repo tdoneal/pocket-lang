@@ -9,6 +9,7 @@ type Mype interface {
 	Intersection(Mype) Mype
 	Union(Mype) Mype
 	WouldChangeFromUnionWith(Mype) bool
+	WouldChangeFromIntersectionWith(Mype) bool
 	Subtract(Mype) Mype
 	Converse() Mype
 	ToType() int // only works if IsSingle() is true
@@ -142,6 +143,21 @@ func (me *MypeExplicit) WouldChangeFromUnionWith(other Mype) bool {
 			}
 		}
 		return false
+	} else {
+		panic("unsupported mype arg type")
+	}
+}
+
+func (me *MypeExplicit) WouldChangeFromIntersectionWith(other Mype) bool {
+	if otherMe, ok := other.(*MypeExplicit); ok {
+		allMineInOther := true
+		for myType := range me.Types {
+			if _, ok := otherMe.Types[myType]; !ok { // if a type was found in us that wasn't in other
+				allMineInOther = false
+				break
+			}
+		}
+		return !allMineInOther
 	} else {
 		panic("unsupported mype arg type")
 	}

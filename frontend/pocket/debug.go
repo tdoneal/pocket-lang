@@ -71,6 +71,8 @@ func (d *Debug) initialize() {
 	ntl[NT_PARAMETER] = "PARAM"
 	ntl[NTR_FUNCDEF_INTYPE] = "IN"
 	ntl[NTR_FUNCDEF_OUTTYPE] = "OUT"
+	ntl[NTR_VARDEF_SCOPE] = "SCOPE"
+	ntl[NT_VARDEF_SCOPE] = "VARSCOPE"
 	d.initialized = true
 }
 

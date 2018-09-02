@@ -272,8 +272,11 @@ func (p *ParserPocket) parseLiteralList() Nod {
 func (p *ParserPocket) parseLiteralKeyword() Nod {
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseLiteralBool() },
-		func() Nod { return p.parseKeywordLitPrimitive(TK_VOID, "void") },
-		func() Nod { return p.parseKeywordLitPrimitive(TK_INT, "int") },
+		func() Nod { return p.parseKeywordPrimitive(TK_VOID, NT_TYPE, TY_VOID) },
+		func() Nod { return p.parseKeywordPrimitive(TK_INT, NT_TYPE, TY_INT) },
+		func() Nod { return p.parseKeywordPrimitive(TK_BOOL, NT_TYPE, TY_BOOL) },
+		func() Nod { return p.parseKeywordPrimitive(TK_FLOAT, NT_TYPE, TY_FLOAT) },
+		func() Nod { return p.parseKeywordPrimitive(TK_STRING, NT_TYPE, TY_STRING) },
 	})
 }
 
@@ -294,9 +297,9 @@ func (p *ParserPocket) parseFalse() Nod {
 	return NodNewData(NT_LIT_BOOL, false)
 }
 
-func (p *ParserPocket) parseKeywordLitPrimitive(tokenType int, data string) Nod {
+func (p *ParserPocket) parseKeywordPrimitive(tokenType int, nodeType int, data interface{}) Nod {
 	p.ParseToken(tokenType)
-	return NodNewData(NT_LIT_PRIMITIVE, data)
+	return NodNewData(nodeType, data)
 }
 
 func (p *ParserPocket) parseFuncDefTypeValue() Nod {
