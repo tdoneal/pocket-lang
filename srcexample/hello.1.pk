@@ -1,7 +1,11 @@
 main func
-    print(factorial(4))
+    print(Fibonacci 4)
 
-factorial func(x int) void
+Fibonacci func(x int) int
+    if (x = 0)
+        return 0
     if x=1
         return 1
-    return x * factorial(x-1)
+    return (Fibonacci(x - 1) + Fibonacci(x - 2))
+
+

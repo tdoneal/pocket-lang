@@ -449,8 +449,24 @@ func (p *ParserPocket) parseCommand() Nod {
 }
 
 func (p *ParserPocket) parseReceiverCall() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseReceiverCallParentheticalStyle() },
+		func() Nod { return p.parseReceiverCallCommandStyle() },
+	})
+}
+
+func (p *ParserPocket) parseReceiverCallCommandStyle() Nod {
 	name := p.parseReceiverName()
 	val := p.parseValue()
+	rv := NodNew(NT_RECEIVERCALL)
+	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
+	NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
+	return rv
+}
+
+func (p *ParserPocket) parseReceiverCallParentheticalStyle() Nod {
+	name := p.parseReceiverName()
+	val := p.parseValueParenthetical()
 	rv := NodNew(NT_RECEIVERCALL)
 	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
 	NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
