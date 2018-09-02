@@ -39,9 +39,14 @@ const (
 	NTR_IF_COND             = 88
 	NTR_IF_BODY_TRUE        = 89
 	NTR_IF_BODY_FALSE       = 90
+	NT_WHILE                = 92
+	NTR_WHILE_COND          = 93
+	NTR_WHILE_BODY          = 94
 	NT_ADDOP                = 100
 	NT_GTOP                 = 105
-	NT_LTOP                 = 106
+	NT_GTEQOP               = 106
+	NT_LTOP                 = 107
+	NT_LTEQOP               = 108
 	NTR_BINOP_LEFT          = 118
 	NTR_BINOP_RIGHT         = 119
 	NT_INLINEOPSTREAM       = 150

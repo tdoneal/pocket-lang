@@ -190,15 +190,38 @@ func (tkzr *TokenizerPocket) processInit() {
 	} else if input == '}' {
 		tkzr.EmitTokenRuneAndIncr(TK_CURLYR)
 	} else if input == '>' {
-		tkzr.EmitTokenRuneAndIncr(TK_GT)
+		tkzr.processGT()
 	} else if input == '<' {
-		tkzr.EmitTokenRuneAndIncr(TK_LT)
+		tkzr.processLT()
 	} else if input == ',' {
 		tkzr.EmitTokenRuneAndIncr(TK_COMMA)
 	} else if input == '#' {
 		tkzr.processPound()
 	} else {
 		tkzr.Incr()
+	}
+}
+
+func (tkzr *TokenizerPocket) processLT() {
+	tkzr.processGTOrLT('<', TK_LT, TK_LTEQ)
+}
+
+func (tkzr *TokenizerPocket) processGT() {
+	tkzr.processGTOrLT('>', TK_GT, TK_GTEQ)
+}
+
+func (tkzr *TokenizerPocket) processGTOrLT(firstRune rune, tokNoEq int, tokEq int) {
+	// skip first rune
+	tkzr.Incr()
+	if tkzr.IsEOF() {
+		panic("unexpected EOF")
+	}
+	nxtRune := tkzr.CurrRune()
+	if nxtRune == '=' {
+		tkzr.EmitToken(tokEq, string(firstRune)+"=")
+		tkzr.Incr()
+	} else {
+		tkzr.EmitToken(tokNoEq, string(firstRune))
 	}
 }
 

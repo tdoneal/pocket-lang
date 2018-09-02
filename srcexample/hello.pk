@@ -1,13 +1,16 @@
 
 main func
-    print 'a'
-    if 365 > 366
-        print 'b'
-    else
-        x : 1
-        print 'c'
-        if x > 1
-            print 'd'
-        print 'e'
+    a : 0
+    b : 1
+    c : 0
+    while b <= 1000
+        t : a + b
+        a : b
+        b : t
+        print 'iter'
+        print a
+        print b
+        c : c + 1
+    print 'done'
 
 

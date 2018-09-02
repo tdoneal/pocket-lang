@@ -193,6 +193,8 @@ func (g *Generator) genImperativeUnit(n Nod) {
 		g.genReturn(n)
 	} else if n.NodeType == NT_LOOP {
 		g.genLoop(n)
+	} else if n.NodeType == NT_WHILE {
+		g.genWhile(n)
 	} else if n.NodeType == NT_IF {
 		g.genIf(n)
 	} else if n.NodeType == NT_BREAK {
@@ -200,6 +202,15 @@ func (g *Generator) genImperativeUnit(n Nod) {
 	} else {
 		g.WS("command")
 	}
+	g.WS("\n")
+}
+
+func (g *Generator) genWhile(n Nod) {
+	g.WS("for ")
+	g.genValue(NodGetChild(n, NTR_WHILE_COND))
+	g.WS("{\n")
+	g.genImperative(NodGetChild(n, NTR_WHILE_BODY))
+	g.WS("}")
 	g.WS("\n")
 }
 
@@ -314,14 +325,17 @@ func (g *Generator) genLiteralString(n Nod) {
 }
 
 func (g *Generator) isBinaryInlineOpType(nType int) bool {
-	return nType == NT_ADDOP || nType == NT_GTOP || nType == NT_LTOP
+	return nType == NT_ADDOP || nType == NT_GTOP || nType == NT_LTOP ||
+		nType == NT_GTEQOP || nType == NT_LTEQOP
 }
 
 func (g *Generator) getBinaryInlineOpSymbol(nType int) string {
 	lut := map[int]string{
-		NT_ADDOP: "+",
-		NT_GTOP:  ">",
-		NT_LTOP:  "<",
+		NT_ADDOP:  "+",
+		NT_GTOP:   ">",
+		NT_LTOP:   "<",
+		NT_GTEQOP: ">=",
+		NT_LTEQOP: "<=",
 	}
 	return lut[nType]
 }
