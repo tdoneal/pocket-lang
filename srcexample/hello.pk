@@ -1,5 +1,6 @@
 
 main func
-    x float : 3.9
+    x int : 'hello' + 'world'
     print x
+    
 

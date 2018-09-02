@@ -198,10 +198,11 @@ func (x *XformerPocket) convertValidMypesToFinalTypes() {
 }
 
 func (x *XformerPocket) getAllNegativeMARRules() []*RewriteRule {
-	return []*RewriteRule{
-		marNegUseInOp(),
+	rv := []*RewriteRule{
 		marNegDeclaredType(),
 	}
+	rv = append(rv, marNegOpRestrictRules()...)
+	return rv
 }
 
 func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
@@ -283,25 +284,68 @@ type MypeOpEvaluateRule struct {
 	result   int
 }
 
-func marPosGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
+func marGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
 	// define type propagation rules of the form (int + int) -> int
 	return []*MypeOpEvaluateRule{
 		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_ADDOP, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_ADDOP, TY_STRING, TY_STRING},
 		&MypeOpEvaluateRule{NT_GTOP, TY_INT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_LTOP, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_GTEQOP, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_LTEQOP, TY_INT, TY_BOOL},
 	}
 }
 
 func marPosOpEvaluateRules() []*RewriteRule {
-	oers := marPosGetCompactOpEvaluateRules()
+	oers := marGetCompactOpEvaluateRules()
 	rv := []*RewriteRule{}
 	for _, oer := range oers {
-		rv = append(rv, createRewriteRuleFromOpEvaluateRule(oer))
+		rv = append(rv, createPosRewriteRuleFromOpEvaluateRule(oer))
 	}
 	return rv
 }
 
-func createRewriteRuleFromOpEvaluateRule(oer *MypeOpEvaluateRule) *RewriteRule {
+func marNegOpRestrictRules() []*RewriteRule {
+	oers := marGetCompactOpEvaluateRules()
+
+	opToallowableResult := map[int]Mype{}
+	for _, oer := range oers {
+		var allowableResult Mype
+		if _, ok := opToallowableResult[oer.operator]; !ok {
+			allowableResult = MypeExplicitNewEmpty()
+			opToallowableResult[oer.operator] = allowableResult
+		} else {
+			allowableResult = opToallowableResult[oer.operator]
+		}
+		allowableResult = allowableResult.Union(MypeExplicitNewSingle(oer.result))
+		opToallowableResult[oer.operator] = allowableResult
+	}
+	rv := []*RewriteRule{} // one rewrite rule per operator
+	for operatorType, allowableResult := range opToallowableResult {
+		rv = append(rv, createNegOpResultRestrictRule(operatorType, allowableResult))
+	}
+	return rv
+}
+
+func createNegOpResultRestrictRule(operatorType int, allowableResult Mype) *RewriteRule {
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == operatorType {
+				resultMype := NodGetChild(n, NTR_MYPE_NEG).Data.(Mype)
+				if resultMype.WouldChangeFromIntersectionWith(allowableResult) {
+					return true
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			NodGetChild(n, NTR_MYPE_NEG).Data = NodGetChild(n, NTR_MYPE_NEG).Data.(Mype).Intersection(allowableResult)
+		},
+	}
+}
+
+func createPosRewriteRuleFromOpEvaluateRule(oer *MypeOpEvaluateRule) *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if n.NodeType == oer.operator {
@@ -319,36 +363,6 @@ func createRewriteRuleFromOpEvaluateRule(oer *MypeOpEvaluateRule) *RewriteRule {
 		},
 		action: func(n Nod) {
 			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewSingle(oer.result)
-		},
-	}
-}
-
-func marNegUseInOp() *RewriteRule {
-	// for now, say that all add ops force all involved mypes (both args and result) to int
-	return &RewriteRule{
-		condition: func(n Nod) bool {
-			if n.NodeType == NT_ADDOP {
-				resultMype := NodGetChild(n, NTR_MYPE_NEG).Data.(Mype)
-				argMypes := []Mype{
-					NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_NEG).Data.(Mype),
-					NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE_NEG).Data.(Mype),
-				}
-				if resultMype.IsPlural() || argMypes[0].IsPlural() ||
-					argMypes[1].IsPlural() {
-					return true
-				}
-			}
-			return false
-		},
-		action: func(n Nod) {
-			intMype := MypeExplicitNewSingle(TY_INT)
-			resultMypeNod := NodGetChild(n, NTR_MYPE_NEG)
-			leftMypeNod := NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_NEG)
-			rightMypeNod := NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE_NEG)
-
-			resultMypeNod.Data = intMype.Intersection(resultMypeNod.Data.(Mype))
-			leftMypeNod.Data = intMype.Intersection(leftMypeNod.Data.(Mype))
-			rightMypeNod.Data = intMype.Intersection(rightMypeNod.Data.(Mype))
 		},
 	}
 }

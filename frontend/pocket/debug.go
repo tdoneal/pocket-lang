@@ -8,7 +8,8 @@ import (
 
 type Debug struct {
 	initialized    bool
-	nodeTypeLookup map[int]string
+	nodeTypeLookup map[int]string // NT_IMPERATIVE -> "IMPERATIVE", etc
+	typeLookup     map[int]string // TY_INT -> "int", etc
 }
 
 type DebugPrinter struct {
@@ -73,6 +74,15 @@ func (d *Debug) initialize() {
 	ntl[NTR_FUNCDEF_OUTTYPE] = "OUT"
 	ntl[NTR_VARDEF_SCOPE] = "SCOPE"
 	ntl[NT_VARDEF_SCOPE] = "VARSCOPE"
+
+	d.typeLookup = map[int]string{}
+	tl := d.typeLookup
+	tl[TY_BOOL] = "bool"
+	tl[TY_FLOAT] = "float"
+	tl[TY_INT] = "int"
+	tl[TY_STRING] = "string"
+	tl[TY_DUCK] = "duck"
+
 	d.initialized = true
 }
 
@@ -151,12 +161,7 @@ func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 		d.buf.WriteString(val)
 		d.buf.WriteString("\"")
 	} else if val, ok := node.Data.(*MypeExplicit); ok {
-		d.buf.WriteString("{")
-		for key := range val.Types {
-			d.PrintNodeType(key)
-			d.buf.WriteString(", ")
-		}
-		d.buf.WriteString("}")
+		d.llPrintMypeObject(val)
 	}
 }
 
@@ -187,6 +192,27 @@ func (d *DebugPrinter) PrintNodeType(nodeType int) {
 func (d *DebugPrinter) PrettyPrintMypes(nods []Nod) {
 	for _, ele := range nods {
 		d.PrettyPrintMype(ele)
+	}
+}
+
+func (d *DebugPrinter) PrintType(t int) {
+	if val, ok := DEBUG.typeLookup[t]; ok {
+		d.buf.WriteString(val)
+	} else {
+		d.buf.WriteString(strconv.Itoa(t))
+	}
+}
+
+func (d *DebugPrinter) llPrintMypeObject(m Mype) {
+	if me, ok := m.(*MypeExplicit); ok {
+		d.buf.WriteString("{")
+		for key := range me.Types {
+			d.PrintType(key)
+			d.buf.WriteString(", ")
+		}
+		d.buf.WriteString("}")
+	} else {
+		panic("invalid mype object")
 	}
 }
 
