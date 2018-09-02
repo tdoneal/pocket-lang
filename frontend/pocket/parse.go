@@ -230,7 +230,27 @@ func (p *ParserPocket) parseLiteral() Nod {
 		func() Nod { return p.parseLiteralList() },
 		func() Nod { return p.parseLiteralMap() },
 		func() Nod { return p.parseLiteralInt() },
+		func() Nod { return p.parseLiteralFloat() },
 	})
+}
+
+func (p *ParserPocket) parseLiteralInt() Nod {
+	tok := p.ParseToken(TK_LITERALINT)
+	ival, err := strconv.Atoi(tok.Data)
+	if err != nil {
+		p.RaiseParseError("in int literal")
+	}
+	return NodNewData(NT_LIT_INT, ival)
+}
+
+func (p *ParserPocket) parseLiteralFloat() Nod {
+	tok := p.ParseToken(TK_LITERALFLOAT)
+	ival, err := strconv.ParseFloat(tok.Data, 64)
+	if err != nil {
+		p.RaiseParseError("in float literal")
+	}
+	return NodNewData(NT_LIT_FLOAT, ival)
+
 }
 
 func (p *ParserPocket) parseLiteralString() Nod {
@@ -428,15 +448,6 @@ func (p *ParserPocket) parseReceiverCall() Nod {
 
 func (p *ParserPocket) parseReceiverName() Nod {
 	return p.parseIdentifier()
-}
-
-func (p *ParserPocket) parseLiteralInt() Nod {
-	tok := p.ParseToken(TK_LITERALINT)
-	ival, err := strconv.Atoi(tok.Data)
-	if err != nil {
-		p.RaiseParseError("in int literal")
-	}
-	return NodNewData(NT_LIT_INT, ival)
 }
 
 func (p *ParserPocket) parseColon() {

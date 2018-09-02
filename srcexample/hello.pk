@@ -1,5 +1,5 @@
 
 main func
-    x int : '3'
+    x float : 3.9
     print x
 

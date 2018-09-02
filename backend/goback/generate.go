@@ -175,7 +175,7 @@ func (g *Generator) genType(n Nod) {
 	lut := map[int]string{
 		TY_BOOL:   "bool",
 		TY_INT:    "int",
-		TY_FLOAT:  "float",
+		TY_FLOAT:  "float64",
 		TY_NUMBER: "number",
 		TY_STRING: "string",
 		TY_DUCK:   "interface{}",
@@ -290,7 +290,9 @@ func (g *Generator) genListIndexor(n Nod) {
 func (g *Generator) genValue(n Nod) {
 	nt := n.NodeType
 	if nt == NT_LIT_INT {
-		g.WS(strconv.Itoa(n.Data.(int)))
+		g.genLiteralInt(n)
+	} else if nt == NT_LIT_FLOAT {
+		g.genLiteralFloat(n)
 	} else if nt == NT_LIT_STRING {
 		g.genLiteralString(n)
 	} else if nt == NT_LIT_BOOL {
@@ -310,6 +312,14 @@ func (g *Generator) genValue(n Nod) {
 	} else {
 		g.WS("value")
 	}
+}
+
+func (g *Generator) genLiteralInt(n Nod) {
+	g.WS(strconv.Itoa(n.Data.(int)))
+}
+
+func (g *Generator) genLiteralFloat(n Nod) {
+	g.WS(strconv.FormatFloat(n.Data.(float64), 'g', -1, 64))
 }
 
 func (g *Generator) genLiteralBool(n Nod) {

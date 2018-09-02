@@ -25,10 +25,10 @@ func (tkzr *Tokenizer) CurrRune() rune {
 	return rune(tkzr.Input[tkzr.Pos])
 }
 
-func (tkzr *Tokenizer) EndBufedToken() {
+func (tkzr *Tokenizer) EndBufedToken(tokType int) {
 	tkzr.EmitTokenObject(&types.Token{
 		Data:           tkzr.Tokbuf.String(),
-		Type:           tkzr.State,
+		Type:           tokType,
 		SourceLocation: tkzr.CreateCurrSourceLocation(),
 	})
 	tkzr.Tokbuf.Reset()

@@ -19,6 +19,7 @@ const (
 	TK_INCINDENT     = 2
 	TK_DECINDENT     = 3
 	TK_LITERALINT    = 10
+	TK_LITERALFLOAT  = 11
 	TK_LITERALSTRING = 15
 	TK_ALPHANUM      = 20
 	TK_COLON         = 30
@@ -169,7 +170,7 @@ func (tkzr *TokenizerPocket) processInit() {
 		tkzr.EmitTokenRune(TK_COLON, input)
 		tkzr.Incr()
 	} else if isDigit(input) {
-		tkzr.processLiteralInt()
+		tkzr.processLiteralNumeric()
 	} else if isStringDelim(input) {
 		tkzr.processLiteralString()
 	} else if input == ' ' {
@@ -233,18 +234,32 @@ func (tkzr *TokenizerPocket) processPound() {
 	tkzr.Incr()
 }
 
-func (tkzr *TokenizerPocket) processLiteralInt() {
+func (tkzr *TokenizerPocket) processLiteralNumeric() {
 	tkzr.State = TK_LITERALINT
+	decPointFound := false
 	for !tkzr.IsEOF() {
 		chr := tkzr.CurrRune()
 		if isDigit(chr) {
+			tkzr.Tokbuf.WriteRune(chr)
+			tkzr.Incr()
+		} else if isDecimalPoint(chr) {
+			if decPointFound {
+				panic("too many decimal points")
+			}
+			decPointFound = true
 			tkzr.Tokbuf.WriteRune(chr)
 			tkzr.Incr()
 		} else {
 			break
 		}
 	}
-	tkzr.EndBufedToken()
+	var tokType int
+	if decPointFound {
+		tokType = TK_LITERALFLOAT
+	} else {
+		tokType = TK_LITERALINT
+	}
+	tkzr.EndBufedToken(tokType)
 	tkzr.State = TKS_INIT
 }
 
@@ -367,4 +382,8 @@ func isSpace(input rune) bool {
 
 func isStringDelim(input rune) bool {
 	return input == '\''
+}
+
+func isDecimalPoint(input rune) bool {
+	return input == '.'
 }
