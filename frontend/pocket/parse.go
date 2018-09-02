@@ -83,10 +83,23 @@ func (p *ParserPocket) parseIf() Nod {
 	cond := p.parseValue()
 	p.parseEOL()
 	body := p.parseImperativeBlock()
+
+	elseNod := p.ParseAtMostOne(func() Nod { return p.parseElse() })
+
 	rv := NodNew(NT_IF)
 	NodSetChild(rv, NTR_IF_COND, cond)
-	NodSetChild(rv, NTR_IF_BODY, body)
+	NodSetChild(rv, NTR_IF_BODY_TRUE, body)
+	if elseNod != nil {
+		NodSetChild(rv, NTR_IF_BODY_FALSE, elseNod)
+	}
 	return rv
+}
+
+func (p *ParserPocket) parseElse() Nod {
+	p.ParseToken(TK_ELSE)
+	p.parseEOL()
+	body := p.parseImperativeBlock()
+	return body
 }
 
 func (p *ParserPocket) parseLoop() Nod {

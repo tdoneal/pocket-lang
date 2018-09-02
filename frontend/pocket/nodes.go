@@ -37,7 +37,8 @@ const (
 	NT_BREAK                = 85
 	NT_IF                   = 87
 	NTR_IF_COND             = 88
-	NTR_IF_BODY             = 89
+	NTR_IF_BODY_TRUE        = 89
+	NTR_IF_BODY_FALSE       = 90
 	NT_ADDOP                = 100
 	NT_GTOP                 = 105
 	NT_LTOP                 = 106

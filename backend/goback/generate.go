@@ -217,8 +217,14 @@ func (g *Generator) genIf(input Nod) {
 	g.WS("if ")
 	g.genValue(NodGetChild(input, NTR_IF_COND))
 	g.WS("{\n")
-	g.genImperative(NodGetChild(input, NTR_IF_BODY))
-	g.WS("}\n")
+	g.genImperative(NodGetChild(input, NTR_IF_BODY_TRUE))
+	g.WS("}")
+	if elseBody := NodGetChildOrNil(input, NTR_IF_BODY_FALSE); elseBody != nil {
+		g.WS(" else {\n")
+		g.genImperative(elseBody)
+		g.WS("}")
+	}
+	g.WS("\n")
 }
 
 func (g *Generator) genReturn(input Nod) {

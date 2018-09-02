@@ -1,3 +1,13 @@
 
 main func
-    x: true
+    print 'a'
+    if 365 > 366
+        print 'b'
+    else
+        x : 1
+        print 'c'
+        if x > 1
+            print 'd'
+        print 'e'
+
+
