@@ -47,14 +47,70 @@ func (x *XformerPocket) Xform() {
 
 	x.buildFuncDefTables()
 	x.buildVarDefTables()
+	// now do second pass of resolving functions, specifically those that may refer to variables in a local scope
+	x.linkCallsToVariableFuncdefs()
+	x.checkAllCallsResolved()
 
 	fmt.Println("after building var def tables:", PrettyPrint(x.Root))
 
 	x.solveTypes()
 }
 
+func (x *XformerPocket) linkCallsToVariableFuncdefs() {
+	// find all unresolved calls
+	unresCalls := x.SearchRoot(func(n Nod) bool {
+		if isReceiverCallType(n.NodeType) {
+			if !NodHasChild(n, NTR_FUNCDEF) {
+				return true
+			}
+		}
+		return false
+	})
+
+	for _, call := range unresCalls {
+		varTable := x.getEnclosingVarTable(call)
+		varDefs := NodGetChildList(varTable)
+		callName := NodGetChild(call, NTR_RECEIVERCALL_NAME).Data.(string)
+		var matchedVarDef Nod
+		for _, varDef := range varDefs {
+			varName := NodGetChild(varDef, NTR_VARDEF_NAME).Data.(string)
+			if callName == varName {
+				matchedVarDef = varDef
+				break
+			}
+		}
+		if matchedVarDef != nil {
+			NodSetChild(call, NTR_FUNCDEF, matchedVarDef)
+		}
+	}
+}
+
+func (x *XformerPocket) getEnclosingVarTable(n Nod) Nod {
+	funcDef := x.findTopLevelFuncDef(n)
+	return NodGetChild(funcDef, NTR_VARTABLE)
+}
+
+func isReceiverCallType(nt int) bool {
+	return nt == NT_RECEIVERCALL || nt == NT_RECEIVERCALL_CMD
+}
+
+func (x *XformerPocket) checkAllCallsResolved() {
+	calls := x.SearchRoot(func(n Nod) bool {
+		return isReceiverCallType(n.NodeType)
+	})
+	for _, call := range calls {
+		funcName := NodGetChild(call, NTR_RECEIVERCALL_NAME).Data.(string)
+		if isSystemFuncName(funcName) {
+			continue // don't check these
+		}
+		if !NodHasChild(call, NTR_FUNCDEF) {
+			panic("unknown function '" + funcName + "'")
+		}
+	}
+}
+
 func isSystemFuncName(name string) bool {
-	return name == "print"
+	return name == "print" || name == "$li" || name == "$mi"
 }
 
 func (x *XformerPocket) buildFuncDefTables() {
@@ -62,7 +118,7 @@ func (x *XformerPocket) buildFuncDefTables() {
 	funcTable := NodNewChildList(NT_FUNCTABLE, funcDefs)
 	NodSetChild(x.Root, NTR_FUNCTABLE, funcTable)
 
-	// link functional calls to their associated def
+	// link functional calls to their associated def (if found)
 	calls := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_RECEIVERCALL })
 	for _, call := range calls {
 		callName := NodGetChild(call, NTR_RECEIVERCALL_NAME).Data.(string)
@@ -81,10 +137,9 @@ func (x *XformerPocket) buildFuncDefTables() {
 				break
 			}
 		}
-		if matchedFuncDef == nil {
-			panic("Unknown function '" + callName + "'")
+		if matchedFuncDef != nil {
+			NodSetChild(call, NTR_FUNCDEF, matchedFuncDef)
 		}
-		NodSetChild(call, NTR_FUNCDEF, matchedFuncDef)
 	}
 }
 
@@ -263,10 +318,49 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		marPosLiterals(),
 		marPosVarAssign(),
 		marPosPublicParameter(),
+		marPosSysFunc(),
+		marPosVarFunc(),
 	}
 	rv = append(rv, marPosOpEvaluateRules()...)
 	rv = append(rv, x.marPosUserFuncEvaluateRules()...)
 	return rv
+}
+
+func marPosVarFunc() *RewriteRule {
+	// all calls to a variable can return anything
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if isReceiverCallType(n.NodeType) {
+				funcDef := NodGetChild(n, NTR_FUNCDEF)
+				if funcDef.NodeType == NT_VARDEF {
+					return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewFull()
+		},
+	}
+}
+
+func marPosSysFunc() *RewriteRule {
+	// all sys funcs can return anything
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if isReceiverCallType(n.NodeType) {
+				rcName := NodGetChild(n, NTR_RECEIVERCALL_NAME).Data.(string)
+				if isSystemFuncName(rcName) {
+					pMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+					return !pMype.IsFull()
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewFull()
+		},
+	}
 }
 
 func (x *XformerPocket) marPosUserFuncEvaluateRules() []*RewriteRule {
@@ -571,11 +665,11 @@ func (x *XformerPocket) buildVarDefTables() {
 	})
 	impToVarRef := make(map[Nod][]Nod)
 	for _, ele := range varReferences {
-		tlImper := x.findTopLevelImperative(ele)
-		if tlImper == nil {
+		funcDef := x.findTopLevelFuncDef(ele)
+		if funcDef == nil {
 			panic("failed to find top level imperative")
 		}
-		impToVarRef[tlImper] = append(impToVarRef[tlImper], ele)
+		impToVarRef[funcDef] = append(impToVarRef[funcDef], ele)
 	}
 
 	// next, generate the vartables for each imperative
@@ -583,8 +677,6 @@ func (x *XformerPocket) buildVarDefTables() {
 		varTable := x.generateVarTableFromVarRefs(varRefs)
 		NodSetChild(imper, NTR_VARTABLE, varTable)
 	}
-
-	fmt.Println("right before lvtovt", PrettyPrint(x.Root))
 
 	x.linkVarsToVarTables()
 	x.computeVariableScopes()
@@ -599,11 +691,11 @@ func (x *XformerPocket) linkVarsToVarTables() {
 	})
 	for _, varRef := range varRefs {
 		// get the var table associated with this var reference
-		tlImper := x.findTopLevelImperative(varRef)
-		if tlImper == nil {
+		funcDef := x.findTopLevelFuncDef(varRef)
+		if funcDef == nil {
 			panic("failed to find top level imperative")
 		}
-		varTable := NodGetChildOrNil(tlImper, NTR_VARTABLE)
+		varTable := NodGetChildOrNil(funcDef, NTR_VARTABLE)
 		if varTable == nil {
 			panic("failed to find vartable for top level imperative")
 		}
@@ -678,7 +770,7 @@ func (x *XformerPocket) generateVarTableFromVarRefs(varRefs []Nod) Nod {
 	return NodNewChildList(NT_VARTABLE, varDefsList)
 }
 
-func (x *XformerPocket) findTopLevelImperative(n Nod) Nod {
+func (x *XformerPocket) findTopLevelFuncDef(n Nod) Nod {
 	found := x.SearchFor(n, func(n Nod) bool {
 		return n.NodeType == NT_FUNCDEF
 	}, func(n Nod) []Nod {

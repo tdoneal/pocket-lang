@@ -32,6 +32,8 @@ func (d *Debug) initialize() {
 	ntl[NT_IDENTIFIER] = "IDENTIFIER"
 	ntl[NT_IMPERATIVE] = "IMPERATIVE"
 	ntl[NT_RECEIVERCALL] = "CALL"
+	ntl[NT_RECEIVERCALL_CMD] = "CALLCMD"
+
 	ntl[NT_LIT_INT] = "INT"
 	ntl[NT_LIT_STRING] = "STRING"
 	ntl[NT_INLINEOPSTREAM] = "OPSTREAM"
@@ -70,6 +72,7 @@ func (d *Debug) initialize() {
 	ntl[NT_BREAK] = "BREAK"
 	ntl[NT_VAR_GETTER] = "VARGET"
 	ntl[NT_PARAMETER] = "PARAM"
+	ntl[NTR_FUNCDEF] = "FUNCDEF"
 	ntl[NTR_FUNCDEF_INTYPE] = "IN"
 	ntl[NTR_FUNCDEF_OUTTYPE] = "OUT"
 	ntl[NTR_VARDEF_SCOPE] = "SCOPE"
@@ -82,6 +85,9 @@ func (d *Debug) initialize() {
 	tl[TY_INT] = "int"
 	tl[TY_STRING] = "string"
 	tl[TY_DUCK] = "duck"
+	tl[TY_LIST] = "list"
+	tl[TY_MAP] = "map"
+	tl[TY_SET] = "set"
 
 	d.initialized = true
 }

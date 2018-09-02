@@ -1,5 +1,5 @@
 
 main func
-    i : [3, 5]
+    i : {3, 6, 4}
     print i
     

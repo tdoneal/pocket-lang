@@ -223,6 +223,7 @@ func (p *ParserPocket) parseLiteral() Nod {
 		func() Nod { return p.parseLiteralKeyword() },
 		func() Nod { return p.parseLiteralString() },
 		func() Nod { return p.parseLiteralList() },
+		func() Nod { return p.parseLiteralSet() },
 		func() Nod { return p.parseLiteralMap() },
 		func() Nod { return p.parseLiteralInt() },
 		func() Nod { return p.parseLiteralFloat() },
@@ -253,14 +254,21 @@ func (p *ParserPocket) parseLiteralString() Nod {
 	return NodNewData(NT_LIT_STRING, tkn.Data)
 }
 
+func (p *ParserPocket) parseLiteralSet() Nod {
+	p.ParseToken(TK_CURLYL)
+	elements := p.parseManyOptDelimited(func() Nod { return p.parseValue() },
+		func() Nod { return p.parseComma() })
+
+	p.ParseToken(TK_CURLYR)
+	return NodNewChildList(NT_LIT_SET, elements)
+}
+
 func (p *ParserPocket) parseLiteralMap() Nod {
 	p.ParseToken(TK_CURLYL)
-
 	kvpairs := p.parseManyOptDelimited(func() Nod { return p.parseMapKeyValuePair() },
 		func() Nod { return p.parseComma() })
 
 	p.ParseToken(TK_CURLYR)
-
 	return NodNewChildList(NT_LIT_MAP, kvpairs)
 }
 

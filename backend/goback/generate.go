@@ -317,6 +317,8 @@ func (g *Generator) genValue(n Nod) {
 		g.genVarGetter(n)
 	} else if nt == NT_LIT_LIST {
 		g.genLiteralList(n)
+	} else if nt == NT_LIT_SET {
+		g.genLiteralSet(n)
 	} else if nt == NT_LIT_MAP {
 		g.genLiteralMap(n)
 	} else if nt == NT_RECEIVERCALL {
@@ -383,6 +385,17 @@ func (g *Generator) genBinaryInlineOp(n Nod) {
 	g.WS(g.getBinaryInlineOpSymbol(n.NodeType))
 	g.genValue(NodGetChild(n, NTR_BINOP_RIGHT))
 	g.WS(")")
+}
+
+func (g *Generator) genLiteralSet(n Nod) {
+	g.WS("map[interface{}]bool{")
+	elements := NodGetChildList(n)
+	for _, element := range elements {
+		g.genValue(element)
+		g.WS(": true")
+		g.WS(", ")
+	}
+	g.WS("}")
 }
 
 func (g *Generator) genLiteralMap(n Nod) {

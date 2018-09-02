@@ -6,6 +6,7 @@ type Mype interface {
 	IsSingleType(int) bool
 	GetSingleType() int
 	IsEmpty() bool
+	IsFull() bool
 	Intersection(Mype) Mype
 	Union(Mype) Mype
 	WouldChangeFromUnionWith(Mype) bool
@@ -21,6 +22,10 @@ type MypeExplicit struct {
 }
 
 var _ Mype = &MypeExplicit{} // interface implementation declaration
+
+const (
+	MypeExplicitFullCount = 7 // must correspond to the len of types returned by MypeExplicitNewFull()
+)
 
 func MypeExplicitNewFull() *MypeExplicit {
 	return &MypeExplicit{
@@ -56,6 +61,10 @@ func (me *MypeExplicit) IsPlural() bool {
 
 func (me *MypeExplicit) IsSingle() bool {
 	return len(me.Types) == 1
+}
+
+func (me *MypeExplicit) IsFull() bool {
+	return len(me.Types) == MypeExplicitFullCount
 }
 
 func (me *MypeExplicit) IsSingleType(t int) bool {
