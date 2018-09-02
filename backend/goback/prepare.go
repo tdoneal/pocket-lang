@@ -21,7 +21,8 @@ func (p *Preparer) Prepare(code Nod) {
 
 func (p *Preparer) checkForPrintStatements() {
 	rcs := p.SearchRoot(func(n Nod) bool {
-		return n.NodeType == NT_RECEIVERCALL && NodGetChild(n, NTR_RECEIVERCALL_NAME).Data.(string) == "print"
+		return isReceiverCallType(n.NodeType) &&
+			NodGetChild(n, NTR_RECEIVERCALL_NAME).Data.(string) == "print"
 	})
 
 	if len(rcs) > 0 {

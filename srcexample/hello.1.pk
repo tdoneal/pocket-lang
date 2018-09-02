@@ -1,0 +1,7 @@
+main func
+    print(factorial(4))
+
+factorial func(x int) void
+    if x=1
+        return 1
+    return x * factorial(x-1)

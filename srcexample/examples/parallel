@@ -1,0 +1,16 @@
+use threading.Thread 
+
+main func
+    threads : []
+    for 5
+        t : Thread work
+        threads.append t
+        t.start
+    for t in threads
+        t.join
+
+work func
+    print 'working'
+    for 100
+        print it
+    

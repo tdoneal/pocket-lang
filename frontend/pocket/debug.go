@@ -155,7 +155,11 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 	if val, ok := node.Data.(int); ok {
 		d.buf.WriteString(": ")
-		d.buf.WriteString(strconv.Itoa(val))
+		if node.NodeType == NT_TYPE {
+			d.PrintType(val)
+		} else {
+			d.buf.WriteString(strconv.Itoa(val))
+		}
 	} else if val, ok := node.Data.(string); ok {
 		d.buf.WriteString(": \"")
 		d.buf.WriteString(val)

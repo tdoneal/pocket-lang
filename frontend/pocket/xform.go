@@ -45,11 +45,47 @@ func Xform(root Nod) Nod {
 func (x *XformerPocket) Xform() {
 	x.parseInlineOpStreams()
 
+	x.buildFuncDefTables()
 	x.buildVarDefTables()
 
 	fmt.Println("after building var def tables:", PrettyPrint(x.Root))
 
 	x.solveTypes()
+}
+
+func isSystemFuncName(name string) bool {
+	return name == "print"
+}
+
+func (x *XformerPocket) buildFuncDefTables() {
+	funcDefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_FUNCDEF })
+	funcTable := NodNewChildList(NT_FUNCTABLE, funcDefs)
+	NodSetChild(x.Root, NTR_FUNCTABLE, funcTable)
+
+	// link functional calls to their associated def
+	calls := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_RECEIVERCALL })
+	for _, call := range calls {
+		callName := NodGetChild(call, NTR_RECEIVERCALL_NAME).Data.(string)
+		if isSystemFuncName(callName) {
+			// continue, don't worry about linking system funcs
+			// as by definition there is nothing to point them to
+			continue
+		}
+		fmt.Println("call name", callName)
+		// lookup function in func table (naive linear search for now)
+		var matchedFuncDef Nod
+		for _, funcDef := range funcDefs {
+			funcDefName := NodGetChild(funcDef, NTR_FUNCDEF_NAME).Data.(string)
+			if callName == funcDefName {
+				matchedFuncDef = funcDef
+				break
+			}
+		}
+		if matchedFuncDef == nil {
+			panic("Unknown function '" + callName + "'")
+		}
+		NodSetChild(call, NTR_FUNCDEF, matchedFuncDef)
+	}
 }
 
 func (x *XformerPocket) parseInlineOpStreams() {
@@ -97,16 +133,27 @@ func getLiteralTypeAnnDataFromNT(nt int) int {
 }
 
 func isBinaryOpType(nt int) bool {
-	return nt == NT_ADDOP || nt == NT_GTOP || nt == NT_LTOP
+	return nt == NT_ADDOP || nt == NT_GTOP || nt == NT_LTOP ||
+		nt == NT_GTEQOP || nt == NT_LTEQOP || nt == NT_EQOP ||
+		nt == NT_SUBOP || nt == NT_DIVOP || nt == NT_MULOP
 }
 
 func isVarReferenceNT(nt int) bool {
 	return nt == NT_VAR_GETTER || nt == NT_VARASSIGN || nt == NT_PARAMETER
 }
 
+func isCallType(nt int) bool {
+	return nt == NT_RECEIVERCALL
+}
+
 func (x *XformerPocket) initializeMypes(n Nod) {
 	NodSetChild(n, NTR_MYPE_NEG, x.getInitMypeNodFull())
 	NodSetChild(n, NTR_MYPE_POS, x.getInitMypeNodEmpty())
+}
+
+func isMypedValueType(nt int) bool {
+	return isLiteralNodeType(nt) || isBinaryOpType(nt) ||
+		isVarReferenceNT(nt) || isCallType(nt)
 }
 
 func (x *XformerPocket) initializeAllMypes() []Nod {
@@ -121,8 +168,7 @@ func (x *XformerPocket) initializeAllMypes() []Nod {
 	// next gather all value nodes
 	// TODO: multi-function support
 	values := x.SearchRoot(func(n Nod) bool {
-		nt := n.NodeType
-		return isLiteralNodeType(nt) || isBinaryOpType(nt) || isVarReferenceNT(nt)
+		return isMypedValueType(n.NodeType)
 	})
 
 	// assign an initial mype to all value nodes
@@ -212,7 +258,61 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		marPosPublicParameter(),
 	}
 	rv = append(rv, marPosOpEvaluateRules()...)
+	rv = append(rv, x.marPosUserFuncEvaluateRules()...)
 	return rv
+}
+
+func (x *XformerPocket) marPosUserFuncEvaluateRules() []*RewriteRule {
+	funcTableNod := NodGetChild(x.Root, NTR_FUNCTABLE)
+	funcDefs := NodGetChildList(funcTableNod)
+	rv := []*RewriteRule{}
+	for _, funcDef := range funcDefs {
+		rule := x.marPosGenFuncEvaluateRule(funcDef)
+		if rule != nil {
+			rv = append(rv, rule)
+		}
+	}
+	fmt.Println("generated evaluation rules for ", len(rv), "funcdefs")
+	return rv
+}
+
+func marPosGFERCondition(call Nod, funcDef Nod) bool {
+	callMype := NodGetChild(call, NTR_MYPE_POS).Data.(Mype)
+	declaredDefType := NodGetChild(funcDef, NTR_FUNCDEF_OUTTYPE)
+	funcOutMype := MypeExplicitNewSingle(declaredDefType.Data.(int))
+	if callMype.WouldChangeFromUnionWith(funcOutMype) {
+		return true
+	}
+	return false
+}
+
+func marPosGFERAction(call Nod) {
+	funcDef := NodGetChild(call, NTR_FUNCDEF)
+	declaredDefType := NodGetChild(funcDef, NTR_FUNCDEF_OUTTYPE)
+	funcOutMype := MypeExplicitNewSingle(declaredDefType.Data.(int))
+	NodGetChild(call, NTR_MYPE_POS).Data = funcOutMype
+}
+
+func (x *XformerPocket) marPosGenFuncEvaluateRule(funcDef Nod) *RewriteRule {
+	// generates the rule that replaces a function call with its return type
+	if outType := NodGetChildOrNil(funcDef, NTR_FUNCDEF_OUTTYPE); outType != nil {
+		return &RewriteRule{
+			condition: func(n Nod) bool {
+				if n.NodeType == NT_RECEIVERCALL {
+					if callDef := NodGetChildOrNil(n, NTR_FUNCDEF); callDef != nil {
+						if callDef == funcDef {
+							return marPosGFERCondition(n, callDef)
+						}
+					}
+
+				}
+				return false
+			},
+			action: marPosGFERAction,
+		}
+	} else {
+		return nil
+	}
 }
 
 func marPosPublicParameter() *RewriteRule {
@@ -238,6 +338,7 @@ func marPosVarAssign() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if n.NodeType == NT_VARASSIGN {
+				fmt.Println("found a varassign:", PrettyPrint(n))
 				mypeLHS := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
 				mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE_POS).Data.(Mype)
 				if mypeLHS.WouldChangeFromUnionWith(mypeRHS) {
@@ -258,7 +359,7 @@ func marPosVarAssign() *RewriteRule {
 func marNegDeclaredType() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_VARASSIGN {
+			if n.NodeType == NT_PARAMETER || n.NodeType == NT_VARASSIGN {
 				if typeDeclNod := NodGetChildOrNil(n, NTR_TYPE_DECL); typeDeclNod != nil {
 					negMype := NodGetChild(n, NTR_MYPE_NEG).Data.(Mype)
 					declMype := MypeExplicitNewSingle(typeDeclNod.Data.(int))
@@ -290,10 +391,24 @@ func marGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
 		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_INT},
 		&MypeOpEvaluateRule{NT_ADDOP, TY_FLOAT, TY_FLOAT},
 		&MypeOpEvaluateRule{NT_ADDOP, TY_STRING, TY_STRING},
+		&MypeOpEvaluateRule{NT_SUBOP, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_SUBOP, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_MULOP, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_MULOP, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_DIVOP, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_DIVOP, TY_FLOAT, TY_FLOAT},
 		&MypeOpEvaluateRule{NT_GTOP, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_GTOP, TY_FLOAT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_LTOP, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_LTOP, TY_FLOAT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_GTEQOP, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_GTEQOP, TY_FLOAT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_LTEQOP, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_LTEQOP, TY_FLOAT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_EQOP, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_EQOP, TY_FLOAT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_EQOP, TY_STRING, TY_BOOL},
+		&MypeOpEvaluateRule{NT_EQOP, TY_BOOL, TY_BOOL},
 	}
 }
 
@@ -354,8 +469,8 @@ func createPosRewriteRuleFromOpEvaluateRule(oer *MypeOpEvaluateRule) *RewriteRul
 					NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_POS).Data.(Mype),
 					NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE_POS).Data.(Mype),
 				}
-				if resultMype.IsEmpty() && argMypes[0].IsSingleType(oer.operand) &&
-					argMypes[1].IsSingleType(oer.operand) {
+				if resultMype.IsEmpty() && argMypes[0].ContainsSingleType(oer.operand) &&
+					argMypes[1].ContainsSingleType(oer.operand) {
 					return true
 				}
 			}

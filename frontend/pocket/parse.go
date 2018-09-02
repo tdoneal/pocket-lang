@@ -146,7 +146,7 @@ func (p *ParserPocket) parseStatementBody() Nod {
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseReturnStatement() },
 		func() Nod { return p.parseVarAssign() },
-		func() Nod { return p.parseReceiverCallStatement() },
+		func() Nod { return p.parseCommand() },
 	})
 }
 
@@ -401,6 +401,12 @@ func (p *ParserPocket) parseInlineOp() Nod {
 func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {
 	if tokenType == TK_ADDOP {
 		return NT_ADDOP
+	} else if tokenType == TK_MULTOP {
+		return NT_MULOP
+	} else if tokenType == TK_SUBOP {
+		return NT_SUBOP
+	} else if tokenType == TK_DIVOP {
+		return NT_DIVOP
 	} else if tokenType == TK_LT {
 		return NT_LTOP
 	} else if tokenType == TK_GT {
@@ -409,6 +415,8 @@ func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {
 		return NT_LTEQOP
 	} else if tokenType == TK_GTEQ {
 		return NT_GTEQOP
+	} else if tokenType == TK_EQOP {
+		return NT_EQOP
 	} else {
 		return -1
 	}
@@ -426,13 +434,16 @@ func (p *ParserPocket) parseIdentifier() Nod {
 	return NodNewData(NT_IDENTIFIER, p.parseTokenAlphanumeric().Data)
 }
 
-func (p *ParserPocket) parseReceiverCallStatement() Nod {
+func (p *ParserPocket) parseCommand() Nod {
 	name := p.parseReceiverName()
-	val := p.ParseAtMostOne(func() Nod { return p.parseValue() })
-	rv := NodNew(NT_RECEIVERCALL)
+	args := p.ParseManyGreedy(func() Nod { return p.parseValue() })
+	if len(args) > 1 {
+		p.RaiseParseError("only zro and one arg cmds supported for now")
+	}
+	rv := NodNew(NT_RECEIVERCALL_CMD)
 	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
-	if val != nil {
-		NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
+	if len(args) > 0 {
+		NodSetChild(rv, NTR_RECEIVERCALL_VALUE, args[0])
 	}
 	return rv
 }

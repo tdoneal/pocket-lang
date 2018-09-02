@@ -23,6 +23,7 @@ const (
 	TK_LITERALSTRING = 15
 	TK_ALPHANUM      = 20
 	TK_COLON         = 30
+	TK_EQOP          = 35
 	TK_ADDOP         = 40
 	TK_SUBOP         = 41
 	TK_MULTOP        = 42
@@ -167,8 +168,9 @@ func (tkzr *TokenizerPocket) processInit() {
 	if isAlphic(input) {
 		tkzr.processAlphanum()
 	} else if input == ':' {
-		tkzr.EmitTokenRune(TK_COLON, input)
-		tkzr.Incr()
+		tkzr.EmitTokenRuneAndIncr(TK_COLON)
+	} else if input == '=' {
+		tkzr.EmitTokenRuneAndIncr(TK_EQOP)
 	} else if isDigit(input) {
 		tkzr.processLiteralNumeric()
 	} else if isStringDelim(input) {
@@ -181,6 +183,12 @@ func (tkzr *TokenizerPocket) processInit() {
 		tkzr.processEOL()
 	} else if input == '+' {
 		tkzr.EmitTokenRuneAndIncr(TK_ADDOP)
+	} else if input == '-' {
+		tkzr.EmitTokenRuneAndIncr(TK_SUBOP)
+	} else if input == '*' {
+		tkzr.EmitTokenRuneAndIncr(TK_MULTOP)
+	} else if input == '/' {
+		tkzr.EmitTokenRuneAndIncr(TK_DIVOP)
 	} else if input == '(' {
 		tkzr.EmitTokenRuneAndIncr(TK_PARENL)
 	} else if input == ')' {

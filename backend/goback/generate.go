@@ -57,6 +57,16 @@ func (g *Generator) genFuncInType(n Nod) {
 	}
 }
 
+func (g *Generator) genFuncOutType(n Nod) {
+	if typeInt, ok := n.Data.(int); ok {
+		if typeInt == TY_VOID {
+			// in go there is no void keyword, so we don't output anything here
+			return
+		}
+	}
+	g.genType(n)
+}
+
 func (g *Generator) genParameterList(n Nod) {
 	g.WS("args []interface{}")
 }
@@ -84,9 +94,7 @@ func (g *Generator) genFuncDef(n Nod) {
 	g.WS(")")
 
 	if outType := NodGetChildOrNil(n, NTR_FUNCDEF_OUTTYPE); outType != nil {
-		if outType.Data.(string) == "int" {
-			g.WS("int")
-		}
+		g.genFuncOutType(outType)
 	}
 
 	g.WS(" {\n")
@@ -104,22 +112,17 @@ func (g *Generator) genFuncDef(n Nod) {
 func (g *Generator) genArgUnpacking(inTypeDef Nod) {
 	params := NodGetChildList(inTypeDef)
 	for ndx, param := range params {
-		var typeName string
-		if pType := NodGetChildOrNil(param, NTR_TYPE); pType != nil {
-			typeName = pType.Data.(string)
-		} else {
-			typeName = "interface{}"
-		}
+		typeStr := g.getGenType(NodGetChild(param, NTR_TYPE))
 
 		g.WS("var ")
 		g.WS(NodGetChild(param, NTR_VARDEF_NAME).Data.(string))
 		g.WS(" ")
-		g.WS(typeName)
+		g.WS(typeStr)
 		g.WS(" = ")
 		g.WS("args[")
 		g.WS(strconv.Itoa(ndx))
 		g.WS("].(")
-		g.WS(typeName)
+		g.WS(typeStr)
 		g.WS(")")
 		g.WS("\n")
 	}
@@ -172,6 +175,10 @@ func (g *Generator) genVarDef(n Nod) {
 }
 
 func (g *Generator) genType(n Nod) {
+	g.WS(g.getGenType(n))
+}
+
+func (g *Generator) getGenType(n Nod) string {
 	lut := map[int]string{
 		TY_BOOL:   "bool",
 		TY_INT:    "int",
@@ -181,16 +188,20 @@ func (g *Generator) genType(n Nod) {
 		TY_DUCK:   "interface{}",
 	}
 	if val, ok := lut[n.Data.(int)]; ok {
-		g.WS(val)
+		return val
 	} else {
-		g.WS("<type>")
+		return "<type>"
 	}
+}
+
+func isReceiverCallType(nt int) bool {
+	return nt == NT_RECEIVERCALL || nt == NT_RECEIVERCALL_CMD
 }
 
 func (g *Generator) genImperativeUnit(n Nod) {
 	if n.NodeType == NT_VARASSIGN {
 		g.genVarAssign(n)
-	} else if n.NodeType == NT_RECEIVERCALL {
+	} else if isReceiverCallType(n.NodeType) {
 		g.genReceiverCall(n)
 	} else if n.NodeType == NT_RETURN {
 		g.genReturn(n)
@@ -339,16 +350,22 @@ func (g *Generator) genLiteralString(n Nod) {
 
 func (g *Generator) isBinaryInlineOpType(nType int) bool {
 	return nType == NT_ADDOP || nType == NT_GTOP || nType == NT_LTOP ||
-		nType == NT_GTEQOP || nType == NT_LTEQOP
+		nType == NT_GTEQOP || nType == NT_LTEQOP || nType == NT_EQOP ||
+		nType == NT_SUBOP || nType == NT_MULOP || nType == NT_DIVOP
+
 }
 
 func (g *Generator) getBinaryInlineOpSymbol(nType int) string {
 	lut := map[int]string{
 		NT_ADDOP:  "+",
+		NT_SUBOP:  "-",
+		NT_MULOP:  "*",
+		NT_DIVOP:  "/",
 		NT_GTOP:   ">",
 		NT_LTOP:   "<",
 		NT_GTEQOP: ">=",
 		NT_LTEQOP: "<=",
+		NT_EQOP:   "==",
 	}
 	return lut[nType]
 }

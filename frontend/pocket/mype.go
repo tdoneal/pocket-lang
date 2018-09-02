@@ -12,6 +12,7 @@ type Mype interface {
 	WouldChangeFromIntersectionWith(Mype) bool
 	Subtract(Mype) Mype
 	Converse() Mype
+	ContainsSingleType(int) bool
 	ToType() int // only works if IsSingle() is true
 }
 
@@ -59,6 +60,13 @@ func (me *MypeExplicit) IsSingleType(t int) bool {
 		if _, ok := me.Types[t]; ok {
 			return true
 		}
+	}
+	return false
+}
+
+func (me *MypeExplicit) ContainsSingleType(t int) bool {
+	if _, ok := me.Types[t]; ok {
+		return true
 	}
 	return false
 }
