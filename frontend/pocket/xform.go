@@ -115,7 +115,10 @@ func (x *XformerPocket) getInitMypeNodEmpty() Nod {
 }
 
 func isLiteralNodeType(nt int) bool {
-	return nt == NT_LIT_INT || nt == NT_LIT_STRING || nt == NT_LIT_BOOL || nt == NT_LIT_FLOAT
+	return nt == NT_LIT_INT || nt == NT_LIT_STRING ||
+		nt == NT_LIT_BOOL || nt == NT_LIT_FLOAT ||
+		nt == NT_LIT_MAP || nt == NT_LIT_LIST ||
+		nt == NT_LIT_SET
 }
 
 func getLiteralTypeAnnDataFromNT(nt int) int {
@@ -124,6 +127,9 @@ func getLiteralTypeAnnDataFromNT(nt int) int {
 		NT_LIT_STRING: TY_STRING,
 		NT_LIT_BOOL:   TY_BOOL,
 		NT_LIT_FLOAT:  TY_FLOAT,
+		NT_LIT_LIST:   TY_LIST,
+		NT_LIT_SET:    TY_SET,
+		NT_LIT_MAP:    TY_MAP,
 	}
 	if rv, ok := lut[nt]; ok {
 		return rv

@@ -29,6 +29,9 @@ func MypeExplicitNewFull() *MypeExplicit {
 			TY_STRING: true,
 			TY_FLOAT:  true,
 			TY_BOOL:   true,
+			TY_LIST:   true,
+			TY_MAP:    true,
+			TY_SET:    true,
 		},
 	}
 }

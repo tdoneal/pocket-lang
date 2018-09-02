@@ -186,6 +186,9 @@ func (g *Generator) getGenType(n Nod) string {
 		TY_NUMBER: "number",
 		TY_STRING: "string",
 		TY_DUCK:   "interface{}",
+		TY_LIST:   "[]interface{}",
+		TY_SET:    "map[interface{}]bool",
+		TY_MAP:    "map[interface{}]interface{}",
 	}
 	if val, ok := lut[n.Data.(int)]; ok {
 		return val

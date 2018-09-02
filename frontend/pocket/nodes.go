@@ -73,6 +73,7 @@ const (
 	NT_LIT_MAP_KVPAIR       = 236
 	NTR_KVPAIR_KEY          = 237
 	NTR_KVPAIR_VAL          = 238
+	NT_LIT_SET              = 239
 	NT_LIT_PRIMITIVE        = 240
 	NT_VAR_GETTER           = 250
 	NTR_VAR_GETTER_NAME     = 251
