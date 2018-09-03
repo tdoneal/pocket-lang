@@ -758,15 +758,6 @@ func marPosLiterals() *RewriteRule {
 	}
 }
 
-func isNodOfTypeString(n Nod, cmp string) bool {
-	if nt := NodGetChildOrNil(n, NTR_TYPE); nt != nil {
-		if tn, ok := nt.Data.(string); ok {
-			return tn == cmp
-		}
-	}
-	return false
-}
-
 func (x *XformerPocket) applyRewritesUntilStable(nods []Nod, rules []*RewriteRule) {
 	for {
 		maxApplied := 0
@@ -963,6 +954,7 @@ func (x *XformerPocket) parseInlineOpStream(opStream Nod) Nod {
 					operands[i] = groupedOp
 					// remove operator
 					operators = x.removeNodListAt(operators, i)
+					i--
 				}
 			}
 		}
