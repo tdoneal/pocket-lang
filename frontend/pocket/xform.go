@@ -237,7 +237,7 @@ func (x *XformerPocket) buildFuncDefTables() {
 	NodSetChild(x.Root, NTR_FUNCTABLE, funcTable)
 
 	// link functional calls to their associated def (if found)
-	calls := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_RECEIVERCALL })
+	calls := x.SearchRoot(func(n Nod) bool { return isReceiverCallType(n.NodeType) })
 	for _, call := range calls {
 		callName := NodGetChild(call, NTR_RECEIVERCALL_NAME).Data.(string)
 		if isSystemFuncName(callName) {
