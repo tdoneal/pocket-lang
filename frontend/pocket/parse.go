@@ -64,11 +64,26 @@ func (p *ParserPocket) parseImperativeUnit() Nod {
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseIf() },
 		func() Nod { return p.parseWhile() },
+		func() Nod { return p.parseFor() },
 		func() Nod { return p.parseLoop() },
 		func() Nod { return p.parseBreak() },
 		func() Nod { return p.parseImperativeBlock() },
 		func() Nod { return p.parseStatement() },
 	})
+}
+
+func (p *ParserPocket) parseFor() Nod {
+	p.ParseToken(TK_FOR)
+	iterVar := p.parseIdentifier()
+	p.ParseToken(TK_IN)
+	iterOverValue := p.parseValue()
+	p.parseEOL()
+	body := p.parseImperativeBlock()
+	rv := NodNew(NT_FOR)
+	NodSetChild(rv, NTR_FOR_BODY, body)
+	NodSetChild(rv, NTR_FOR_ITERVAR, iterVar)
+	NodSetChild(rv, NTR_FOR_ITEROVER, iterOverValue)
+	return rv
 }
 
 func (p *ParserPocket) parseBreak() Nod {
@@ -429,6 +444,8 @@ func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {
 		return NT_ANDOP
 	} else if tokenType == TK_MOD {
 		return NT_MODOP
+	} else if tokenType == TK_DOT {
+		return NT_DOTOP
 	} else {
 		return -1
 	}

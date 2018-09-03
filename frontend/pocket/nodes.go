@@ -38,9 +38,13 @@ const (
 	NTR_FUNCDEF_CODE        = 73
 	NT_RETURN               = 74
 	NTR_RETURN_VALUE        = 75
-	NT_LOOP                 = 80
-	NTR_LOOP_ARG            = 81
-	NTR_LOOP_BODY           = 83
+	NT_LOOP                 = 77
+	NTR_LOOP_ARG            = 78
+	NTR_LOOP_BODY           = 79
+	NT_FOR                  = 81
+	NTR_FOR_ITERVAR         = 82
+	NTR_FOR_ITEROVER        = 83
+	NTR_FOR_BODY            = 84
 	NT_BREAK                = 85
 	NT_IF                   = 87
 	NTR_IF_COND             = 88
@@ -61,6 +65,7 @@ const (
 	NT_OROP                 = 110
 	NT_ANDOP                = 111
 	NT_MODOP                = 112
+	NT_DOTOP                = 113
 	NTR_BINOP_LEFT          = 118
 	NTR_BINOP_RIGHT         = 119
 	NT_INLINEOPSTREAM       = 150
@@ -78,4 +83,5 @@ const (
 	NT_LIT_PRIMITIVE        = 240
 	NT_VAR_GETTER           = 250
 	NTR_VAR_GETTER_NAME     = 251
+	NT_DOTOP_QUALIFIER      = 253
 )

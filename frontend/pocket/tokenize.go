@@ -23,6 +23,7 @@ const (
 	TK_LITERALSTRING = 15
 	TK_ALPHANUM      = 20
 	TK_COLON         = 30
+	TK_DOT           = 32
 	TK_EQOP          = 35
 	TK_ADDOP         = 40
 	TK_SUBOP         = 41
@@ -48,7 +49,8 @@ const (
 	TK_ELSE          = 76
 	TK_LOOP          = 80
 	TK_FOR           = 81
-	TK_WHILE         = 82
+	TK_IN            = 82
+	TK_WHILE         = 83
 	TK_BREAK         = 85
 	TK_RETURN        = 100
 	TK_VOID          = 110
@@ -216,6 +218,8 @@ func (tkzr *TokenizerPocket) processInit() {
 		tkzr.EmitTokenRuneAndIncr(TK_AND)
 	} else if input == '%' {
 		tkzr.EmitTokenRuneAndIncr(TK_MOD)
+	} else if input == '.' {
+		tkzr.EmitTokenRuneAndIncr(TK_DOT)
 	} else if input == '#' {
 		tkzr.processPound()
 	} else {
@@ -376,6 +380,8 @@ func (tkzr *TokenizerPocket) checkKeyword(word string) int {
 		return TK_TRUE
 	} else if word == "false" {
 		return TK_FALSE
+	} else if word == "in" {
+		return TK_IN
 	}
 	return -1
 }

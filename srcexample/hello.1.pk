@@ -1,11 +1,12 @@
+
 main func
-    print(Fibonacci 4)
+    for x in [0,1]
+        print x
 
-Fibonacci func(x int) int
-    if (x = 0)
-        return 0
-    if x=1
-        return 1
-    return (Fibonacci(x - 1) + Fibonacci(x - 2))
-
-
+    iterover : [0,1]
+    itervar int : 0
+    loop
+        if itervar > $len(iterover)
+            break
+        print itervar
+        iterva

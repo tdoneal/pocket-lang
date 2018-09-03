@@ -44,7 +44,7 @@ func Xform(root Nod) Nod {
 
 func (x *XformerPocket) Xform() {
 	x.parseInlineOpStreams()
-
+	x.annotateDotScopes()
 	x.buildFuncDefTables()
 	x.buildVarDefTables()
 	// now do second pass of resolving functions, specifically those that may refer to variables in a local scope
@@ -54,6 +54,27 @@ func (x *XformerPocket) Xform() {
 	fmt.Println("after building var def tables:", PrettyPrint(x.Root))
 
 	x.solveTypes()
+}
+
+func (x *XformerPocket) annotateDotScopes() {
+	// get all dot ops whose parent's aren't dot ops
+	topLevelDotOps := x.SearchRoot(func(n Nod) bool {
+		if !(n.NodeType == NT_DOTOP) {
+			return false
+		}
+		return true
+	})
+
+	// rewrite the right side of dot ops to be NT_DOTOP_QUALIFIER
+	for _, ele := range topLevelDotOps {
+		rightArg := NodGetChild(ele, NTR_BINOP_RIGHT)
+		if rightArg.NodeType == NT_VAR_GETTER {
+			rightArg.NodeType = NT_DOTOP_QUALIFIER
+		} else {
+			panic("illegal expression on right side of dot")
+		}
+	}
+
 }
 
 func isSystemCall(n Nod) bool {
@@ -205,7 +226,8 @@ func isBinaryOpType(nt int) bool {
 	return nt == NT_ADDOP || nt == NT_GTOP || nt == NT_LTOP ||
 		nt == NT_GTEQOP || nt == NT_LTEQOP || nt == NT_EQOP ||
 		nt == NT_SUBOP || nt == NT_DIVOP || nt == NT_MULOP ||
-		nt == NT_OROP || nt == NT_ANDOP || nt == NT_MODOP
+		nt == NT_OROP || nt == NT_ANDOP || nt == NT_MODOP ||
+		nt == NT_DOTOP
 }
 
 func isVarReferenceNT(nt int) bool {
@@ -532,7 +554,37 @@ func marPosOpEvaluateRules() []*RewriteRule {
 	for _, oer := range oers {
 		rv = append(rv, createPosRewriteRuleFromOpEvaluateRule(oer))
 	}
+
+	rv = append(rv, marPosOpCollectionLenRule())
+
 	return rv
+}
+
+func getLengthableTypes() []int {
+	return []int{TY_LIST, TY_MAP, TY_SET}
+}
+
+func marPosOpCollectionLenRule() *RewriteRule {
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_DOTOP {
+				qualName := NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_VAR_GETTER_NAME).Data.(string)
+				resulPosMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+				if qualName == "len" {
+					leftArgPosMype := NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_POS).Data.(Mype)
+					intMype := MypeExplicitNewSingle(TY_INT)
+					fmt.Println("left arg", PrettyPrintMype(NodGetChild(n, NTR_BINOP_LEFT)))
+					return leftArgPosMype.ContainsAnyType(getLengthableTypes()) &&
+						resulPosMype.WouldChangeFromUnionWith(intMype)
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			NodGetChild(n, NTR_MYPE_POS).Data = (NodGetChild(n,
+				NTR_MYPE_POS).Data.(Mype).Union(MypeExplicitNewSingle(TY_INT)))
+		},
+	}
 }
 
 func marNegOpRestrictRules() []*RewriteRule {

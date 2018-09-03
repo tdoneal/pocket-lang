@@ -343,10 +343,28 @@ func (g *Generator) genValue(n Nod) {
 		g.genLiteralMap(n)
 	} else if nt == NT_RECEIVERCALL {
 		g.genReceiverCall(n)
+	} else if nt == NT_DOTOP {
+		g.genDotOp(n)
 	} else if g.isBinaryInlineOpType(n.NodeType) {
 		g.genBinaryInlineOp(n)
 	} else {
 		g.WS("value")
+	}
+}
+
+func (g *Generator) genDotOp(n Nod) {
+	qualName := NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_VAR_GETTER_NAME).Data.(string)
+	objNod := NodGetChild(n, NTR_BINOP_LEFT)
+	if qualName == "len" {
+		g.WS("len(")
+		g.genValue(objNod)
+		g.WS(")")
+	} else {
+		g.WS("(")
+		g.genValue(objNod)
+		g.WS(")")
+		g.WS(".")
+		g.WS("qualname")
 	}
 }
 

@@ -14,6 +14,7 @@ type Mype interface {
 	Subtract(Mype) Mype
 	Converse() Mype
 	ContainsSingleType(int) bool
+	ContainsAnyType([]int) bool
 	ToType() int // only works if IsSingle() is true
 }
 
@@ -79,6 +80,15 @@ func (me *MypeExplicit) IsSingleType(t int) bool {
 func (me *MypeExplicit) ContainsSingleType(t int) bool {
 	if _, ok := me.Types[t]; ok {
 		return true
+	}
+	return false
+}
+
+func (me *MypeExplicit) ContainsAnyType(ts []int) bool {
+	for _, t := range ts {
+		if _, ok := me.Types[t]; ok {
+			return true
+		}
 	}
 	return false
 }
