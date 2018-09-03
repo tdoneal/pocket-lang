@@ -115,9 +115,14 @@ func (p *ParserPocket) parseElse() Nod {
 
 func (p *ParserPocket) parseLoop() Nod {
 	p.ParseToken(TK_LOOP)
+	arg := p.ParseAtMostOne(func() Nod { return p.parseValue() })
 	p.parseEOL()
 	body := p.parseImperativeBlock()
-	return NodNewChild(NT_LOOP, NTR_LOOP_BODY, body)
+	rv := NodNewChild(NT_LOOP, NTR_LOOP_BODY, body)
+	if arg != nil {
+		NodSetChild(rv, NTR_LOOP_ARG, arg)
+	}
+	return rv
 }
 
 func (p *ParserPocket) parseTopLevel() Nod {

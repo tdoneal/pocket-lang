@@ -10,8 +10,9 @@ import (
 )
 
 type Generator struct {
-	input Nod
-	buf   *bytes.Buffer
+	input         Nod
+	buf           *bytes.Buffer
+	tmpVarCounter int
 }
 
 func Generate(code Nod) string {
@@ -235,8 +236,27 @@ func (g *Generator) genBreak(n Nod) {
 	g.WS("break")
 }
 
+func (g *Generator) getTempVarName() string {
+	rv := "_pk_" + strconv.Itoa(g.tmpVarCounter)
+	g.tmpVarCounter++
+	return rv
+}
+
 func (g *Generator) genLoop(input Nod) {
-	g.WS("for {\n")
+	g.WS("for ")
+	if loopArg := NodGetChildOrNil(input, NTR_LOOP_ARG); loopArg != nil {
+		tmpVarName := g.getTempVarName()
+		g.WS(" ")
+		g.WS(tmpVarName)
+		g.WS(" := 0; ")
+		g.WS(tmpVarName)
+		g.WS(" < ")
+		g.genValue(loopArg)
+		g.WS("; ")
+		g.WS(tmpVarName)
+		g.WS("++ ")
+	}
+	g.WS("{\n")
 	g.genImperative(NodGetChild(input, NTR_LOOP_BODY))
 	g.WS("}\n")
 }
@@ -281,7 +301,7 @@ func (g *Generator) genReceiverCall(n Nod) {
 		rcvName = "fmt.Println"
 	}
 
-	if rcvName == "$li" || rcvName == "$mi" {
+	if rcvName == "$li" {
 		g.genListIndexor(n)
 	} else {
 		g.WS(rcvName)

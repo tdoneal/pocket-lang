@@ -56,10 +56,18 @@ func (x *XformerPocket) Xform() {
 	x.solveTypes()
 }
 
+func isSystemCall(n Nod) bool {
+	if isReceiverCallType(n.NodeType) {
+		callName := NodGetChild(n, NTR_RECEIVERCALL_NAME).Data.(string)
+		return isSystemFuncName(callName)
+	}
+	return false
+}
+
 func (x *XformerPocket) linkCallsToVariableFuncdefs() {
 	// find all unresolved calls
 	unresCalls := x.SearchRoot(func(n Nod) bool {
-		if isReceiverCallType(n.NodeType) {
+		if isReceiverCallType(n.NodeType) && !isSystemCall(n) {
 			if !NodHasChild(n, NTR_FUNCDEF) {
 				return true
 			}
@@ -110,7 +118,7 @@ func (x *XformerPocket) checkAllCallsResolved() {
 }
 
 func isSystemFuncName(name string) bool {
-	return name == "print" || name == "$li" || name == "$mi"
+	return name == "print" || name == "$li"
 }
 
 func (x *XformerPocket) buildFuncDefTables() {
@@ -331,9 +339,10 @@ func marPosVarFunc() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if isReceiverCallType(n.NodeType) {
-				funcDef := NodGetChild(n, NTR_FUNCDEF)
-				if funcDef.NodeType == NT_VARDEF {
-					return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
+				if funcDef := NodGetChildOrNil(n, NTR_FUNCDEF); funcDef != nil {
+					if funcDef.NodeType == NT_VARDEF {
+						return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
+					}
 				}
 			}
 			return false

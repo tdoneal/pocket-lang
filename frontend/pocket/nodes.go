@@ -39,6 +39,7 @@ const (
 	NT_RETURN               = 74
 	NTR_RETURN_VALUE        = 75
 	NT_LOOP                 = 80
+	NTR_LOOP_ARG            = 81
 	NTR_LOOP_BODY           = 83
 	NT_BREAK                = 85
 	NT_IF                   = 87

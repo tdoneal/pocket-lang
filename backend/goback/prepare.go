@@ -17,7 +17,7 @@ type Preparer struct {
 func (p *Preparer) Prepare(code Nod) {
 	p.Root = code
 	p.checkForPrintStatements()
-	p.createExplicitListAccessors()
+	p.createExplicitIndexors()
 }
 
 func (p *Preparer) checkForPrintStatements() {
@@ -31,13 +31,13 @@ func (p *Preparer) checkForPrintStatements() {
 	}
 }
 
-func (p *Preparer) createExplicitListAccessors() {
+func (p *Preparer) createExplicitIndexors() {
 	listCalls := p.SearchRoot(func(n Nod) bool {
 		if isReceiverCallType(n.NodeType) {
 			if funcDef := NodGetChildOrNil(n, NTR_FUNCDEF); funcDef != nil {
 				if funcDef.NodeType == NT_VARDEF {
 					varType := NodGetChild(funcDef, NTR_TYPE).Data.(int)
-					if varType == TY_LIST {
+					if varType == TY_LIST || varType == TY_MAP {
 						return true
 					}
 				}
