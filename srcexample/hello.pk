@@ -1,9 +1,9 @@
 
 main func
-    print(sum([1,2,3]))
+    sub [3,6,5]
 
-sum func(numbers list) int
-    rv : 0
-    for number in numbers
-        rv : rv + number
-    return rv
+sub func(numbers list) void
+    x : numbers
+    print x
+
+    

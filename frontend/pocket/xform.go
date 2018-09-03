@@ -537,7 +537,8 @@ func (x *XformerPocket) marPosGenFuncEvaluateRule(funcDef Nod) *RewriteRule {
 }
 
 func marPosPublicParameter() *RewriteRule {
-	// assume that assignments to this parameter can be of any possible type
+	// assume that assignments to this parameter are in fact called
+	// with every allowable type
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if n.NodeType == NT_PARAMETER {
@@ -549,7 +550,14 @@ func marPosPublicParameter() *RewriteRule {
 			return false
 		},
 		action: func(n Nod) {
-			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewFull()
+			typeDecl := NodGetChildOrNil(n, NTR_TYPE_DECL)
+			var allowedMype Mype
+			if typeDecl == nil {
+				allowedMype = MypeExplicitNewFull()
+			} else {
+				allowedMype = MypeExplicitNewSingle(typeDecl.Data.(int))
+			}
+			NodGetChild(n, NTR_MYPE_POS).Data = allowedMype
 		},
 	}
 }

@@ -1,12 +1,8 @@
 
 main func
-    for x in [0,1]
-        print x
+    sub [3,6,5]
 
-    iterover : [0,1]
-    itervar int : 0
-    loop
-        if itervar > $len(iterover)
-            break
-        print itervar
-        iterva
+sub func(numbers list) void
+    print numbers
+
+    
