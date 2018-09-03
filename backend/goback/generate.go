@@ -333,8 +333,6 @@ func (g *Generator) genValue(n Nod) {
 		g.genLiteralString(n)
 	} else if nt == NT_LIT_BOOL {
 		g.genLiteralBool(n)
-	} else if nt == NT_INLINEOPSTREAM {
-		g.genOpStream(n)
 	} else if nt == NT_VAR_GETTER {
 		g.genVarGetter(n)
 	} else if nt == NT_LIT_LIST {
@@ -467,27 +465,6 @@ func (g *Generator) genLiteralList(n Nod) {
 func (g *Generator) genVarGetter(n Nod) {
 	varName := NodGetChild(n, NTR_VAR_GETTER_NAME).Data.(string)
 	g.WS(varName)
-}
-
-func (g *Generator) genOpStream(n Nod) {
-	g.WS("(")
-	children := NodGetChildList(n)
-	for _, child := range children {
-		g.genOpStreamChild(child)
-	}
-	g.WS(")")
-}
-
-func (g *Generator) genOpStreamChild(n Nod) {
-	if n.NodeType == NT_ADDOP {
-		g.WS("+")
-	} else if n.NodeType == NT_GTOP {
-		g.WS(">")
-	} else if n.NodeType == NT_LTOP {
-		g.WS("<")
-	} else {
-		g.genValue(n)
-	}
 }
 
 func (g *Generator) WS(s string) {
