@@ -1,4 +1,9 @@
 
 main func
-    print(1 + [0,3].len)
-    
+    print(sum([1,2,3]))
+
+sum func(numbers list) int
+    rv : 0
+    for number in numbers
+        rv : rv + number
+    return rv

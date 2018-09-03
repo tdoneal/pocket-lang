@@ -320,6 +320,9 @@ func (p *ParserPocket) parseLiteralKeyword() Nod {
 		func() Nod { return p.parseKeywordPrimitive(TK_BOOL, NT_TYPE, TY_BOOL) },
 		func() Nod { return p.parseKeywordPrimitive(TK_FLOAT, NT_TYPE, TY_FLOAT) },
 		func() Nod { return p.parseKeywordPrimitive(TK_STRING, NT_TYPE, TY_STRING) },
+		func() Nod { return p.parseKeywordPrimitive(TK_LIST, NT_TYPE, TY_LIST) },
+		func() Nod { return p.parseKeywordPrimitive(TK_SET, NT_TYPE, TY_SET) },
+		func() Nod { return p.parseKeywordPrimitive(TK_MAP, NT_TYPE, TY_MAP) },
 	})
 }
 

@@ -58,6 +58,9 @@ const (
 	TK_INT           = 121
 	TK_FLOAT         = 122
 	TK_STRING        = 123
+	TK_LIST          = 124
+	TK_SET           = 125
+	TK_MAP           = 126
 	TK_FALSE         = 130
 	TK_TRUE          = 131
 )
@@ -364,6 +367,12 @@ func (tkzr *TokenizerPocket) checkKeyword(word string) int {
 		return TK_FLOAT
 	} else if word == "string" {
 		return TK_STRING
+	} else if word == "list" {
+		return TK_LIST
+	} else if word == "set" {
+		return TK_SET
+	} else if word == "map" {
+		return TK_MAP
 	} else if word == "loop" {
 		return TK_LOOP
 	} else if word == "for" {
