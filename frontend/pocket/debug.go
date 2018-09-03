@@ -45,6 +45,8 @@ func (d *Debug) initialize() {
 	ntl[NT_GTEQOP] = "GTEQ"
 	ntl[NT_LTEQOP] = "LTEQ"
 	ntl[NT_DOTOP] = "DOT"
+	ntl[NTR_BINOP_LEFT] = "LEFT"
+	ntl[NTR_BINOP_RIGHT] = "RIGHT"
 
 	ntl[NT_VARINIT] = "VARINIT"
 	ntl[NT_VARTABLE] = "VARTABLE"
@@ -72,6 +74,9 @@ func (d *Debug) initialize() {
 	ntl[NTR_FOR_BODY] = "BODY"
 	ntl[NTR_FOR_ITERVAR] = "ITERVAR"
 	ntl[NTR_FOR_ITEROVER] = "ITEROVER"
+	ntl[NT_WHILE] = "WHILE"
+	ntl[NTR_WHILE_BODY] = "BODY"
+	ntl[NTR_WHILE_COND] = "COND"
 	ntl[NT_IF] = "IF"
 	ntl[NTR_IF_COND] = "COND"
 	ntl[NTR_IF_BODY_TRUE] = "IFTRUE"

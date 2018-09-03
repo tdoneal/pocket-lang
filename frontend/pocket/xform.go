@@ -28,14 +28,13 @@ const (
 
 type XformerPocket struct {
 	*Xformer
+	tempVarCounter int
 }
 
 func Xform(root Nod) Nod {
 	fmt.Println("starting Xform()")
 
-	xformer := &XformerPocket{
-		&Xformer{},
-	}
+	xformer := &XformerPocket{&Xformer{}, 0}
 
 	xformer.Root = root
 	xformer.Xform()
@@ -44,6 +43,9 @@ func Xform(root Nod) Nod {
 
 func (x *XformerPocket) Xform() {
 	x.parseInlineOpStreams()
+	x.rewriteForInLoops()
+	fmt.Println("after rewriting for in loops:", PrettyPrint(x.Root))
+
 	x.annotateDotScopes()
 	x.buildFuncDefTables()
 	x.buildVarDefTables()
@@ -56,20 +58,107 @@ func (x *XformerPocket) Xform() {
 	x.solveTypes()
 }
 
+func (x *XformerPocket) rewriteForInLoops() {
+	forLoops := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_FOR })
+	for _, forLoop := range forLoops {
+		x.Replace(forLoop, x.rewriteForInLoop(forLoop))
+	}
+}
+
+func (x *XformerPocket) getTempVarName() string {
+	rv := "__pkx" + strconv.Itoa(x.tempVarCounter) + "__"
+	x.tempVarCounter++
+	return rv
+}
+
+func (x *XformerPocket) rewriteForInLoop(forLoop Nod) Nod {
+	// rewrites the for <var> in <list> : body syntax
+	// to a lower level form involving a while loop and an index variable
+	rvSeq := []Nod{}
+	loopOver := NodGetChild(forLoop, NTR_FOR_ITEROVER)
+	declaredElementVarName := NodGetChild(forLoop, NTR_FOR_ITERVAR).Data.(string)
+	ndxVarName := x.getTempVarName()
+	iterOverVarName := x.getTempVarName()
+	// generate the effective code: __ndx_var__ : 0
+	ndxVarInitializer := NodNew(NT_VARASSIGN)
+	ndxVarIdentifier := NodNewData(NT_IDENTIFIER, ndxVarName)
+	ndxVarInitValue := NodNewData(NT_LIT_INT, 0)
+	NodSetChild(ndxVarInitializer, NTR_VAR_NAME, ndxVarIdentifier)
+	NodSetChild(ndxVarInitializer, NTR_VARASSIGN_VALUE, ndxVarInitValue)
+
+	// __iterover_var__: <iterover>
+	iterOverVarInitializer := NodNew(NT_VARASSIGN)
+	iterOverVarIdentifier := NodNewData(NT_IDENTIFIER, iterOverVarName)
+	iterOverVarInitValue := loopOver
+	NodSetChild(iterOverVarInitializer, NTR_VAR_NAME, iterOverVarIdentifier)
+	NodSetChild(iterOverVarInitializer, NTR_VARASSIGN_VALUE, iterOverVarInitValue)
+
+	loopBodySeq := []Nod{}
+	// while __ndx__ < seq.len
+	termCond := NodNew(NT_LTOP)
+	termCondNdxVarGetter := NodNewChild(NT_VAR_GETTER, NTR_VAR_GETTER_NAME,
+		NodNewData(NT_IDENTIFIER, ndxVarName))
+	termCondLenGetter := NodNew(NT_DOTOP)
+	NodSetChild(termCondLenGetter, NTR_BINOP_LEFT,
+		NodNewChild(NT_VAR_GETTER, NTR_VAR_GETTER_NAME,
+			NodNewData(NT_IDENTIFIER, iterOverVarName)))
+	NodSetChild(termCondLenGetter, NTR_BINOP_RIGHT, NodNewData(NT_IDENTIFIER, "len"))
+	NodSetChild(termCond, NTR_BINOP_LEFT, termCondNdxVarGetter)
+	NodSetChild(termCond, NTR_BINOP_RIGHT, termCondLenGetter)
+
+	// <itervar>: __iterover_var__[__ndx__]
+	iterVarAssigner := NodNew(NT_VARASSIGN)
+	NodSetChild(iterVarAssigner, NTR_VAR_NAME, NodNewData(NT_IDENTIFIER, declaredElementVarName))
+	iterVarAssignerValue := NodNew(NT_RECEIVERCALL)
+	// generate the list indexor as a receiver call
+	NodSetChild(iterVarAssignerValue, NTR_RECEIVERCALL_NAME, NodNewData(NT_IDENTIFIER, iterOverVarName))
+	NodSetChild(iterVarAssignerValue, NTR_RECEIVERCALL_VALUE,
+		NodNewChild(NT_VAR_GETTER, NTR_VAR_GETTER_NAME,
+			NodNewData(NT_IDENTIFIER, ndxVarName)))
+	NodSetChild(iterVarAssigner, NTR_VARASSIGN_VALUE, iterVarAssignerValue)
+	loopBodySeq = append(loopBodySeq, iterVarAssigner)
+
+	// actual user body
+	loopBodySeq = append(loopBodySeq, NodGetChild(forLoop, NTR_FOR_BODY))
+
+	// __ndx__++
+	ndxVarIncrementor := NodNew(NT_VARASSIGN)
+	NodSetChild(ndxVarIncrementor, NTR_VAR_NAME, NodNewData(NT_IDENTIFIER, ndxVarName))
+	ndxVarIncrementorValue := NodNew(NT_ADDOP)
+	NodSetChild(ndxVarIncrementorValue, NTR_BINOP_LEFT, NodNewChild(
+		NT_VAR_GETTER, NTR_VAR_GETTER_NAME, NodNewData(NT_IDENTIFIER, ndxVarName)))
+	NodSetChild(ndxVarIncrementorValue, NTR_BINOP_RIGHT, NodNewData(
+		NT_LIT_INT, 1))
+	NodSetChild(ndxVarIncrementor, NTR_VARASSIGN_VALUE, ndxVarIncrementorValue)
+	loopBodySeq = append(loopBodySeq, ndxVarIncrementor)
+
+	// put it all together and return
+	whileLoop := NodNew(NT_WHILE)
+	NodSetChild(whileLoop, NTR_WHILE_COND, termCond)
+	NodSetChild(whileLoop, NTR_WHILE_BODY, NodNewChildList(NT_IMPERATIVE, loopBodySeq))
+
+	rvSeq = append(rvSeq, ndxVarInitializer)
+	rvSeq = append(rvSeq, iterOverVarInitializer)
+	rvSeq = append(rvSeq, whileLoop)
+	rv := NodNewChildList(NT_IMPERATIVE, rvSeq)
+	return rv
+
+}
+
 func (x *XformerPocket) annotateDotScopes() {
-	// get all dot ops whose parent's aren't dot ops
-	topLevelDotOps := x.SearchRoot(func(n Nod) bool {
-		if !(n.NodeType == NT_DOTOP) {
-			return false
-		}
-		return true
+	allDotOps := x.SearchRoot(func(n Nod) bool {
+		return n.NodeType == NT_DOTOP
 	})
 
-	// rewrite the right side of dot ops to be NT_DOTOP_QUALIFIER
-	for _, ele := range topLevelDotOps {
-		rightArg := NodGetChild(ele, NTR_BINOP_RIGHT)
+	// rewrite the right side of dot ops to be simple NT_IDENTIFIERs
+	for _, dotOp := range allDotOps {
+		rightArg := NodGetChild(dotOp, NTR_BINOP_RIGHT)
 		if rightArg.NodeType == NT_VAR_GETTER {
-			rightArg.NodeType = NT_DOTOP_QUALIFIER
+			varName := NodGetChild(rightArg, NTR_VAR_GETTER_NAME).Data.(string)
+			newNode := NodNewData(NT_IDENTIFIER, varName)
+			x.Replace(rightArg, newNode)
+		} else if rightArg.NodeType == NT_IDENTIFIER {
+			// pass, everything looks good already
 		} else {
 			panic("illegal expression on right side of dot")
 		}
@@ -470,7 +559,6 @@ func marPosVarAssign() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if n.NodeType == NT_VARASSIGN {
-				fmt.Println("found a varassign:", PrettyPrint(n))
 				mypeLHS := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
 				mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE_POS).Data.(Mype)
 				if mypeLHS.WouldChangeFromUnionWith(mypeRHS) {
@@ -568,7 +656,7 @@ func marPosOpCollectionLenRule() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if n.NodeType == NT_DOTOP {
-				qualName := NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_VAR_GETTER_NAME).Data.(string)
+				qualName := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string)
 				resulPosMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
 				if qualName == "len" {
 					leftArgPosMype := NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_POS).Data.(Mype)
@@ -844,23 +932,51 @@ func (x *XformerPocket) findTopLevelFuncDef(n Nod) Nod {
 func (x *XformerPocket) parseInlineOpStream(opStream Nod) Nod {
 	// converts an inline op stream to a proper prioritized tree representation
 	// for now assume all elements are same priority and group left to right
-	opStreamNodes := NodGetChildList(opStream)
-	streamNodes := make([]Nod, len(opStreamNodes))
-	copy(streamNodes, opStreamNodes)
-	output := streamNodes[0]
-	i := 1
-	for {
-		if i+1 >= len(streamNodes) {
-			break
-		}
-		op := streamNodes[i]
-		right := streamNodes[i+1]
-		opCopy := NodNew(op.NodeType)
-		opCopy.Data = op.Data
-		NodSetChild(opCopy, NTR_BINOP_LEFT, output)
-		NodSetChild(opCopy, NTR_BINOP_RIGHT, right)
-		output = opCopy
-		i += 2
+	priGroups := [][]int{
+		[]int{NT_DOTOP},
+		[]int{NT_MULOP, NT_DIVOP},
+		[]int{NT_ADDOP, NT_SUBOP},
+		[]int{NT_LTOP, NT_LTEQOP, NT_GTOP, NT_GTEQOP, NT_EQOP},
+		[]int{NT_OROP, NT_ANDOP},
 	}
-	return output
+	opStreamNods := NodGetChildList(opStream)
+	operands := []Nod{}
+	operators := []Nod{}
+	for i := 0; i < len(opStreamNods); i += 2 {
+		operands = append(operands, opStreamNods[i])
+	}
+	for i := 1; i < len(opStreamNods); i += 2 {
+		operators = append(operators, opStreamNods[i])
+	}
+	fmt.Println("operands", PrettyPrintNodes(operands))
+	fmt.Println("operators", PrettyPrintNodes(operators))
+	for _, priGroup := range priGroups {
+		for _, currOp := range priGroup {
+			for i := 0; i < len(operators); i++ {
+				op := operators[i].NodeType
+				if currOp == op {
+					groupedOp := NodNew(op)
+					NodSetChild(groupedOp, NTR_BINOP_LEFT, operands[i])
+					NodSetChild(groupedOp, NTR_BINOP_RIGHT, operands[i+1])
+					// replace 2 operands with single group
+					operands = x.removeNodListAt(operands, i)
+					operands[i] = groupedOp
+					// remove operator
+					operators = x.removeNodListAt(operators, i)
+				}
+			}
+		}
+	}
+
+	if len(operands) > 1 {
+		panic("couldn't fully parse inline op stream")
+	} else if len(operands) == 0 {
+		panic("weird state error")
+	}
+
+	return operands[0]
+}
+
+func (x *XformerPocket) removeNodListAt(nods []Nod, removeAt int) []Nod {
+	return append(nods[:removeAt], nods[removeAt+1:]...)
 }

@@ -217,6 +217,8 @@ func (g *Generator) genImperativeUnit(n Nod) {
 		g.genIf(n)
 	} else if n.NodeType == NT_BREAK {
 		g.genBreak(n)
+	} else if n.NodeType == NT_IMPERATIVE {
+		g.genImperative(n)
 	} else {
 		g.WS("command")
 	}
@@ -353,7 +355,7 @@ func (g *Generator) genValue(n Nod) {
 }
 
 func (g *Generator) genDotOp(n Nod) {
-	qualName := NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_VAR_GETTER_NAME).Data.(string)
+	qualName := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string)
 	objNod := NodGetChild(n, NTR_BINOP_LEFT)
 	if qualName == "len" {
 		g.WS("len(")
