@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	PNR_GOIMPORTS = 200000
+	PNTR_GOIMPORTS = 284000 + iota
+	PNT_DUCK_ADDOP
 )
 
 type Preparer struct {
@@ -18,6 +19,7 @@ func (p *Preparer) Prepare(code Nod) {
 	p.Root = code
 	p.checkForPrintStatements()
 	p.createExplicitIndexors()
+	p.rewriteDuckedOps()
 }
 
 func (p *Preparer) checkForPrintStatements() {
@@ -27,7 +29,18 @@ func (p *Preparer) checkForPrintStatements() {
 	})
 
 	if len(rcs) > 0 {
-		NodSetChild(p.Root, PNR_GOIMPORTS, NodNewData(NT_IDENTIFIER, "fmt"))
+		NodSetChild(p.Root, PNTR_GOIMPORTS, NodNewData(NT_IDENTIFIER, "fmt"))
+	}
+}
+
+func (p *Preparer) isIndexableType(n Nod) bool {
+	if n.NodeType == NT_TYPEBASE {
+		bt := n.Data.(int)
+		return bt == TY_LIST || bt == TY_MAP
+	} else if n.NodeType == NT_TYPEARGED {
+		return p.isIndexableType(NodGetChild(n, NTR_TYPEARGED_BASE))
+	} else {
+		panic("unhandled type of type")
 	}
 }
 
@@ -36,8 +49,7 @@ func (p *Preparer) createExplicitIndexors() {
 		if isReceiverCallType(n.NodeType) {
 			if funcDef := NodGetChildOrNil(n, NTR_FUNCDEF); funcDef != nil {
 				if funcDef.NodeType == NT_VARDEF {
-					varType := NodGetChild(funcDef, NTR_TYPE).Data.(int)
-					if varType == TY_LIST || varType == TY_MAP {
+					if p.isIndexableType(NodGetChild(funcDef, NTR_TYPE)) {
 						return true
 					}
 				}
@@ -62,5 +74,24 @@ func (p *Preparer) createExplicitIndexors() {
 		NodSetChild(listCall, NTR_RECEIVERCALL_NAME, NodNewData(NT_IDENTIFIER, "$li"))
 		NodSetChild(listCall, NTR_RECEIVERCALL_VALUE, listNod)
 	}
+
+}
+
+func (p *Preparer) rewriteDuckedOps() {
+	// search for: any add ops with ducked args
+	p.SearchReplaceAll(func(n Nod) bool {
+		if n.NodeType == NT_ADDOP {
+			if NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_TYPE).Data.(int) == TY_DUCK ||
+				NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_TYPE).Data.(int) == TY_DUCK {
+				return true
+			}
+		}
+		return false
+	}, func(n Nod) Nod {
+		rv := NodNew(PNT_DUCK_ADDOP)
+		NodSetChild(rv, NTR_BINOP_LEFT, NodGetChild(n, NTR_BINOP_LEFT))
+		NodSetChild(rv, NTR_BINOP_RIGHT, NodGetChild(n, NTR_BINOP_RIGHT))
+		return rv
+	})
 
 }

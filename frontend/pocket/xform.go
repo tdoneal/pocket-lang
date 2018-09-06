@@ -42,9 +42,8 @@ func Xform(root Nod) Nod {
 }
 
 func (x *XformerPocket) Xform() {
-	x.parseInlineOpStreams()
-	x.rewriteForInLoops()
-	fmt.Println("after rewriting for in loops:", PrettyPrint(x.Root))
+	x.prepare()
+	x.desugar()
 
 	x.annotateDotScopes()
 	x.buildFuncDefTables()
@@ -56,6 +55,14 @@ func (x *XformerPocket) Xform() {
 	fmt.Println("after building var def tables:", PrettyPrint(x.Root))
 
 	x.solveTypes()
+}
+
+func (x *XformerPocket) prepare() {
+	x.parseInlineOpStreams()
+}
+
+func (x *XformerPocket) desugar() {
+	x.rewriteForInLoops()
 }
 
 func (x *XformerPocket) rewriteForInLoops() {
@@ -278,20 +285,29 @@ type RewriteRule struct {
 }
 
 func (x *XformerPocket) getInitMypeNodFull() Nod {
-	md := MypeExplicitNewFull()
+	md := MypeArgedNewFull()
 	return NodNewData(NT_MYPE, md)
 }
 
 func (x *XformerPocket) getInitMypeNodEmpty() Nod {
-	md := MypeExplicitNewEmpty()
+	md := MypeArgedNewEmpty()
 	return NodNewData(NT_MYPE, md)
 }
 
 func isLiteralNodeType(nt int) bool {
-	return nt == NT_LIT_INT || nt == NT_LIT_STRING ||
-		nt == NT_LIT_BOOL || nt == NT_LIT_FLOAT ||
-		nt == NT_LIT_MAP || nt == NT_LIT_LIST ||
+	return isPrimitiveLiteralNodeType(nt) ||
+		isCollectionLiteralNodeType(nt)
+
+}
+
+func isCollectionLiteralNodeType(nt int) bool {
+	return nt == NT_LIT_MAP || nt == NT_LIT_LIST ||
 		nt == NT_LIT_SET
+}
+
+func isPrimitiveLiteralNodeType(nt int) bool {
+	return nt == NT_LIT_INT || nt == NT_LIT_STRING ||
+		nt == NT_LIT_BOOL || nt == NT_LIT_FLOAT
 }
 
 func getLiteralTypeAnnDataFromNT(nt int) int {
@@ -327,7 +343,7 @@ func isCallType(nt int) bool {
 	return nt == NT_RECEIVERCALL
 }
 
-func (x *XformerPocket) initializeMypes(n Nod) {
+func (x *XformerPocket) initializePosNegMypes(n Nod) {
 	NodSetChild(n, NTR_MYPE_NEG, x.getInitMypeNodFull())
 	NodSetChild(n, NTR_MYPE_POS, x.getInitMypeNodEmpty())
 }
@@ -343,7 +359,7 @@ func (x *XformerPocket) initializeAllMypes() []Nod {
 	// first: initialize all positive and negative in the vartable
 	varDefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARDEF })
 	for _, value := range varDefs {
-		x.initializeMypes(value)
+		x.initializePosNegMypes(value)
 	}
 
 	// next gather all value nodes
@@ -362,7 +378,7 @@ func (x *XformerPocket) initializeAllMypes() []Nod {
 			NodSetChild(value, NTR_MYPE_NEG, NodGetChild(varDef, NTR_MYPE_NEG))
 			NodSetChild(value, NTR_MYPE_POS, NodGetChild(varDef, NTR_MYPE_POS))
 		} else {
-			x.initializeMypes(value)
+			x.initializePosNegMypes(value)
 		}
 	}
 
@@ -381,7 +397,7 @@ func (x *XformerPocket) solveTypes() {
 	negativeRules := x.getAllNegativeMARRules()
 	x.applyRewritesUntilStable(nodes, negativeRules)
 	fmt.Println("after positive and negative rules:", PrettyPrintMypes(nodes))
-	// generate the "valid" mypes by subtracting the converse of the negative from the positive
+	// generate the "valid" mypes by intersecting the negative with the positive
 	x.generateValidMypes(nodes)
 	fmt.Println("after generating valid mypes:", PrettyPrintMypes(nodes))
 	x.convertValidMypesToFinalTypes()
@@ -392,7 +408,7 @@ func (x *XformerPocket) generateValidMypes(nodes []Nod) {
 	for _, node := range nodes {
 		posMype := NodGetChild(node, NTR_MYPE_POS).Data.(Mype)
 		negMype := NodGetChild(node, NTR_MYPE_NEG).Data.(Mype)
-		validMype := posMype.Subtract(negMype.Converse())
+		validMype := posMype.Intersection(negMype)
 		if validMype.IsEmpty() {
 			panic("couldn't find a valid type for node: " + PrettyPrintMype(node))
 		}
@@ -410,15 +426,7 @@ func (x *XformerPocket) convertValidMypesToFinalTypes() {
 		},
 		action: func(n Nod) {
 			mype := NodGetChild(n, NTR_MYPE_VALID).Data.(Mype)
-			var assignType Nod
-			if mype.IsSingle() {
-				assignType = NodNewData(NT_TYPE, mype.GetSingleType())
-			} else if mype.IsPlural() {
-				assignType = NodNewData(NT_TYPE, TY_DUCK)
-			} else {
-				panic("should never be here")
-			}
-			NodSetChild(n, NTR_TYPE, assignType)
+			NodSetChild(n, NTR_TYPE, XMypeToFinalType(mype))
 			NodRemoveChild(n, NTR_MYPE_VALID)
 		},
 	})
@@ -434,7 +442,8 @@ func (x *XformerPocket) getAllNegativeMARRules() []*RewriteRule {
 
 func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 	rv := []*RewriteRule{
-		marPosLiterals(),
+		marPosPrimitiveLiterals(),
+		marPosCollectionLiterals(),
 		marPosVarAssign(),
 		marPosPublicParameter(),
 		marPosSysFunc(),
@@ -443,6 +452,93 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 	rv = append(rv, marPosOpEvaluateRules()...)
 	rv = append(rv, x.marPosUserFuncEvaluateRules()...)
 	return rv
+}
+
+func marPosCollectionGetCand(elements []Nod) Mype {
+	accum := XMypeNewEmpty()
+	for _, element := range elements {
+		elementPosMype := NodGetChild(element, NTR_MYPE_POS).Data.(Mype)
+		accum = accum.Union(elementPosMype)
+	}
+	candMype := XMypeNewSingleArged(TY_LIST, accum)
+	return candMype
+}
+
+func marPosCollectionLiterals() *RewriteRule {
+	// [3, 4, 5] -+> {list, list<int>}
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			// TODO: support maps and sets
+			if n.NodeType == NT_LIT_LIST {
+				// evaluating this can be expensive, there might be a need
+				// to optimize this at some point
+				extantMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+				candMype := marPosCollectionGetCand(NodGetChildList(n))
+				if extantMype.WouldChangeFromUnionWith(candMype) {
+					return true
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			NodGetChild(n, NTR_MYPE_POS).Data = marPosCollectionGetCand(NodGetChildList(n))
+		},
+	}
+}
+
+// provides a way to abstract away the specific mype algebra from the
+// type propagation rules
+func XMypeNewFull() Mype {
+	return MypeArgedNewFull()
+}
+
+func XMypeNewEmpty() Mype {
+	return MypeArgedNewEmpty()
+}
+
+func XMypeNewSingle(n Nod) Mype {
+	if n.NodeType == NT_TYPEBASE {
+		ty := n.Data.(int)
+		return XMypeNewSingleBase(ty)
+	} else if n.NodeType == NT_TYPEARGED {
+		base := NodGetChild(n, NTR_TYPEARGED_BASE)
+		arg := NodGetChild(n, NTR_TYPEARGED_ARG)
+		return MypeArgedNewSingleArged(base.Data.(int), XMypeNewSingle(arg))
+	} else {
+		fmt.Println("FAIL: XMypeNewSingle on", PrettyPrint(n))
+		panic("cannot generate single mype")
+	}
+}
+
+func XMypeNewSingleBase(ty int) Mype {
+	return MypeArgedNewSingleBase(ty)
+}
+
+func XMypeNewSingleArged(baseTy int, arg Mype) Mype {
+	return MypeArgedNewSingleArged(baseTy, arg)
+}
+
+func XMypeToFinalType(arg Mype) Nod {
+	if ma, ok := arg.(*MypeArged); ok {
+		return XMypeArgedNodToFinalType(ma.Node)
+	} else {
+		panic("only MypeArged supported")
+	}
+}
+
+func XMypeArgedNodToFinalType(n Nod) Nod {
+	if n.NodeType == MATYPE_SINGLE_BASE {
+		return NodNewData(NT_TYPEBASE, n.Data.(int))
+	} else if n.NodeType == MATYPE_SINGLE_ARGED {
+		base := NodNewData(NT_TYPEBASE, NodGetChild(n, MATYPER_BASE).Data.(int))
+		arg := XMypeArgedNodToFinalType(NodGetChild(n, MATYPER_ARG))
+		rv := NodNew(NT_TYPEARGED)
+		NodSetChild(rv, NTR_TYPEARGED_BASE, base)
+		NodSetChild(rv, NTR_TYPEARGED_ARG, arg)
+		return rv
+	} else {
+		return NodNewData(NT_TYPEBASE, TY_DUCK)
+	}
 }
 
 func marPosVarFunc() *RewriteRule {
@@ -459,7 +555,7 @@ func marPosVarFunc() *RewriteRule {
 			return false
 		},
 		action: func(n Nod) {
-			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewFull()
+			NodGetChild(n, NTR_MYPE_POS).Data = XMypeNewFull()
 		},
 	}
 }
@@ -478,7 +574,7 @@ func marPosSysFunc() *RewriteRule {
 			return false
 		},
 		action: func(n Nod) {
-			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewFull()
+			NodGetChild(n, NTR_MYPE_POS).Data = XMypeNewFull()
 		},
 	}
 }
@@ -500,7 +596,7 @@ func (x *XformerPocket) marPosUserFuncEvaluateRules() []*RewriteRule {
 func marPosGFERCondition(call Nod, funcDef Nod) bool {
 	callMype := NodGetChild(call, NTR_MYPE_POS).Data.(Mype)
 	declaredDefType := NodGetChild(funcDef, NTR_FUNCDEF_OUTTYPE)
-	funcOutMype := MypeExplicitNewSingle(declaredDefType.Data.(int))
+	funcOutMype := XMypeNewSingle(declaredDefType)
 	if callMype.WouldChangeFromUnionWith(funcOutMype) {
 		return true
 	}
@@ -510,7 +606,7 @@ func marPosGFERCondition(call Nod, funcDef Nod) bool {
 func marPosGFERAction(call Nod) {
 	funcDef := NodGetChild(call, NTR_FUNCDEF)
 	declaredDefType := NodGetChild(funcDef, NTR_FUNCDEF_OUTTYPE)
-	funcOutMype := MypeExplicitNewSingle(declaredDefType.Data.(int))
+	funcOutMype := XMypeNewSingle(declaredDefType)
 	NodGetChild(call, NTR_MYPE_POS).Data = funcOutMype
 }
 
@@ -553,9 +649,9 @@ func marPosPublicParameter() *RewriteRule {
 			typeDecl := NodGetChildOrNil(n, NTR_TYPE_DECL)
 			var allowedMype Mype
 			if typeDecl == nil {
-				allowedMype = MypeExplicitNewFull()
+				allowedMype = XMypeNewFull()
 			} else {
-				allowedMype = MypeExplicitNewSingle(typeDecl.Data.(int))
+				allowedMype = XMypeNewSingle(typeDecl)
 			}
 			NodGetChild(n, NTR_MYPE_POS).Data = allowedMype
 		},
@@ -569,6 +665,7 @@ func marPosVarAssign() *RewriteRule {
 			if n.NodeType == NT_VARASSIGN {
 				mypeLHS := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
 				mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE_POS).Data.(Mype)
+
 				if mypeLHS.WouldChangeFromUnionWith(mypeRHS) {
 					return true
 				}
@@ -590,7 +687,7 @@ func marNegDeclaredType() *RewriteRule {
 			if n.NodeType == NT_PARAMETER || n.NodeType == NT_VARASSIGN {
 				if typeDeclNod := NodGetChildOrNil(n, NTR_TYPE_DECL); typeDeclNod != nil {
 					negMype := NodGetChild(n, NTR_MYPE_NEG).Data.(Mype)
-					declMype := MypeExplicitNewSingle(typeDeclNod.Data.(int))
+					declMype := XMypeNewSingle(typeDeclNod)
 					if negMype.WouldChangeFromIntersectionWith(declMype) {
 						return true
 					}
@@ -600,47 +697,50 @@ func marNegDeclaredType() *RewriteRule {
 		},
 		action: func(n Nod) {
 			typeDeclNod := NodGetChild(n, NTR_TYPE_DECL)
-			declMype := MypeExplicitNewSingle(typeDeclNod.Data.(int))
+			declMype := XMypeNewSingle(typeDeclNod)
 			currNegMypeNod := NodGetChild(n, NTR_MYPE_NEG)
 			currNegMypeNod.Data = declMype.Intersection(currNegMypeNod.Data.(Mype))
 		},
 	}
 }
 
+// "low" and "high" refer to the canonical order of types (to avoid duplication issues with commutativity)
 type MypeOpEvaluateRule struct {
-	operator int
-	operand  int
-	result   int
+	operator    int
+	operandLow  int
+	operandHigh int
+	result      int
 }
 
 func marGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
 	// define type propagation rules of the form (int + int) -> int
 	return []*MypeOpEvaluateRule{
-		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_INT},
-		&MypeOpEvaluateRule{NT_ADDOP, TY_FLOAT, TY_FLOAT},
-		&MypeOpEvaluateRule{NT_ADDOP, TY_STRING, TY_STRING},
-		&MypeOpEvaluateRule{NT_SUBOP, TY_INT, TY_INT},
-		&MypeOpEvaluateRule{NT_SUBOP, TY_FLOAT, TY_FLOAT},
-		&MypeOpEvaluateRule{NT_MULOP, TY_INT, TY_INT},
-		&MypeOpEvaluateRule{NT_MULOP, TY_FLOAT, TY_FLOAT},
-		&MypeOpEvaluateRule{NT_DIVOP, TY_INT, TY_INT},
-		&MypeOpEvaluateRule{NT_DIVOP, TY_FLOAT, TY_FLOAT},
-		&MypeOpEvaluateRule{NT_MODOP, TY_INT, TY_INT},
-		&MypeOpEvaluateRule{NT_MODOP, TY_FLOAT, TY_FLOAT},
-		&MypeOpEvaluateRule{NT_GTOP, TY_INT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_GTOP, TY_FLOAT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_LTOP, TY_INT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_LTOP, TY_FLOAT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_GTEQOP, TY_INT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_GTEQOP, TY_FLOAT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_LTEQOP, TY_INT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_LTEQOP, TY_FLOAT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_EQOP, TY_INT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_EQOP, TY_FLOAT, TY_BOOL},
-		&MypeOpEvaluateRule{NT_EQOP, TY_STRING, TY_BOOL},
-		&MypeOpEvaluateRule{NT_EQOP, TY_BOOL, TY_BOOL},
-		&MypeOpEvaluateRule{NT_OROP, TY_BOOL, TY_BOOL},
-		&MypeOpEvaluateRule{NT_ANDOP, TY_BOOL, TY_BOOL},
+		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_ADDOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_ADDOP, TY_STRING, TY_STRING, TY_STRING},
+		&MypeOpEvaluateRule{NT_SUBOP, TY_INT, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_SUBOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_MULOP, TY_INT, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_MULOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_DIVOP, TY_INT, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_DIVOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_MODOP, TY_INT, TY_INT, TY_INT},
+		&MypeOpEvaluateRule{NT_MODOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_GTOP, TY_INT, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_GTOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_LTOP, TY_INT, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_LTOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_GTEQOP, TY_INT, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_GTEQOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_LTEQOP, TY_INT, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_LTEQOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_EQOP, TY_INT, TY_INT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_EQOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
+		&MypeOpEvaluateRule{NT_EQOP, TY_STRING, TY_STRING, TY_BOOL},
+		&MypeOpEvaluateRule{NT_EQOP, TY_BOOL, TY_BOOL, TY_BOOL},
+		&MypeOpEvaluateRule{NT_OROP, TY_BOOL, TY_BOOL, TY_BOOL},
+		&MypeOpEvaluateRule{NT_ANDOP, TY_BOOL, TY_BOOL, TY_BOOL},
 	}
 }
 
@@ -668,7 +768,7 @@ func marPosOpCollectionLenRule() *RewriteRule {
 				resulPosMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
 				if qualName == "len" {
 					leftArgPosMype := NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_POS).Data.(Mype)
-					intMype := MypeExplicitNewSingle(TY_INT)
+					intMype := XMypeNewSingleBase(TY_INT)
 					fmt.Println("left arg", PrettyPrintMype(NodGetChild(n, NTR_BINOP_LEFT)))
 					return leftArgPosMype.ContainsAnyType(getLengthableTypes()) &&
 						resulPosMype.WouldChangeFromUnionWith(intMype)
@@ -678,7 +778,7 @@ func marPosOpCollectionLenRule() *RewriteRule {
 		},
 		action: func(n Nod) {
 			NodGetChild(n, NTR_MYPE_POS).Data = (NodGetChild(n,
-				NTR_MYPE_POS).Data.(Mype).Union(MypeExplicitNewSingle(TY_INT)))
+				NTR_MYPE_POS).Data.(Mype).Union(XMypeNewSingleBase(TY_INT)))
 		},
 	}
 }
@@ -690,12 +790,12 @@ func marNegOpRestrictRules() []*RewriteRule {
 	for _, oer := range oers {
 		var allowableResult Mype
 		if _, ok := opToallowableResult[oer.operator]; !ok {
-			allowableResult = MypeExplicitNewEmpty()
+			allowableResult = XMypeNewEmpty()
 			opToallowableResult[oer.operator] = allowableResult
 		} else {
 			allowableResult = opToallowableResult[oer.operator]
 		}
-		allowableResult = allowableResult.Union(MypeExplicitNewSingle(oer.result))
+		allowableResult = allowableResult.Union(XMypeNewSingleBase(oer.result))
 		opToallowableResult[oer.operator] = allowableResult
 	}
 	rv := []*RewriteRule{} // one rewrite rule per operator
@@ -731,15 +831,19 @@ func createPosRewriteRuleFromOpEvaluateRule(oer *MypeOpEvaluateRule) *RewriteRul
 					NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_POS).Data.(Mype),
 					NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE_POS).Data.(Mype),
 				}
-				if resultMype.IsEmpty() && argMypes[0].ContainsSingleType(oer.operand) &&
-					argMypes[1].ContainsSingleType(oer.operand) {
-					return true
+
+				// todo: ensure we have precise semantics for arged types
+				if argMypes[0].ContainsSingleType(oer.operandLow) &&
+					argMypes[1].ContainsSingleType(oer.operandHigh) {
+					if !resultMype.ContainsSingleType(oer.result) {
+						return true
+					}
 				}
 			}
 			return false
 		},
 		action: func(n Nod) {
-			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewSingle(oer.result)
+			NodGetChild(n, NTR_MYPE_POS).Data = NodGetChild(n, NTR_MYPE_POS).Data.(Mype).Union(XMypeNewSingleBase(oer.result))
 		},
 	}
 }
@@ -749,10 +853,10 @@ func writeTypeAndData(dst Nod, src Nod) {
 	dst.Data = src.Data
 }
 
-func marPosLiterals() *RewriteRule {
+func marPosPrimitiveLiterals() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if isLiteralNodeType(n.NodeType) {
+			if isPrimitiveLiteralNodeType(n.NodeType) {
 				if NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsEmpty() {
 					return true
 				}
@@ -761,7 +865,7 @@ func marPosLiterals() *RewriteRule {
 		},
 		action: func(n Nod) {
 			ty := getLiteralTypeAnnDataFromNT(n.NodeType)
-			NodGetChild(n, NTR_MYPE_POS).Data = MypeExplicitNewSingle(ty)
+			NodGetChild(n, NTR_MYPE_POS).Data = XMypeNewSingleBase(ty)
 		},
 	}
 }

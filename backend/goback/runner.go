@@ -3,8 +3,10 @@ package goback
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 func RunFile(filePath string) {
@@ -17,8 +19,13 @@ func RunFile(filePath string) {
 	copyFile(filePath, dst)
 	fmt.Println("copied source file from", filePath, "to", dst)
 
+	// copy runtime libs
+	outLibPath := "../outexec/lib.go"
+	copyRuntimeLib("./backend/goback/runtime.go", outLibPath)
+	fmt.Println("created runtime lib at", outLibPath)
+
 	fmt.Println("running file", filePath)
-	output, _ := exec.Command("go", "run", dst).CombinedOutput()
+	output, _ := exec.Command("go", "run", dst, outLibPath).CombinedOutput()
 
 	fmt.Println("Output:")
 	fmt.Println(string(output))
@@ -28,6 +35,20 @@ func RunFile(filePath string) {
 func cleanr(path string) {
 	os.RemoveAll(path)
 	os.MkdirAll(path, 0700)
+}
+
+func copyRuntimeLib(src string, dst string) {
+	dat, err := ioutil.ReadFile(src)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("input lib file:")
+	iconts := string(dat)
+
+	// clean it up a bit
+	iconts = strings.Replace(iconts, "goback", "main", 1)
+
+	ioutil.WriteFile(dst, ([]byte)(iconts), 0644)
 }
 
 // copy the src file to dst. Any existing file will be overwritten and will not

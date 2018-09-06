@@ -1,5 +1,7 @@
 package pocket
 
+// Represents a set of types
+
 type Mype interface {
 	IsPlural() bool
 	IsSingle() bool
@@ -7,6 +9,9 @@ type Mype interface {
 	GetSingleType() int
 	IsEmpty() bool
 	IsFull() bool
+	// The contract for Union and Intersection is:
+	// the returned value may have references to the arguments,
+	// but the arguments will never be modified
 	Intersection(Mype) Mype
 	Union(Mype) Mype
 	WouldChangeFromUnionWith(Mype) bool

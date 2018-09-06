@@ -58,7 +58,12 @@ func (d *Debug) initialize() {
 	ntl[NTR_FUNCDEF_CODE] = "BODY"
 	ntl[NT_LIT_LIST] = "LIST"
 	ntl[NTR_TYPE] = "TYPE"
+	ntl[NT_TYPEARGED] = "TYPEARGED"
+	ntl[NTR_TYPEARGED_BASE] = "BASE"
+	ntl[NTR_TYPEARGED_ARG] = "ARG"
+	ntl[NTR_TYPE_DECL] = "TYPEDECL"
 	ntl[NT_TYPE] = "TYPE"
+	ntl[NT_TYPEBASE] = "TYPEBASE"
 	ntl[NT_MYPE] = "MYPE"
 	ntl[NTR_MYPE_POS] = "MYPE_POS"
 	ntl[NTR_MYPE_NEG] = "MYPE_NEG"
@@ -91,6 +96,17 @@ func (d *Debug) initialize() {
 	ntl[NTR_FUNCDEF_OUTTYPE] = "OUT"
 	ntl[NTR_VARDEF_SCOPE] = "SCOPE"
 	ntl[NT_VARDEF_SCOPE] = "VARSCOPE"
+	ntl[NT_FUNCTABLE] = "FUNCTABLE"
+	ntl[NTR_FUNCTABLE] = "FUNCTABLE"
+
+	// mypearged
+	ntl[MATYPE_ALL] = "MA_ALL"
+	ntl[MATYPE_EMPTY] = "MA_EMPTY"
+	ntl[MATYPE_SINGLE_BASE] = "MA_SINGLE_BASE"
+	ntl[MATYPE_UNION] = "UNION"
+	ntl[MATYPE_SINGLE_ARGED] = "MA_SINGLE_ARGED"
+	ntl[MATYPER_ARG] = "ARG"
+	ntl[MATYPER_BASE] = "BASE"
 
 	d.typeLookup = map[int]string{}
 	tl := d.typeLookup
@@ -175,7 +191,7 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 	if val, ok := node.Data.(int); ok {
 		d.buf.WriteString(": ")
-		if node.NodeType == NT_TYPE {
+		if node.NodeType == NT_TYPE || node.NodeType == NT_TYPEBASE {
 			d.PrintType(val)
 		} else {
 			d.buf.WriteString(strconv.Itoa(val))
@@ -186,6 +202,11 @@ func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 		d.buf.WriteString("\"")
 	} else if val, ok := node.Data.(*MypeExplicit); ok {
 		d.llPrintMypeObject(val)
+	} else if val, ok := node.Data.(*MypeArged); ok {
+		subPrinter := DebugPrinterNew()
+		subPrinter.PrettyPrint(val.Node)
+		d.buf.WriteString(";; ")
+		d.buf.WriteString(subPrinter.buf.String())
 	}
 }
 

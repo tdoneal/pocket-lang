@@ -315,14 +315,14 @@ func (p *ParserPocket) parseLiteralList() Nod {
 func (p *ParserPocket) parseLiteralKeyword() Nod {
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseLiteralBool() },
-		func() Nod { return p.parseKeywordPrimitive(TK_VOID, NT_TYPE, TY_VOID) },
-		func() Nod { return p.parseKeywordPrimitive(TK_INT, NT_TYPE, TY_INT) },
-		func() Nod { return p.parseKeywordPrimitive(TK_BOOL, NT_TYPE, TY_BOOL) },
-		func() Nod { return p.parseKeywordPrimitive(TK_FLOAT, NT_TYPE, TY_FLOAT) },
-		func() Nod { return p.parseKeywordPrimitive(TK_STRING, NT_TYPE, TY_STRING) },
-		func() Nod { return p.parseKeywordPrimitive(TK_LIST, NT_TYPE, TY_LIST) },
-		func() Nod { return p.parseKeywordPrimitive(TK_SET, NT_TYPE, TY_SET) },
-		func() Nod { return p.parseKeywordPrimitive(TK_MAP, NT_TYPE, TY_MAP) },
+		func() Nod { return p.parseKeywordPrimitive(TK_VOID, NT_TYPEBASE, TY_VOID) },
+		func() Nod { return p.parseKeywordPrimitive(TK_INT, NT_TYPEBASE, TY_INT) },
+		func() Nod { return p.parseKeywordPrimitive(TK_BOOL, NT_TYPEBASE, TY_BOOL) },
+		func() Nod { return p.parseKeywordPrimitive(TK_FLOAT, NT_TYPEBASE, TY_FLOAT) },
+		func() Nod { return p.parseKeywordPrimitive(TK_STRING, NT_TYPEBASE, TY_STRING) },
+		func() Nod { return p.parseKeywordPrimitive(TK_LIST, NT_TYPEBASE, TY_LIST) },
+		func() Nod { return p.parseKeywordPrimitive(TK_SET, NT_TYPEBASE, TY_SET) },
+		func() Nod { return p.parseKeywordPrimitive(TK_MAP, NT_TYPEBASE, TY_MAP) },
 	})
 }
 
@@ -358,8 +358,23 @@ func (p *ParserPocket) parseFuncDefTypeValue() Nod {
 
 func (p *ParserPocket) parseType() Nod {
 	return p.ParseDisjunction([]ParseFunc{
-		func() Nod { return p.parseLiteralKeyword() },
+		func() Nod { return p.parseTypeArged() },
+		func() Nod { return p.parseTypeBase() },
 	})
+}
+
+func (p *ParserPocket) parseTypeBase() Nod {
+	return p.parseLiteralKeyword()
+}
+
+func (p *ParserPocket) parseTypeArged() Nod {
+	baseType := p.parseTypeBase()
+	// for now only support single type args
+	typeArg := p.parseTypeBase()
+	rv := NodNew(NT_TYPEARGED)
+	NodSetChild(rv, NTR_TYPEARGED_BASE, baseType)
+	NodSetChild(rv, NTR_TYPEARGED_ARG, typeArg)
+	return rv
 }
 
 func (p *ParserPocket) parseParameterList() Nod {

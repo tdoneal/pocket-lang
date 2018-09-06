@@ -1,9 +1,12 @@
-
 main func
-    sub [3,6,5]
+    sub 3
 
-sub func(numbers list) void
-    x : numbers
-    print x
+sub func(x) void
+    y : 1 + x
+    print y
+    
+    
+
+    
 
     

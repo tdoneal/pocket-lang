@@ -35,7 +35,7 @@ func Generate(code Nod) string {
 func (g *Generator) genSourceFile(input Nod) {
 	g.WS("package main\n\n")
 
-	if fmtImport := NodGetChildOrNil(input, PNR_GOIMPORTS); fmtImport != nil {
+	if fmtImport := NodGetChildOrNil(input, PNTR_GOIMPORTS); fmtImport != nil {
 		g.WS("import \"fmt\"\n\n")
 	}
 
@@ -179,10 +179,10 @@ func (g *Generator) genType(n Nod) {
 	g.WS(g.getGenType(n))
 }
 
-func (g *Generator) getGenType(n Nod) string {
+func (g *Generator) getGenTypeBase(n Nod) string {
 	lut := map[int]string{
 		TY_BOOL:   "bool",
-		TY_INT:    "int",
+		TY_INT:    "int64",
 		TY_FLOAT:  "float64",
 		TY_NUMBER: "number",
 		TY_STRING: "string",
@@ -194,7 +194,27 @@ func (g *Generator) getGenType(n Nod) string {
 	if val, ok := lut[n.Data.(int)]; ok {
 		return val
 	} else {
+		return "<basetype>"
+	}
+}
+
+func (g *Generator) getGenType(n Nod) string {
+	if n.NodeType == NT_TYPEBASE {
+		return g.getGenTypeBase(n)
+	} else if n.NodeType == NT_TYPEARGED {
+		return g.getGenTypeArged(n)
+	} else {
 		return "<type>"
+	}
+}
+
+func (g *Generator) getGenTypeArged(n Nod) string {
+	bt := NodGetChild(n, NTR_TYPEARGED_BASE).Data.(int)
+	if bt == TY_LIST {
+		argStr := g.getGenType(NodGetChild(n, NTR_TYPEARGED_ARG))
+		return "[]" + argStr
+	} else {
+		return "<typearged>"
 	}
 }
 
@@ -345,11 +365,17 @@ func (g *Generator) genValue(n Nod) {
 		g.genReceiverCall(n)
 	} else if nt == NT_DOTOP {
 		g.genDotOp(n)
+	} else if g.isBinaryInlineDuckOpType(n.NodeType) {
+		g.genDuckOp(n)
 	} else if g.isBinaryInlineOpType(n.NodeType) {
 		g.genBinaryInlineOp(n)
 	} else {
 		g.WS("value")
 	}
+}
+
+func (g *Generator) isBinaryInlineDuckOpType(nt int) bool {
+	return nt == PNT_DUCK_ADDOP
 }
 
 func (g *Generator) genDotOp(n Nod) {
@@ -369,7 +395,9 @@ func (g *Generator) genDotOp(n Nod) {
 }
 
 func (g *Generator) genLiteralInt(n Nod) {
+	g.WS("int64(")
 	g.WS(strconv.Itoa(n.Data.(int)))
+	g.WS(")")
 }
 
 func (g *Generator) genLiteralFloat(n Nod) {
@@ -425,6 +453,14 @@ func (g *Generator) genBinaryInlineOp(n Nod) {
 	g.WS(")")
 }
 
+func (g *Generator) genDuckOp(n Nod) {
+	g.WS("Pduck_add(")
+	g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
+	g.WS(",")
+	g.genValue(NodGetChild(n, NTR_BINOP_RIGHT))
+	g.WS(")")
+}
+
 func (g *Generator) genLiteralSet(n Nod) {
 	g.WS("map[interface{}]bool{")
 	elements := NodGetChildList(n)
@@ -453,7 +489,8 @@ func (g *Generator) genMapKVPair(n Nod) {
 }
 
 func (g *Generator) genLiteralList(n Nod) {
-	g.WS("[]interface{}{")
+	g.genType(NodGetChild(n, NTR_TYPE))
+	g.WS("{")
 	elements := NodGetChildList(n)
 	for _, ele := range elements {
 		g.genValue(ele)
