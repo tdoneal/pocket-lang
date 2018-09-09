@@ -518,23 +518,16 @@ func (p *ParserPocket) parseIdentifier() Nod {
 
 func (p *ParserPocket) parseCommand() Nod {
 	name := p.parseReceiverName()
-	fmt.Println("hurr 4")
 	rv := NodNew(NT_RECEIVERCALL_CMD)
 	NodSetChild(rv, NTR_RECEIVERCALL_BASE, name)
 	parenArg := p.ParseAtMostOne(func() Nod { return p.parseCommandParentheticalArg() })
-	fmt.Println("hurr 5")
 	if parenArg != nil {
-		fmt.Println("hurr 6")
-
 		if parenArg.NodeType != NT_EMPTYARGLIST {
 			NodSetChild(rv, NTR_RECEIVERCALL_ARG, parenArg)
 		}
 	} else {
-		fmt.Println("hurr 7")
-
 		args := p.ParseManyGreedy(func() Nod { return p.parseValue() })
 		if len(args) > 1 {
-			fmt.Println("hurr 8")
 			p.RaiseParseError("only zro and one arg cmds supported for now")
 		}
 		if len(args) > 0 {

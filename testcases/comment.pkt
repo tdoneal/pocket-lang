@@ -1,0 +1,21 @@
+main func
+# TEST COMMENT
+    print 'hi'     
+>>>hi>>>
+main func
+    # TEST COMMENT
+    print 'hi'     
+>>>hi>>>
+main func
+      # TEST COMMENT
+    print 'hi'     
+>>>hi>>>
+main func
+    print 'hi'    # TEST COMMENT 
+>>>hi>>>
+main func
+    # comment starts
+    # and keeps going print 'hi'
+    print 'end'
+    # and again
+>>>end>>>

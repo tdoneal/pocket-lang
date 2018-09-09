@@ -120,6 +120,7 @@ func (tkzr *TokenizerPocket) processPreline() {
 	// now indents must be 4 spaces
 	nspaces := 0
 	lineEmpty := true
+	lineComment := false
 	for !tkzr.IsEOF() {
 		chr := tkzr.CurrRune()
 		if isSpace(chr) || chr == '\r' {
@@ -127,10 +128,17 @@ func (tkzr *TokenizerPocket) processPreline() {
 			tkzr.Incr()
 		} else if isEOL(chr) {
 			break
+		} else if isCommentStart(chr) {
+			lineComment = true
+			break
 		} else {
 			lineEmpty = false
 			break
 		}
+	}
+	if lineComment {
+		tkzr.State = TK_COMMENT
+		return
 	}
 	if lineEmpty {
 		return
@@ -167,6 +175,8 @@ func (tkzr *TokenizerPocket) cleanUpDanglingIndents() {
 func (tkzr *TokenizerPocket) processComment() {
 	if isEOL(tkzr.CurrRune()) {
 		tkzr.State = TKS_INIT
+		tkzr.isPreline = true
+		tkzr.Incr()
 		return
 	}
 	tkzr.Incr()
@@ -265,6 +275,10 @@ func (tkzr *TokenizerPocket) processGTOrLT(firstRune rune, tokNoEq int, tokEq in
 func (tkzr *TokenizerPocket) processPound() {
 	tkzr.State = TK_COMMENT
 	tkzr.Incr()
+}
+
+func isCommentStart(chr rune) bool {
+	return chr == '#'
 }
 
 func (tkzr *TokenizerPocket) processLiteralNumeric() {
