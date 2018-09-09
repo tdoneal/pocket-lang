@@ -8,7 +8,7 @@ import (
 
 const (
 	PNTR_GOIMPORTS = 284000 + iota
-	PNT_DUCK_ADDOP
+	PNT_DUCK_BINOP
 )
 
 type Preparer struct {
@@ -91,9 +91,9 @@ func (p *Preparer) interpretAsListIndex(arg Nod) Nod {
 }
 
 func (p *Preparer) rewriteDuckedOps() {
-	// search for: any add ops with ducked args
+	// search for: any binary ops with ducked args
 	p.SearchReplaceAll(func(n Nod) bool {
-		if n.NodeType == NT_ADDOP {
+		if isBinaryInlineOpType(n.NodeType) {
 			if NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_TYPE).Data.(int) == TY_DUCK ||
 				NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_TYPE).Data.(int) == TY_DUCK {
 				return true
@@ -101,7 +101,8 @@ func (p *Preparer) rewriteDuckedOps() {
 		}
 		return false
 	}, func(n Nod) Nod {
-		rv := NodNew(PNT_DUCK_ADDOP)
+		rv := NodNew(PNT_DUCK_BINOP)
+		rv.Data = n.NodeType
 		NodSetChild(rv, NTR_BINOP_LEFT, NodGetChild(n, NTR_BINOP_LEFT))
 		NodSetChild(rv, NTR_BINOP_RIGHT, NodGetChild(n, NTR_BINOP_RIGHT))
 		return rv

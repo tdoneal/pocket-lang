@@ -11,4 +11,16 @@ sub func[x, y]
     print(x >= y)
     print(x < y)
     print(x <= y)
+    print(x = y)
 
+>>>
+18
+8
+65
+2
+3
+true
+true
+false
+false
+false

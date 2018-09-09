@@ -369,7 +369,7 @@ func (g *Generator) genValue(n Nod) {
 		g.genDotOp(n)
 	} else if g.isBinaryInlineDuckOpType(n.NodeType) {
 		g.genDuckOp(n)
-	} else if g.isBinaryInlineOpType(n.NodeType) {
+	} else if isBinaryInlineOpType(n.NodeType) {
 		g.genBinaryInlineOp(n)
 	} else {
 		g.WS("value")
@@ -402,7 +402,7 @@ func (g *Generator) genCallObjInit(n Nod) {
 }
 
 func (g *Generator) isBinaryInlineDuckOpType(nt int) bool {
-	return nt == PNT_DUCK_ADDOP
+	return nt == PNT_DUCK_BINOP
 }
 
 func (g *Generator) genDotOp(n Nod) {
@@ -446,7 +446,7 @@ func (g *Generator) genLiteralString(n Nod) {
 	g.WS("\"")
 }
 
-func (g *Generator) isBinaryInlineOpType(nType int) bool {
+func isBinaryInlineOpType(nType int) bool {
 	return nType == NT_ADDOP || nType == NT_GTOP || nType == NT_LTOP ||
 		nType == NT_GTEQOP || nType == NT_LTEQOP || nType == NT_EQOP ||
 		nType == NT_SUBOP || nType == NT_MULOP || nType == NT_DIVOP ||
@@ -480,8 +480,33 @@ func (g *Generator) genBinaryInlineOp(n Nod) {
 	g.WS(")")
 }
 
+func (g *Generator) getGenDuckOpName(nt int) string {
+	lut := map[int]string{
+		NT_ADDOP:  "add",
+		NT_SUBOP:  "sub",
+		NT_MULOP:  "mul",
+		NT_DIVOP:  "div",
+		NT_MODOP:  "mod",
+		NT_GTOP:   "gt",
+		NT_GTEQOP: "gteq",
+		NT_LTOP:   "lt",
+		NT_LTEQOP: "lteq",
+		NT_EQOP:   "defeq",
+	}
+	if val, ok := lut[nt]; ok {
+		return val
+	} else {
+		return "someop(nt " + strconv.Itoa(nt) + ")"
+	}
+}
+
+func (g *Generator) getGenFullDuckOpName(nt int) string {
+	return "P__duck_" + g.getGenDuckOpName(nt)
+}
+
 func (g *Generator) genDuckOp(n Nod) {
-	g.WS("Pduck_add(")
+	g.WS(g.getGenFullDuckOpName(n.Data.(int)))
+	g.WS("(")
 	g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
 	g.WS(",")
 	g.genValue(NodGetChild(n, NTR_BINOP_RIGHT))

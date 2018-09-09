@@ -502,18 +502,21 @@ func marPosObjInit() *RewriteRule {
 	}
 }
 
-func marPosCollectionGetCand(elements []Nod) Mype {
+func marPosCollectionGetArgedCand(elements []Nod) Mype {
 	accum := XMypeNewEmpty()
 	for _, element := range elements {
 		elementPosMype := NodGetChild(element, NTR_MYPE_POS).Data.(Mype)
 		accum = accum.Union(elementPosMype)
 	}
-	candMype := XMypeNewSingleArged(TY_LIST, accum)
-	return candMype
+	if accum.IsEmpty() {
+		return XMypeNewEmpty()
+	} else {
+		return XMypeNewSingleArged(TY_LIST, accum)
+	}
 }
 
 func marPosCollectionEvaluateMype(n Nod) Mype {
-	candMype := marPosCollectionGetCand(NodGetChildList(n))
+	candMype := marPosCollectionGetArgedCand(NodGetChildList(n))
 	untypedMype := XMypeNewSingleBase(TY_LIST)
 	allMypes := candMype.Union(untypedMype)
 	return allMypes
@@ -1137,7 +1140,7 @@ func (x *XformerPocket) parseInlineOpStream(opStream Nod) Nod {
 	// for now assume all elements are same priority and group left to right
 	priGroups := [][]int{
 		[]int{NT_DOTOP, NT_DOTPIPEOP},
-		[]int{NT_MULOP, NT_DIVOP},
+		[]int{NT_MULOP, NT_DIVOP, NT_MODOP},
 		[]int{NT_ADDOP, NT_SUBOP},
 		[]int{NT_LTOP, NT_LTEQOP, NT_GTOP, NT_GTEQOP, NT_EQOP},
 		[]int{NT_OROP, NT_ANDOP},
