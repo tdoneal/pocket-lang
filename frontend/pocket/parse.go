@@ -165,9 +165,15 @@ func (p *ParserPocket) parseStatement() Nod {
 func (p *ParserPocket) parseStatementBody() Nod {
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseReturnStatement() },
+		func() Nod { return p.parsePass() },
 		func() Nod { return p.parseVarAssign() },
 		func() Nod { return p.parseCommand() },
 	})
+}
+
+func (p *ParserPocket) parsePass() Nod {
+	p.ParseToken(TK_PASS)
+	return NodNew(NT_PASS)
 }
 
 func (p *ParserPocket) parseReturnStatement() Nod {

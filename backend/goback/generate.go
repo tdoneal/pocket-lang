@@ -239,10 +239,16 @@ func (g *Generator) genImperativeUnit(n Nod) {
 		g.genBreak(n)
 	} else if n.NodeType == NT_IMPERATIVE {
 		g.genImperative(n)
+	} else if n.NodeType == NT_PASS {
+		g.genPass(n)
 	} else {
 		g.WS("command")
 	}
 	g.WS("\n")
+}
+
+func (g *Generator) genPass(n Nod) {
+	g.WS("")
 }
 
 func (g *Generator) genWhile(n Nod) {

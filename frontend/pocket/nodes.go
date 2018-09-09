@@ -59,6 +59,7 @@ const (
 	NT_WHILE                = 92
 	NTR_WHILE_COND          = 93
 	NTR_WHILE_BODY          = 94
+	NT_PASS                 = 97
 	NT_ADDOP                = 100
 	NT_SUBOP                = 101
 	NT_MULOP                = 102

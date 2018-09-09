@@ -53,6 +53,7 @@ const (
 	TK_IN            = 82
 	TK_WHILE         = 83
 	TK_BREAK         = 85
+	TK_PASS          = 90
 	TK_RETURN        = 100
 	TK_VOID          = 110
 	TK_BOOL          = 120
@@ -414,6 +415,8 @@ func (tkzr *TokenizerPocket) checkKeyword(word string) int {
 		return TK_FALSE
 	} else if word == "in" {
 		return TK_IN
+	} else if word == "pass" {
+		return TK_PASS
 	}
 	return -1
 }
