@@ -67,7 +67,8 @@ func (p *Preparer) createExplicitIndexors() {
 		NodSetChild(listGetter, NTR_TYPE, varType)
 		NodSetChild(listGetter, NTR_VARDEF, varDef)
 		liArgs = append(liArgs, listGetter)
-		liArgs = append(liArgs, NodGetChild(listCall, NTR_RECEIVERCALL_ARG))
+		listIndex := p.interpretAsListIndex(NodGetChild(listCall, NTR_RECEIVERCALL_ARG))
+		liArgs = append(liArgs, listIndex)
 		listNod := NodNewChildList(NT_LIT_LIST, liArgs)
 
 		// copy info into the extant list call
@@ -75,6 +76,18 @@ func (p *Preparer) createExplicitIndexors() {
 		NodSetChild(listCall, NTR_RECEIVERCALL_ARG, listNod)
 	}
 
+}
+
+func (p *Preparer) interpretAsListIndex(arg Nod) Nod {
+	if arg.NodeType == NT_LIT_LIST {
+		listElements := NodGetChildList(arg)
+		if len(listElements) != 1 {
+			panic("only one list index dimension supported")
+		}
+		return listElements[0]
+	} else {
+		return arg
+	}
 }
 
 func (p *Preparer) rewriteDuckedOps() {

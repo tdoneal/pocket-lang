@@ -20,7 +20,7 @@ func RunCase(inFile string) {
 	fmt.Println(string(dat))
 	sdat := string(dat)
 	sections := strings.Split(sdat, ">>>")
-	for i := 0; i < len(sections); i += 2 {
+	for i := 0; i < len(sections)-1; i += 2 {
 		src := sections[i]
 		desOutput := SanitizeOutput(sections[i+1])
 		actOutput := SanitizeOutput(CompileAndRunSrc(src))

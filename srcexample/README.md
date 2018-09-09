@@ -1,2 +1,0 @@
-# pocket-lang
-Pocket Language

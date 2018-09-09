@@ -36,9 +36,11 @@ func (p *ParserPocket) parseFuncDef() Nod {
 	funcInputType := p.ParseAtMostOne(func() Nod { return p.parseFuncDefTypeValue() })
 
 	if funcInputType != nil {
-		funcOutputType := p.parseFuncDefTypeValue()
 		NodSetChild(rv, NTR_FUNCDEF_INTYPE, funcInputType)
-		NodSetChild(rv, NTR_FUNCDEF_OUTTYPE, funcOutputType)
+		funcOutputType := p.ParseAtMostOne(func() Nod { return p.parseFuncDefTypeValue() })
+		if funcOutputType != nil {
+			NodSetChild(rv, NTR_FUNCDEF_OUTTYPE, funcOutputType)
+		}
 	}
 
 	p.parseEOL()

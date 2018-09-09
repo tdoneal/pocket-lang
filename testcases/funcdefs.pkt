@@ -1,0 +1,30 @@
+main func
+    sub 4
+
+sub func(x) 
+    print x
+>>>4>>>
+main func
+    sub 4
+
+sub func(x int) 
+    print x
+>>>4>>>
+main func
+    sub 4
+
+sub func(x) void
+    print x
+>>>4>>>
+main func
+    sub 4
+
+sub func(x int) void
+    print x
+>>>4>>>
+main func
+    sub
+
+sub func
+    print 4
+>>>4
