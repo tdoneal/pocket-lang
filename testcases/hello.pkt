@@ -1,0 +1,4 @@
+main func
+    print 'hello world'
+>>>
+hello world

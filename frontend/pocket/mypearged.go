@@ -65,12 +65,7 @@ func (ma *MypeArged) Union(other Mype) Mype {
 			return &MypeArged{NodNewChildList(MATYPE_UNION, []Nod{ma.Node, otherMa.Node})}
 		}
 		// from here on refer to big and small rather than ma and otherMa
-		big := ma
-		small := otherMa
-		if (big.NodeType == MATYPE_SINGLE_BASE && small.NodeType == MATYPE_UNION) ||
-			(big.NodeType == MATYPE_SINGLE_BASE && small.NodeType == MATYPE_SINGLE_ARGED) {
-			small, big = big, small
-		}
+		big, small := MAGetCanonOrder(ma, otherMa)
 		if big.NodeType == MATYPE_UNION && small.NodeType == MATYPE_SINGLE_BASE {
 			newNods := append(NodGetChildList(big.Node), small.Node)
 			return &MypeArged{NodNewChildList(MATYPE_UNION, newNods)}
@@ -110,15 +105,16 @@ func (ma *MypeArged) Intersection(other Mype) Mype {
 			}
 		}
 		// from here on refer to big and small rather than ma and otherMa
-		big := ma
-		small := otherMa
-		if (big.NodeType == MATYPE_SINGLE_BASE && small.NodeType == MATYPE_UNION) ||
-			(big.NodeType == MATYPE_SINGLE_BASE && small.NodeType == MATYPE_SINGLE_ARGED) {
-			small, big = big, small
-		}
-		if big.NodeType == MATYPE_UNION && small.NodeType == MATYPE_SINGLE_BASE {
-			newNods := append(NodGetChildList(big.Node), small.Node)
-			return &MypeArged{NodNewChildList(MATYPE_UNION, newNods)}
+		big, small := MAGetCanonOrder(ma, otherMa)
+		if big.NodeType == MATYPE_UNION && (small.NodeType == MATYPE_SINGLE_BASE ||
+			small.NodeType == MATYPE_SINGLE_ARGED) {
+			big.CheckNoNestedUnions()
+			bigNods := NodGetChildList(big.Node)
+			if MANodListContains(bigNods, small.Node) {
+				return small
+			} else {
+				return MypeArgedNewEmpty()
+			}
 		}
 		if big.NodeType == MATYPE_SINGLE_ARGED && small.NodeType == MATYPE_SINGLE_BASE {
 			// these are incompatible
@@ -221,11 +217,34 @@ func (ma *MypeArged) WouldChangeFromUnionWith(other Mype) bool {
 		if ma.NodeType == MATYPE_UNION && otherMa.NodeType == MATYPE_UNION {
 			return ma.WouldChangeFromUnionWithUU(otherMa)
 		}
+		if ma.NodeType == MATYPE_UNION && otherMa.NodeType == MATYPE_SINGLE_BASE {
+			ma.CheckNoNestedUnions()
+			fmt.Println("comparing big", PrettyPrint(ma.Node), "small", PrettyPrint(otherMa.Node))
+			return !MANodListContains(NodGetChildList(ma.Node), otherMa.Node)
+		}
+		if ma.NodeType == MATYPE_SINGLE_BASE && otherMa.NodeType == MATYPE_UNION {
+			otherMa.CheckNoNestedUnions()
+			if len(NodGetChildList(otherMa.Node)) > 1 {
+				return true
+			}
+		}
+
 		fmt.Println("Failed: WCFUW", PrettyPrintNodes([]Nod{ma.Node, otherMa.Node}))
 		panic("couldnt figure it out")
 	} else {
 		panic("must union with mypearged (got " + fmt.Sprint(other))
 	}
+}
+
+func MAGetCanonOrder(ma0 *MypeArged, ma1 *MypeArged) (*MypeArged, *MypeArged) {
+	big := ma0
+	small := ma1
+	if (big.NodeType == MATYPE_SINGLE_BASE && small.NodeType == MATYPE_UNION) ||
+		(big.NodeType == MATYPE_SINGLE_BASE && small.NodeType == MATYPE_SINGLE_ARGED) ||
+		(big.NodeType == MATYPE_SINGLE_ARGED && small.NodeType == MATYPE_UNION) {
+		small, big = big, small
+	}
+	return big, small
 }
 
 func (ma *MypeArged) CheckNoNestedUnions() {
@@ -357,8 +376,15 @@ func MANodContainsSingleType(n Nod, ty int) bool {
 	panic("couldnt figure it out")
 }
 
-func (ma *MypeArged) ContainsAnyType([]int) bool { panic("unimplemented") }
-func (ma *MypeArged) ToType() int                { panic("unimplemented") }
+func (ma *MypeArged) ContainsAnyType(ts []int) bool {
+	for _, ty := range ts {
+		if ma.ContainsSingleType(ty) {
+			return true
+		}
+	}
+	return false
+}
+func (ma *MypeArged) ToType() int { panic("unimplemented") }
 func (ma *MypeArged) ExactDeepEqual(other *MypeArged) bool {
 	if ma.NodeType != other.NodeType {
 		return false
@@ -393,4 +419,67 @@ func MANodDeepEqual(n0 Nod, n1 Nod) bool {
 		}
 	}
 	return true
+}
+
+func MANodComputeGreatestCommonStem(nods []Nod) Nod {
+	// given a list of nodes representing single types, returns the greatest common
+	// stem.  for example, [list, list(int)] -> list
+	// another example: [list(list(int)), list(list(float))] -> list(list)
+	var rv Nod
+	for ndx, nod := range nods {
+		if ndx == 0 {
+			rv = nod
+		} else {
+			rv = MANodComputeGreatestCommonStemBinary(rv, nod)
+		}
+	}
+	return rv
+}
+
+func MANodComputeGreatestCommonStemBinary(a Nod, b Nod) Nod {
+	if a == nil || b == nil {
+		return nil
+	}
+	if a.NodeType == MATYPE_SINGLE_BASE && b.NodeType == MATYPE_SINGLE_BASE {
+		if a.Data.(int) == b.Data.(int) {
+			fmt.Println("here 5")
+			return a
+		} else {
+			return nil
+		}
+	}
+	if a.NodeType == MATYPE_SINGLE_ARGED && b.NodeType == MATYPE_SINGLE_ARGED {
+		aBt := NodGetChild(a, MATYPER_BASE)
+		bBt := NodGetChild(b, MATYPER_BASE)
+		if aBt == nil || bBt == nil {
+			panic("ah 1")
+		}
+		baseCommon := MANodComputeGreatestCommonStemBinary(aBt, bBt)
+		if baseCommon == nil {
+			return nil
+		}
+		aArg := NodGetChild(a, MATYPER_ARG)
+		bArg := NodGetChild(b, MATYPER_ARG)
+		if aArg == nil || bArg == nil {
+			panic("ah 2")
+		}
+		argCommon := MANodComputeGreatestCommonStemBinary(aArg, bArg)
+		if argCommon == nil {
+			return baseCommon
+		} else {
+			rv := NodNew(MATYPE_SINGLE_ARGED)
+			NodSetChild(rv, MATYPER_BASE, aBt)
+			NodSetChild(rv, MATYPER_ARG, argCommon)
+			return rv
+		}
+	}
+	big, small := a, b
+	if big.NodeType == MATYPE_SINGLE_BASE && small.NodeType == MATYPE_SINGLE_ARGED {
+		big, small = small, big
+	}
+	if big.NodeType == MATYPE_SINGLE_ARGED && small.NodeType == MATYPE_SINGLE_BASE {
+		return MANodComputeGreatestCommonStemBinary(NodGetChild(big, MATYPER_BASE),
+			small)
+	}
+	panic("couldn't compute common stem")
 }

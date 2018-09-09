@@ -317,7 +317,7 @@ func (g *Generator) genVarAssign(n Nod) {
 }
 
 func (g *Generator) genReceiverCall(n Nod) {
-	rcvName := NodGetChild(n, NTR_RECEIVERCALL_NAME).Data.(string)
+	rcvName := NodGetChild(n, NTR_RECEIVERCALL_BASE).Data.(string)
 
 	if rcvName == "print" {
 		rcvName = "fmt.Println"
@@ -328,15 +328,15 @@ func (g *Generator) genReceiverCall(n Nod) {
 	} else {
 		g.WS(rcvName)
 		g.WS("(")
-		if NodHasChild(n, NTR_RECEIVERCALL_VALUE) {
-			g.genValue(NodGetChild(n, NTR_RECEIVERCALL_VALUE))
+		if NodHasChild(n, NTR_RECEIVERCALL_ARG) {
+			g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
 		}
 		g.WS(")")
 	}
 }
 
 func (g *Generator) genListIndexor(n Nod) {
-	args := NodGetChildList(NodGetChild(n, NTR_RECEIVERCALL_VALUE))
+	args := NodGetChildList(NodGetChild(n, NTR_RECEIVERCALL_ARG))
 	g.genValue(args[0])
 	g.WS("[")
 	g.genValue(args[1])
@@ -363,6 +363,8 @@ func (g *Generator) genValue(n Nod) {
 		g.genLiteralMap(n)
 	} else if nt == NT_RECEIVERCALL {
 		g.genReceiverCall(n)
+	} else if nt == NT_CALLOBJINIT {
+		g.genCallObjInit(n)
 	} else if nt == NT_DOTOP {
 		g.genDotOp(n)
 	} else if g.isBinaryInlineDuckOpType(n.NodeType) {
@@ -374,6 +376,31 @@ func (g *Generator) genValue(n Nod) {
 	}
 }
 
+func (g *Generator) genCallObjInit(n Nod) {
+	// for now only will work for primitive types (outputs as go casts)
+	argNodType := NodGetChild(NodGetChild(n, NTR_RECEIVERCALL_ARG), NTR_TYPE)
+	if argNodType.NodeType == NT_TYPEBASE {
+		fmt.Println("curr type gen", PrettyPrint(argNodType))
+		if argNodType.Data.(int) == TY_DUCK {
+			// use go type assertions
+			g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
+			g.WS(".")
+			g.WS("(")
+			g.genType(NodGetChild(n, NTR_RECEIVERCALL_BASE))
+			g.WS(")")
+		} else {
+			// use go casts
+			g.genType(NodGetChild(n, NTR_RECEIVERCALL_BASE))
+			g.WS("(")
+			g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
+			g.WS(")")
+		}
+	} else {
+		g.WS("(object initializer)")
+	}
+
+}
+
 func (g *Generator) isBinaryInlineDuckOpType(nt int) bool {
 	return nt == PNT_DUCK_ADDOP
 }
@@ -382,9 +409,9 @@ func (g *Generator) genDotOp(n Nod) {
 	qualName := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string)
 	objNod := NodGetChild(n, NTR_BINOP_LEFT)
 	if qualName == "len" {
-		g.WS("len(")
+		g.WS("int64(len(")
 		g.genValue(objNod)
-		g.WS(")")
+		g.WS("))")
 	} else {
 		g.WS("(")
 		g.genValue(objNod)

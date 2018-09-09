@@ -1,12 +1,4 @@
 main func
-    sub 3
-
-sub func(x) void
-    y : 1 + x
-    print y
-    
-    
-
-    
-
-    
+    x : [2, 4]
+    y : x[0]
+        

@@ -24,6 +24,7 @@ const (
 	TK_ALPHANUM      = 20
 	TK_COLON         = 30
 	TK_DOT           = 32
+	TK_DOTPIPE       = 33
 	TK_EQOP          = 35
 	TK_ADDOP         = 40
 	TK_SUBOP         = 41
@@ -222,11 +223,30 @@ func (tkzr *TokenizerPocket) processInit() {
 	} else if input == '%' {
 		tkzr.EmitTokenRuneAndIncr(TK_MOD)
 	} else if input == '.' {
-		tkzr.EmitTokenRuneAndIncr(TK_DOT)
+		tkzr.processDot()
 	} else if input == '#' {
 		tkzr.processPound()
 	} else {
 		tkzr.Incr()
+	}
+}
+
+func (tkzr *TokenizerPocket) processDot() {
+	tkzr.process1Or2CharOp('.', '>', TK_DOT, TK_DOTPIPE)
+}
+
+func (tkzr *TokenizerPocket) process1Or2CharOp(firstRune rune, secondRune rune, tok1 int, tok2 int) {
+	// skip first rune
+	tkzr.Incr()
+	if tkzr.IsEOF() {
+		panic("unexpected EOF")
+	}
+	nxtRune := tkzr.CurrRune()
+	if nxtRune == secondRune {
+		tkzr.EmitToken(tok2, string(firstRune)+string(secondRune))
+		tkzr.Incr()
+	} else {
+		tkzr.EmitToken(tok1, string(firstRune))
 	}
 }
 
@@ -239,18 +259,7 @@ func (tkzr *TokenizerPocket) processGT() {
 }
 
 func (tkzr *TokenizerPocket) processGTOrLT(firstRune rune, tokNoEq int, tokEq int) {
-	// skip first rune
-	tkzr.Incr()
-	if tkzr.IsEOF() {
-		panic("unexpected EOF")
-	}
-	nxtRune := tkzr.CurrRune()
-	if nxtRune == '=' {
-		tkzr.EmitToken(tokEq, string(firstRune)+"=")
-		tkzr.Incr()
-	} else {
-		tkzr.EmitToken(tokNoEq, string(firstRune))
-	}
+	tkzr.process1Or2CharOp(firstRune, '=', tokNoEq, tokEq)
 }
 
 func (tkzr *TokenizerPocket) processPound() {

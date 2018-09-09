@@ -13,8 +13,9 @@ const (
 	NTR_VARDEF              = 29
 	NT_RECEIVERCALL         = 30
 	NT_RECEIVERCALL_CMD     = 31
-	NTR_RECEIVERCALL_NAME   = 33
-	NTR_RECEIVERCALL_VALUE  = 34
+	NTR_RECEIVERCALL_BASE   = 33
+	NTR_RECEIVERCALL_ARG    = 34
+	NT_CALLOBJINIT          = 35
 	NT_IDENTIFIER           = 40
 	NT_TYPEBASE             = 41
 	NT_TYPEARGED            = 42
@@ -70,6 +71,7 @@ const (
 	NT_ANDOP                = 111
 	NT_MODOP                = 112
 	NT_DOTOP                = 113
+	NT_DOTPIPEOP            = 114
 	NTR_BINOP_LEFT          = 118
 	NTR_BINOP_RIGHT         = 119
 	NT_INLINEOPSTREAM       = 150

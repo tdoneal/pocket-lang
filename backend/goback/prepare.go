@@ -25,7 +25,7 @@ func (p *Preparer) Prepare(code Nod) {
 func (p *Preparer) checkForPrintStatements() {
 	rcs := p.SearchRoot(func(n Nod) bool {
 		return isReceiverCallType(n.NodeType) &&
-			NodGetChild(n, NTR_RECEIVERCALL_NAME).Data.(string) == "print"
+			NodGetChild(n, NTR_RECEIVERCALL_BASE).Data.(string) == "print"
 	})
 
 	if len(rcs) > 0 {
@@ -58,7 +58,7 @@ func (p *Preparer) createExplicitIndexors() {
 		return false
 	})
 	for _, listCall := range listCalls {
-		varName := NodGetChild(listCall, NTR_RECEIVERCALL_NAME).Data.(string)
+		varName := NodGetChild(listCall, NTR_RECEIVERCALL_BASE).Data.(string)
 		liArgs := []Nod{}
 		listGetter := NodNew(NT_VAR_GETTER)
 		NodSetChild(listGetter, NTR_VAR_GETTER_NAME, NodNewData(NT_IDENTIFIER, varName))
@@ -67,12 +67,12 @@ func (p *Preparer) createExplicitIndexors() {
 		NodSetChild(listGetter, NTR_TYPE, varType)
 		NodSetChild(listGetter, NTR_VARDEF, varDef)
 		liArgs = append(liArgs, listGetter)
-		liArgs = append(liArgs, NodGetChild(listCall, NTR_RECEIVERCALL_VALUE))
+		liArgs = append(liArgs, NodGetChild(listCall, NTR_RECEIVERCALL_ARG))
 		listNod := NodNewChildList(NT_LIT_LIST, liArgs)
 
 		// copy info into the extant list call
-		NodSetChild(listCall, NTR_RECEIVERCALL_NAME, NodNewData(NT_IDENTIFIER, "$li"))
-		NodSetChild(listCall, NTR_RECEIVERCALL_VALUE, listNod)
+		NodSetChild(listCall, NTR_RECEIVERCALL_BASE, NodNewData(NT_IDENTIFIER, "$li"))
+		NodSetChild(listCall, NTR_RECEIVERCALL_ARG, listNod)
 	}
 
 }

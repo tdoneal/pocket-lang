@@ -464,6 +464,8 @@ func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {
 		return NT_MODOP
 	} else if tokenType == TK_DOT {
 		return NT_DOTOP
+	} else if tokenType == TK_DOTPIPE {
+		return NT_DOTPIPEOP
 	} else {
 		return -1
 	}
@@ -488,9 +490,9 @@ func (p *ParserPocket) parseCommand() Nod {
 		p.RaiseParseError("only zro and one arg cmds supported for now")
 	}
 	rv := NodNew(NT_RECEIVERCALL_CMD)
-	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
+	NodSetChild(rv, NTR_RECEIVERCALL_BASE, name)
 	if len(args) > 0 {
-		NodSetChild(rv, NTR_RECEIVERCALL_VALUE, args[0])
+		NodSetChild(rv, NTR_RECEIVERCALL_ARG, args[0])
 	}
 	return rv
 }
@@ -506,8 +508,8 @@ func (p *ParserPocket) parseReceiverCallCommandStyle() Nod {
 	name := p.parseReceiverName()
 	val := p.parseValue()
 	rv := NodNew(NT_RECEIVERCALL)
-	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
-	NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
+	NodSetChild(rv, NTR_RECEIVERCALL_BASE, name)
+	NodSetChild(rv, NTR_RECEIVERCALL_ARG, val)
 	return rv
 }
 
@@ -517,8 +519,8 @@ func (p *ParserPocket) parseReceiverCallParentheticalStyle() Nod {
 	p.Pos--
 	val := p.parseValueAtomic()
 	rv := NodNew(NT_RECEIVERCALL)
-	NodSetChild(rv, NTR_RECEIVERCALL_NAME, name)
-	NodSetChild(rv, NTR_RECEIVERCALL_VALUE, val)
+	NodSetChild(rv, NTR_RECEIVERCALL_BASE, name)
+	NodSetChild(rv, NTR_RECEIVERCALL_ARG, val)
 	return rv
 }
 
