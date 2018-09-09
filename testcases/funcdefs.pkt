@@ -63,4 +63,10 @@ main func
 
 sub func
     print 4
->>>4
+>>>4>>>
+main func
+    sub(16, 4)
+
+sub func(x, y)
+    print (x + y)
+>>>20>>>

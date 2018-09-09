@@ -396,12 +396,27 @@ func (p *ParserPocket) parseTypeArged() Nod {
 }
 
 func (p *ParserPocket) parseParameterList() Nod {
-	p.ParseToken(TK_BRACKL)
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod {
+			p.ParseToken(TK_PARENL)
+			rv := p.parseParameterListInner()
+			p.ParseToken(TK_PARENR)
+			return rv
+		},
+		func() Nod {
+			p.ParseToken(TK_BRACKL)
+			rv := p.parseParameterListInner()
+			p.ParseToken(TK_BRACKR)
+			return rv
+		},
+	})
+}
+
+func (p *ParserPocket) parseParameterListInner() Nod {
 	parameters := p.parseManyOptDelimited(
 		func() Nod { return p.parseParameterSingle() },
 		func() Nod { return p.parseComma() },
 	)
-	p.ParseToken(TK_BRACKR)
 	return NodNewChildList(NT_LIT_LIST, parameters)
 }
 
@@ -556,8 +571,20 @@ func (p *ParserPocket) parseReceiverCallParentheticalArg() Nod {
 	// returns NT_EMPTYARGLIST if empty arg list, value if arg found, error if neither
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseRCPAEmpty() },
+		func() Nod { return p.parseRCPAParenList() },
 		func() Nod { return p.parseValueAtomic() },
 	})
+}
+
+func (p *ParserPocket) parseRCPAParenList() Nod {
+	p.ParseToken(TK_PARENL)
+	elements := p.parseManyOptDelimited(func() Nod { return p.parseValue() },
+		func() Nod { return p.parseComma() })
+	if len(elements) < 2 {
+		p.RaiseParseError("needed 2 more elements to be considered a list")
+	}
+	p.ParseToken(TK_PARENR)
+	return NodNewChildList(NT_LIT_LIST, elements)
 }
 
 func (p *ParserPocket) parseRCPAEmpty() Nod {

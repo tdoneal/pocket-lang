@@ -1,14 +1,6 @@
 main func
-    sub[13, 5]
+    sub(16, 4)
 
-sub func[x, y]
-    print(x + y)
-    print(x - y)
-    print(x * y)
-    print(x / y)
-    print(x % y)
-    print(x > y)
-    print(x >= y)
-    print(x < y)
-    print(x <= y)
+sub func(x, y)
+    print (x + y)
 
