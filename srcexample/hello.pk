@@ -1,6 +1,3 @@
 main func
-    sub(16, 4)
-
-sub func(x, y)
-    print (x + y)
+    print 1 + 1
 
