@@ -5,6 +5,30 @@ sub func(x)
     print x
 >>>4>>>
 main func
+    sub()
+
+sub func() void
+    print 'hello void'
+>>>hello void>>>
+main func
+    sub
+
+sub func() void
+    print 'hello void'
+>>>hello void>>>
+main func
+    sub()
+
+sub func()
+    print 'hello void'
+>>>hello void>>>
+main func
+    sub()
+
+sub func
+    print 'hello void'
+>>>hello void>>>
+main func
     sub 4
 
 sub func(x int) 

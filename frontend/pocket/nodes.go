@@ -36,6 +36,7 @@ const (
 	NTR_FUNCDEF             = 64
 	NTR_FUNCTABLE           = 65
 	NT_FUNCTABLE            = 66
+	NT_EMPTYARGLIST         = 67
 	NT_PARAMETER            = 69
 	NTR_FUNCDEF_NAME        = 70
 	NTR_FUNCDEF_INTYPE      = 71

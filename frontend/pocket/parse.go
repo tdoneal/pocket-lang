@@ -352,10 +352,26 @@ func (p *ParserPocket) parseKeywordPrimitive(tokenType int, nodeType int, data i
 
 func (p *ParserPocket) parseFuncDefTypeValue() Nod {
 	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseFDTEmptyParenBracketLike() },
 		func() Nod { return p.parseParameterParenthetical() },
 		func() Nod { return p.parseParameterList() },
 		func() Nod { return p.parseLiteralKeyword() },
 	})
+}
+
+func (p *ParserPocket) parseFDTEmptyParenBracketLike() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseFDTEmptyParen(TK_PARENL, TK_PARENR) },
+		func() Nod { return p.parseFDTEmptyParen(TK_CURLYL, TK_CURLYR) },
+		func() Nod { return p.parseFDTEmptyParen(TK_BRACKL, TK_BRACKR) },
+	})
+}
+
+func (p *ParserPocket) parseFDTEmptyParen(tok0 int, tok1 int) Nod {
+	p.ParseToken(tok0)
+	p.ParseToken(tok1)
+	// interpret same as if the keyword "void" was there
+	return NodNewData(NT_TYPEBASE, TY_VOID)
 }
 
 func (p *ParserPocket) parseType() Nod {
@@ -487,15 +503,23 @@ func (p *ParserPocket) parseIdentifier() Nod {
 
 func (p *ParserPocket) parseCommand() Nod {
 	name := p.parseReceiverName()
-	args := p.ParseManyGreedy(func() Nod { return p.parseValue() })
-	if len(args) > 1 {
-		p.RaiseParseError("only zro and one arg cmds supported for now")
-	}
 	rv := NodNew(NT_RECEIVERCALL_CMD)
 	NodSetChild(rv, NTR_RECEIVERCALL_BASE, name)
-	if len(args) > 0 {
-		NodSetChild(rv, NTR_RECEIVERCALL_ARG, args[0])
+	parenArg := p.ParseAtMostOne(func() Nod { return p.parseReceiverCallParentheticalArg() })
+	if parenArg != nil {
+		if parenArg.NodeType != NT_EMPTYARGLIST {
+			NodSetChild(rv, NTR_RECEIVERCALL_ARG, parenArg)
+		}
+	} else {
+		args := p.ParseManyGreedy(func() Nod { return p.parseValue() })
+		if len(args) > 1 {
+			p.RaiseParseError("only zro and one arg cmds supported for now")
+		}
+		if len(args) > 0 {
+			NodSetChild(rv, NTR_RECEIVERCALL_ARG, args[0])
+		}
 	}
+
 	return rv
 }
 
@@ -519,11 +543,35 @@ func (p *ParserPocket) parseReceiverCallParentheticalStyle() Nod {
 	name := p.parseReceiverName()
 	p.parseOpenParenlikeToken()
 	p.Pos--
-	val := p.parseValueAtomic()
+	arg := p.parseReceiverCallParentheticalArg()
 	rv := NodNew(NT_RECEIVERCALL)
 	NodSetChild(rv, NTR_RECEIVERCALL_BASE, name)
-	NodSetChild(rv, NTR_RECEIVERCALL_ARG, val)
+	if arg != nil {
+		NodSetChild(rv, NTR_RECEIVERCALL_ARG, arg)
+	}
 	return rv
+}
+
+func (p *ParserPocket) parseReceiverCallParentheticalArg() Nod {
+	// returns NT_EMPTYARGLIST if empty arg list, value if arg found, error if neither
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseRCPAEmpty() },
+		func() Nod { return p.parseValueAtomic() },
+	})
+}
+
+func (p *ParserPocket) parseRCPAEmpty() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseRCPAEmptyParen(TK_PARENL, TK_PARENR) },
+		func() Nod { return p.parseRCPAEmptyParen(TK_CURLYL, TK_CURLYR) },
+		func() Nod { return p.parseRCPAEmptyParen(TK_BRACKL, TK_BRACKR) },
+	})
+}
+
+func (p *ParserPocket) parseRCPAEmptyParen(tok0 int, tok1 int) Nod {
+	p.ParseToken(tok0)
+	p.ParseToken(tok1)
+	return NodNew(NT_EMPTYARGLIST)
 }
 
 func (p *ParserPocket) parseOpenParenlikeToken() *types.Token {
