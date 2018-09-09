@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func RunFile(filePath string) {
+func RunFile(filePath string) string {
 
 	gopath := "../outexec"
 	cleanr(gopath)
@@ -30,6 +30,8 @@ func RunFile(filePath string) {
 	fmt.Println("Output:")
 	fmt.Println(string(output))
 	fmt.Println("Run done.")
+
+	return string(output)
 }
 
 func cleanr(path string) {

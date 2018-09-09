@@ -1,0 +1,14 @@
+main func
+    print (1 + 2)
+>>>
+3
+>>>
+main func
+    print (1.1 + 2.3)
+>>>
+3.4
+>>>
+main func
+    print ('hi' + ' there')
+>>>
+hi there

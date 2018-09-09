@@ -10,4 +10,8 @@ main func
         i : i + 1
     print sum
     
-        
+>>>
+4
+2
+4
+6
