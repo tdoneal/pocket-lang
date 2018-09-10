@@ -1,9 +1,9 @@
 
 Point class
-    x
+    myfun func() void
+        print 'hi'
 
 main func
-    p : Point()
-    p.x : 6
-    print p.x
+    x : Point()
+    x.myfun()
 

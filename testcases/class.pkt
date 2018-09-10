@@ -6,4 +6,14 @@ main func
     p : Point()
     p.x : 3
     print p.x
->>>3
+>>>3>>>
+Point class
+    myfun func() void
+        print 'hi'
+
+main func
+    x : Point()
+    x.myfun()
+>>>hi
+
+

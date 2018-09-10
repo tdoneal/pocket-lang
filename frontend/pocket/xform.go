@@ -198,18 +198,22 @@ func (x *XformerPocket) annotateDotScopes() {
 
 func isSystemCall(n Nod) bool {
 	if isReceiverCallType(n.NodeType) {
-		callName := NodGetChild(n, NTR_RECEIVERCALL_BASE).Data.(string)
-		return isSystemFuncName(callName)
+		base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+		if callName, ok := base.Data.(string); ok {
+			return isSystemFuncName(callName)
+		}
 	}
 	return false
 }
 
 func (x *XformerPocket) linkCallsToVariableFuncdefs() {
-	// find all unresolved calls
+	// find all unresolved calls that could refer to a local variable
 	unresCalls := x.SearchRoot(func(n Nod) bool {
 		if isReceiverCallType(n.NodeType) && !isSystemCall(n) {
-			if !NodHasChild(n, NTR_FUNCDEF) {
-				return true
+			if NodGetChild(n, NTR_RECEIVERCALL_BASE).NodeType == NT_IDENTIFIER {
+				if !NodHasChild(n, NTR_FUNCDEF) {
+					return true
+				}
 			}
 		}
 		return false
@@ -247,12 +251,13 @@ func (x *XformerPocket) checkAllCallsResolved() {
 		return isReceiverCallType(n.NodeType)
 	})
 	for _, call := range calls {
-		funcName := NodGetChild(call, NTR_RECEIVERCALL_BASE).Data.(string)
-		if isSystemFuncName(funcName) {
+		base := NodGetChild(call, NTR_RECEIVERCALL_BASE)
+		if isSystemCall(call) || base.NodeType == NT_DOTOP {
 			continue // don't check these
 		}
+
 		if !NodHasChild(call, NTR_FUNCDEF) {
-			panic("unknown function '" + funcName + "'")
+			panic("unknown function '" + PrettyPrint(base) + "'")
 		}
 	}
 }
@@ -276,46 +281,49 @@ func (x *XformerPocket) buildFuncDefTables() {
 	// link functional calls to their associated def (if found)
 	calls := x.SearchRoot(func(n Nod) bool { return isReceiverCallType(n.NodeType) })
 	for _, call := range calls {
-		callName := NodGetChild(call, NTR_RECEIVERCALL_BASE).Data.(string)
-		if isSystemFuncName(callName) {
-			// continue, don't worry about linking system funcs
-			// as by definition there is nothing to point them to
-			continue
-		}
-		fmt.Println("call name", callName)
-		// lookup function in func table (naive linear search for now)
-		var matchedFuncDef Nod
-		for _, funcDef := range funcDefs {
-			funcDefName := NodGetChild(funcDef, NTR_FUNCDEF_NAME).Data.(string)
-			if callName == funcDefName {
-				matchedFuncDef = funcDef
-				break
+		base := NodGetChild(call, NTR_RECEIVERCALL_BASE)
+		if callName, ok := base.Data.(string); ok {
+			if isSystemFuncName(callName) {
+				// continue, don't worry about linking system funcs
+				// as by definition there is nothing to point them to
+				continue
 			}
-		}
+			fmt.Println("call name", callName)
+			// lookup function in func table (naive linear search for now)
+			var matchedFuncDef Nod
+			for _, funcDef := range funcDefs {
+				funcDefName := NodGetChild(funcDef, NTR_FUNCDEF_NAME).Data.(string)
+				if callName == funcDefName {
+					matchedFuncDef = funcDef
+					break
+				}
+			}
 
-		if matchedFuncDef != nil {
-			NodSetChild(call, NTR_FUNCDEF, matchedFuncDef)
+			if matchedFuncDef != nil {
+				NodSetChild(call, NTR_FUNCDEF, matchedFuncDef)
+			}
 		}
 	}
 
 	// link calls to associated object initializer if aproppriate
 	for _, call := range calls {
-		callName := NodGetChild(call, NTR_RECEIVERCALL_BASE).Data.(string)
-		// lookup function in class table (indicating an object initializer)
-		var matchedClsDef Nod
-		for _, clsDef := range clsDefs {
-			clsName := NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string)
-			if callName == clsName {
-				matchedClsDef = clsDef
-				break
+		base := NodGetChild(call, NTR_RECEIVERCALL_BASE)
+		if callName, ok := base.Data.(string); ok {
+			// lookup function in class table (indicating an object initializer)
+			var matchedClsDef Nod
+			for _, clsDef := range clsDefs {
+				clsName := NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string)
+				if callName == clsName {
+					matchedClsDef = clsDef
+					break
+				}
+			}
+			if matchedClsDef != nil {
+				// rewrite the call in-place -> object initializer
+				NodSetChild(call, NTR_RECEIVERCALL_BASE, matchedClsDef)
+				call.NodeType = NT_OBJINIT
 			}
 		}
-		if matchedClsDef != nil {
-			// rewrite the call in-place -> object initializer
-			NodSetChild(call, NTR_RECEIVERCALL_BASE, matchedClsDef)
-			call.NodeType = NT_OBJINIT
-		}
-
 	}
 }
 

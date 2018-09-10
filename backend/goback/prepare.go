@@ -23,12 +23,23 @@ func (p *Preparer) Prepare(code Nod) {
 }
 
 func (p *Preparer) checkForPrintStatements() {
-	rcs := p.SearchRoot(func(n Nod) bool {
-		return isReceiverCallType(n.NodeType) &&
-			NodGetChild(n, NTR_RECEIVERCALL_BASE).Data.(string) == "print"
+	printCalls := p.SearchRoot(func(n Nod) bool {
+		if isReceiverCallType(n.NodeType) {
+			base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+			if base.NodeType == NT_IDENTIFIER {
+				if base.Data.(string) == "print" {
+					return true
+				}
+			}
+		}
+		return false
 	})
 
-	if len(rcs) > 0 {
+	for _, printCall := range printCalls {
+		NodGetChild(printCall, NTR_RECEIVERCALL_BASE).Data = "fmt.Println"
+	}
+
+	if len(printCalls) > 0 {
 		NodSetChild(p.Root, PNTR_GOIMPORTS, NodNewData(NT_IDENTIFIER, "fmt"))
 	}
 }

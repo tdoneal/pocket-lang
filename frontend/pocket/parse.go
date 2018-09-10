@@ -5,6 +5,8 @@ import (
 	. "pocket-lang/parse"
 	"pocket-lang/types"
 	"strconv"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 type ParserPocket struct {
@@ -182,20 +184,23 @@ func (p *ParserPocket) parseClassDefBlock() Nod {
 }
 
 func (p *ParserPocket) parseClassDefUnit() Nod {
-	rv := p.parseClassDefField()
-	p.parseEOL()
+	rv := p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseFuncDef() },
+		func() Nod { return p.parseClassDefField() },
+	})
 	return rv
 }
 
 func (p *ParserPocket) parseClassDefField() Nod {
 	name := p.parseIdentifier()
 	optType := p.ParseAtMostOne(func() Nod { return p.parseType() })
-
+	p.parseEOL()
 	rv := NodNew(NT_CLASSFIELD)
 	NodSetChild(rv, NTR_VARDEF_NAME, name)
 	if optType != nil {
 		NodSetChild(rv, NTR_TYPE_DECL, optType)
 	}
+
 	return rv
 }
 
@@ -303,7 +308,7 @@ func (p *ParserPocket) parseLValue() Nod {
 		func() Nod { return p.parseValueParenthetical() },
 		func() Nod { return p.parseLiteral() },
 		func() Nod { return p.parseReceiverCall() },
-		func() Nod { return p.parseVarGetter() },
+		func() Nod { return p.parseIdentifier() },
 	})
 }
 
@@ -314,6 +319,9 @@ func (p *ParserPocket) parseLValueDotStream() Nod {
 		func() Nod { return p.parseIdentifier() },
 	}
 	dotSeq := p.ParseUnrolledSequenceGreedy(dotPattern)
+	if len(dotSeq) < 2 {
+		p.RaiseParseError("not a dot stream")
+	}
 	streamNods := []Nod{baseVal}
 	streamNods = append(streamNods, dotSeq...)
 	rv := NodNew(NT_INLINEOPSTREAM)
@@ -607,9 +615,11 @@ func (p *ParserPocket) parseIdentifier() Nod {
 }
 
 func (p *ParserPocket) parseCommand() Nod {
-	name := p.parseReceiverName()
+	fmt.Println("tryina parse command", spew.Sdump(p.CurrToken()))
+	target := p.parseReceiverBase()
+	fmt.Println("receiver base", PrettyPrint(target))
 	rv := NodNew(NT_RECEIVERCALL_CMD)
-	NodSetChild(rv, NTR_RECEIVERCALL_BASE, name)
+	NodSetChild(rv, NTR_RECEIVERCALL_BASE, target)
 	parenArg := p.ParseAtMostOne(func() Nod { return p.parseCommandParentheticalArg() })
 	if parenArg != nil {
 		if parenArg.NodeType != NT_EMPTYARGLIST {
@@ -626,6 +636,15 @@ func (p *ParserPocket) parseCommand() Nod {
 	}
 
 	return rv
+}
+
+func (p *ParserPocket) parseReceiverBase() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseLValueDotStream() },
+		func() Nod { return p.parseValueParenthetical() },
+		func() Nod { return p.parseLiteral() },
+		func() Nod { return p.parseIdentifier() },
+	})
 }
 
 func (p *ParserPocket) parseCommandParentheticalArg() Nod {

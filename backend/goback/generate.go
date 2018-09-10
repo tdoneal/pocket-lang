@@ -61,12 +61,18 @@ func (g *Generator) genClassDef(n Nod) {
 	for _, unit := range clsUnits {
 		if unit.NodeType == NT_CLASSFIELD {
 			g.genClassField(unit)
-		} else {
-			g.WS("clsunit")
 		}
 		g.WS("\n")
 	}
 	g.WS("}\n")
+
+	// generate all the methods
+	for _, unit := range clsUnits {
+		if unit.NodeType == NT_FUNCDEF {
+			g.genFuncDefInner(unit, n)
+		}
+		g.WS("\n")
+	}
 }
 
 func (g *Generator) genClassField(n Nod) {
@@ -102,9 +108,16 @@ func (g *Generator) genParameter(n Nod) {
 	g.genType(NodGetChild(n, NTR_TYPE))
 }
 
-func (g *Generator) genFuncDef(n Nod) {
+func (g *Generator) genFuncDefInner(n Nod, rcvrDef Nod) {
 	funcName := NodGetChild(n, NTR_FUNCDEF_NAME).Data.(string)
 	g.WS("func ")
+
+	if rcvrDef != nil {
+		g.WS("(self *")
+		g.WS(NodGetChild(rcvrDef, NTR_CLASSDEF_NAME).Data.(string))
+		g.WS(") ")
+	}
+
 	g.WS(funcName)
 	g.WS("(")
 
@@ -131,7 +144,10 @@ func (g *Generator) genFuncDef(n Nod) {
 	g.genImperative(NodGetChild(n, NTR_FUNCDEF_CODE))
 
 	g.WS("}\n")
+}
 
+func (g *Generator) genFuncDef(n Nod) {
+	g.genFuncDefInner(n, nil)
 }
 
 func (g *Generator) genArgUnpacking(inTypeDef Nod) {
@@ -362,22 +378,22 @@ func (g *Generator) genLValue(n Nod) {
 }
 
 func (g *Generator) genReceiverCall(n Nod) {
-	rcvName := NodGetChild(n, NTR_RECEIVERCALL_BASE).Data.(string)
+	base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
 
-	if rcvName == "print" {
-		rcvName = "fmt.Println"
-	}
-
-	if rcvName == "$li" {
-		g.genListIndexor(n)
-	} else {
-		g.WS(rcvName)
-		g.WS("(")
-		if NodHasChild(n, NTR_RECEIVERCALL_ARG) {
-			g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
+	if rcvName, ok := base.Data.(string); ok {
+		if rcvName == "$li" {
+			g.genListIndexor(n)
+			return
 		}
-		g.WS(")")
 	}
+
+	g.genLValue(base)
+	g.WS("(")
+	if NodHasChild(n, NTR_RECEIVERCALL_ARG) {
+		g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
+	}
+	g.WS(")")
+
 }
 
 func (g *Generator) genListIndexor(n Nod) {
