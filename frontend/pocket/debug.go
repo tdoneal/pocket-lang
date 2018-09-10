@@ -37,8 +37,9 @@ func (d *Debug) initialize() {
 	ntl[NT_LIT_INT] = "INT"
 	ntl[NT_LIT_STRING] = "STRING"
 	ntl[NT_INLINEOPSTREAM] = "OPSTREAM"
-	ntl[NTR_RECEIVERCALL_BASE] = "NAME"
+	ntl[NTR_RECEIVERCALL_BASE] = "BASE"
 	ntl[NTR_RECEIVERCALL_ARG] = "ARG"
+	ntl[NT_EMPTYARGLIST] = "ARGEMPTY"
 	ntl[NT_ADDOP] = "ADD"
 	ntl[NT_SUBOP] = "SUB"
 	ntl[NT_MULOP] = "MUL"
@@ -93,7 +94,6 @@ func (d *Debug) initialize() {
 	ntl[NT_BREAK] = "BREAK"
 	ntl[NT_VAR_GETTER] = "VARGET"
 	ntl[NT_DOTOP_QUALIFIER] = "QUAL"
-	ntl[NTR_VAR_GETTER_NAME] = "NAME"
 	ntl[NT_PARAMETER] = "PARAM"
 	ntl[NTR_FUNCDEF] = "FUNCDEF"
 	ntl[NTR_FUNCDEF_INTYPE] = "IN"
@@ -102,6 +102,10 @@ func (d *Debug) initialize() {
 	ntl[NT_VARDEF_SCOPE] = "VARSCOPE"
 	ntl[NT_FUNCTABLE] = "FUNCTABLE"
 	ntl[NTR_FUNCTABLE] = "FUNCTABLE"
+	ntl[NT_CLASSDEF] = "CLASSDEF"
+	ntl[NTR_CLASSDEF_NAME] = "NAME"
+	ntl[NT_CLASSFIELD] = "CLASSFIELD"
+	ntl[NT_OBJINIT] = "OBJINIT"
 
 	// mypearged
 	ntl[MATYPE_ALL] = "MA_ALL"
@@ -270,7 +274,7 @@ func (d *DebugPrinter) PrettyPrintMype(nod Nod) {
 	d.PrintLocalDataIfExtant(nod)
 	if nod.NodeType == NT_VAR_GETTER {
 		d.buf.WriteString(" ")
-		d.buf.WriteString(NodGetChild(nod, NTR_VAR_GETTER_NAME).Data.(string))
+		d.buf.WriteString(NodGetChild(nod, NTR_VAR_NAME).Data.(string))
 	} else if nod.NodeType == NT_VARDEF {
 		d.buf.WriteString(" ")
 		d.buf.WriteString(NodGetChild(nod, NTR_VARDEF_NAME).Data.(string))

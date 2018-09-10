@@ -45,6 +45,10 @@ func MypeArgedNewEmpty() *MypeArged {
 	return &MypeArged{Node: NodNew(MATYPE_EMPTY)}
 }
 
+func MypeArgedNewNod(n Nod) *MypeArged {
+	return &MypeArged{Node: n}
+}
+
 func (ma *MypeArged) Union(other Mype) Mype {
 	if otherMa, ok := other.(*MypeArged); ok {
 		// check for degenerate case
@@ -167,7 +171,7 @@ func (ma *MypeArged) IsEmpty() bool {
 		return true
 	}
 	if ma.NodeType == MATYPE_SINGLE_BASE || ma.NodeType == MATYPE_ALL ||
-		ma.NodeType == MATYPE_SINGLE_ARGED {
+		ma.NodeType == MATYPE_SINGLE_ARGED || ma.NodeType == NT_CLASSDEF {
 		return false
 	}
 	if ma.NodeType == MATYPE_UNION {
@@ -181,7 +185,7 @@ func (ma *MypeArged) IsFull() bool {
 		return true
 	}
 	if ma.NodeType == MATYPE_EMPTY || ma.NodeType == MATYPE_SINGLE_BASE ||
-		ma.NodeType == MATYPE_SINGLE_ARGED {
+		ma.NodeType == MATYPE_SINGLE_ARGED || ma.NodeType == NT_CLASSDEF {
 		return false
 	}
 	if ma.NodeType == MATYPE_UNION {
@@ -207,6 +211,9 @@ func (ma *MypeArged) WouldChangeFromUnionWith(other Mype) bool {
 		}
 		if ma.NodeType == MATYPE_SINGLE_BASE && otherMa.NodeType == MATYPE_SINGLE_BASE {
 			return ma.Data.(int) != otherMa.Data.(int)
+		}
+		if ma.NodeType == NT_CLASSDEF && otherMa.NodeType == NT_CLASSDEF {
+			return ma.Node != otherMa.Node
 		}
 		if ma.NodeType == MATYPE_SINGLE_ARGED && otherMa.NodeType == MATYPE_SINGLE_ARGED {
 			isEq := ma.ExactDeepEqual(otherMa)

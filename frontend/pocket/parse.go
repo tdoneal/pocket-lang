@@ -144,7 +144,7 @@ func (p *ParserPocket) parseLoop() Nod {
 
 func (p *ParserPocket) parseTopLevel() Nod {
 	units := p.ParseManyGreedy(func() Nod {
-		return p.parseFuncDef()
+		return p.parseTopLevelUnit()
 	})
 
 	fmt.Println("top level units:", PrettyPrintNodes(units))
@@ -154,6 +154,49 @@ func (p *ParserPocket) parseTopLevel() Nod {
 	}
 
 	return NodNewChildList(NT_TOPLEVEL, units)
+}
+
+func (p *ParserPocket) parseTopLevelUnit() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseFuncDef() },
+		func() Nod { return p.parseClassDef() },
+	})
+}
+
+func (p *ParserPocket) parseClassDef() Nod {
+	name := p.parseIdentifier()
+	p.ParseToken(TK_CLASS)
+	p.parseEOL()
+	rv := p.parseClassDefBlock()
+	NodSetChild(rv, NTR_CLASSDEF_NAME, name)
+	return rv
+}
+
+func (p *ParserPocket) parseClassDefBlock() Nod {
+	p.ParseToken(TK_INCINDENT)
+	units := p.ParseAtLeastOneGreedy(func() Nod {
+		return p.parseClassDefUnit()
+	})
+	p.ParseToken(TK_DECINDENT)
+	return NodNewChildList(NT_CLASSDEF, units)
+}
+
+func (p *ParserPocket) parseClassDefUnit() Nod {
+	rv := p.parseClassDefField()
+	p.parseEOL()
+	return rv
+}
+
+func (p *ParserPocket) parseClassDefField() Nod {
+	name := p.parseIdentifier()
+	optType := p.ParseAtMostOne(func() Nod { return p.parseType() })
+
+	rv := NodNew(NT_CLASSFIELD)
+	NodSetChild(rv, NTR_VARDEF_NAME, name)
+	if optType != nil {
+		NodSetChild(rv, NTR_TYPE_DECL, optType)
+	}
+	return rv
 }
 
 func (p *ParserPocket) parseStatement() Nod {
@@ -187,6 +230,23 @@ func (p *ParserPocket) parseReturnStatement() Nod {
 }
 
 func (p *ParserPocket) parseVarAssign() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseVarAssignLocal() },
+		func() Nod { return p.parseVarAssignComplex() },
+	})
+}
+
+func (p *ParserPocket) parseVarAssignComplex() Nod {
+	lval := p.parseLValue()
+	p.parseColon()
+	rval := p.parseValue()
+	rv := NodNew(NT_VARASSIGN)
+	NodSetChild(rv, NTR_VAR_NAME, lval)
+	NodSetChild(rv, NTR_VARASSIGN_VALUE, rval)
+	return rv
+}
+
+func (p *ParserPocket) parseVarAssignLocal() Nod {
 	name := p.parseVarName()
 	varType := p.ParseAtMostOne(func() Nod { return p.parseType() })
 	p.parseColon()
@@ -235,6 +295,30 @@ func (p *ParserPocket) parseValueInlineOpStream() Nod {
 	}
 
 	return NodNewChildList(NT_INLINEOPSTREAM, elements)
+}
+
+func (p *ParserPocket) parseLValue() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseLValueDotStream() },
+		func() Nod { return p.parseValueParenthetical() },
+		func() Nod { return p.parseLiteral() },
+		func() Nod { return p.parseReceiverCall() },
+		func() Nod { return p.parseVarGetter() },
+	})
+}
+
+func (p *ParserPocket) parseLValueDotStream() Nod {
+	baseVal := p.parseValueAtomic()
+	dotPattern := []ParseFunc{
+		func() Nod { p.ParseToken(TK_DOT); return NodNew(NT_DOTOP) },
+		func() Nod { return p.parseIdentifier() },
+	}
+	dotSeq := p.ParseUnrolledSequenceGreedy(dotPattern)
+	streamNods := []Nod{baseVal}
+	streamNods = append(streamNods, dotSeq...)
+	rv := NodNew(NT_INLINEOPSTREAM)
+	NodSetOutList(rv, streamNods)
+	return rv
 }
 
 func (p *ParserPocket) parseValueAtomic() Nod {
@@ -511,7 +595,7 @@ func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {
 }
 
 func (p *ParserPocket) parseVarGetter() Nod {
-	return NodNewChild(NT_VAR_GETTER, NTR_VAR_GETTER_NAME, p.parseIdentifier())
+	return NodNewChild(NT_VAR_GETTER, NTR_VAR_NAME, p.parseIdentifier())
 }
 
 func (p *ParserPocket) parseTokenAlphanumeric() *types.Token {

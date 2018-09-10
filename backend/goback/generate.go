@@ -44,10 +44,34 @@ func (g *Generator) genSourceFile(input Nod) {
 	for _, unit := range units {
 		if unit.NodeType == NT_FUNCDEF {
 			g.genFuncDef(unit)
+		} else if unit.NodeType == NT_CLASSDEF {
+			g.genClassDef(unit)
 		} else {
 			panic("unknown source unit type")
 		}
 	}
+}
+
+func (g *Generator) genClassDef(n Nod) {
+	g.WS("type ")
+	g.WS(NodGetChild(n, NTR_CLASSDEF_NAME).Data.(string))
+	g.WS(" struct {\n")
+	clsUnits := NodGetChildList(n)
+
+	for _, unit := range clsUnits {
+		if unit.NodeType == NT_CLASSFIELD {
+			g.genClassField(unit)
+		} else {
+			g.WS("clsunit")
+		}
+		g.WS("\n")
+	}
+	g.WS("}\n")
+}
+
+func (g *Generator) genClassField(n Nod) {
+	g.WS(NodGetChild(n, NTR_VARDEF_NAME).Data.(string))
+	g.WS(" interface{}")
 }
 
 func (g *Generator) genFuncInType(n Nod) {
@@ -203,6 +227,8 @@ func (g *Generator) getGenType(n Nod) string {
 		return g.getGenTypeBase(n)
 	} else if n.NodeType == NT_TYPEARGED {
 		return g.getGenTypeArged(n)
+	} else if n.NodeType == NT_CLASSDEF {
+		return "*" + NodGetChild(n, NTR_CLASSDEF_NAME).Data.(string)
 	} else {
 		return "<type>"
 	}
@@ -313,13 +339,26 @@ func (g *Generator) genReturn(input Nod) {
 }
 
 func (g *Generator) genVarAssign(n Nod) {
-	varName := NodGetChild(n, NTR_VAR_NAME).Data.(string)
 
-	g.WS(varName)
+	lvalue := NodGetChild(n, NTR_VAR_NAME)
+	g.genLValue(lvalue)
+
 	g.WS(" = ")
 	g.WS("(")
 	g.genValue(NodGetChild(n, NTR_VARASSIGN_VALUE))
 	g.WS(")")
+}
+
+func (g *Generator) genLValue(n Nod) {
+	if n.NodeType == NT_DOTOP {
+		g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
+		g.WS(".")
+		g.WS(NodGetChild(n, NTR_BINOP_RIGHT).Data.(string))
+	} else if n.NodeType == NT_IDENTIFIER {
+		g.WS(n.Data.(string))
+	} else {
+		g.WS("lvalue")
+	}
 }
 
 func (g *Generator) genReceiverCall(n Nod) {
@@ -369,8 +408,8 @@ func (g *Generator) genValue(n Nod) {
 		g.genLiteralMap(n)
 	} else if nt == NT_RECEIVERCALL {
 		g.genReceiverCall(n)
-	} else if nt == NT_CALLOBJINIT {
-		g.genCallObjInit(n)
+	} else if nt == NT_OBJINIT {
+		g.genObjInit(n)
 	} else if nt == NT_DOTOP {
 		g.genDotOp(n)
 	} else if g.isBinaryInlineDuckOpType(n.NodeType) {
@@ -382,28 +421,43 @@ func (g *Generator) genValue(n Nod) {
 	}
 }
 
-func (g *Generator) genCallObjInit(n Nod) {
+func (g *Generator) genObjInit(n Nod) {
 	// for now only will work for primitive types (outputs as go casts)
-	argNodType := NodGetChild(NodGetChild(n, NTR_RECEIVERCALL_ARG), NTR_TYPE)
-	if argNodType.NodeType == NT_TYPEBASE {
-		fmt.Println("curr type gen", PrettyPrint(argNodType))
-		if argNodType.Data.(int) == TY_DUCK {
-			// use go type assertions
-			g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
-			g.WS(".")
-			g.WS("(")
-			g.genType(NodGetChild(n, NTR_RECEIVERCALL_BASE))
-			g.WS(")")
-		} else {
-			// use go casts
-			g.genType(NodGetChild(n, NTR_RECEIVERCALL_BASE))
-			g.WS("(")
-			g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
-			g.WS(")")
-		}
+	baseNod := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+	// argNod := NodGetChild(n, NTR_RECEIVERCALL_ARG)
+
+	if baseNod.NodeType == NT_CLASSDEF {
+		// struct initializer
+		clsName := NodGetChild(baseNod, NTR_CLASSDEF_NAME).Data.(string)
+		g.WS("&")
+		g.WS(clsName)
+		g.WS("{")
+		g.WS("}")
 	} else {
-		g.WS("(object initializer)")
+		panic("couldn't handle obj init base:" + PrettyPrint(baseNod))
 	}
+
+	// if argNodType.NodeType == NT_TYPEBASE {
+	// 	argNodType := NodGetChild(NodGetChild(n, NTR_RECEIVERCALL_ARG), NTR_TYPE)
+
+	// 	fmt.Println("curr type gen", PrettyPrint(argNodType))
+	// 	if argNodType.Data.(int) == TY_DUCK {
+	// 		// use go type assertions
+	// 		g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
+	// 		g.WS(".")
+	// 		g.WS("(")
+	// 		g.genType(NodGetChild(n, NTR_RECEIVERCALL_BASE))
+	// 		g.WS(")")
+	// 	} else {
+	// 		// use go casts
+	// 		g.genType(NodGetChild(n, NTR_RECEIVERCALL_BASE))
+	// 		g.WS("(")
+	// 		g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
+	// 		g.WS(")")
+	// 	}
+	// } else {
+	// 	g.WS("(object initializer)")
+	// }
 
 }
 
@@ -423,7 +477,7 @@ func (g *Generator) genDotOp(n Nod) {
 		g.genValue(objNod)
 		g.WS(")")
 		g.WS(".")
-		g.WS("qualname")
+		g.WS(qualName)
 	}
 }
 
@@ -558,7 +612,7 @@ func (g *Generator) genLiteralList(n Nod) {
 }
 
 func (g *Generator) genVarGetter(n Nod) {
-	varName := NodGetChild(n, NTR_VAR_GETTER_NAME).Data.(string)
+	varName := NodGetChild(n, NTR_VAR_NAME).Data.(string)
 	g.WS(varName)
 }
 

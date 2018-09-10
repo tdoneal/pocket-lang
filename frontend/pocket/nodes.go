@@ -15,7 +15,6 @@ const (
 	NT_RECEIVERCALL_CMD     = 31
 	NTR_RECEIVERCALL_BASE   = 33
 	NTR_RECEIVERCALL_ARG    = 34
-	NT_CALLOBJINIT          = 35
 	NT_IDENTIFIER           = 40
 	NT_TYPEBASE             = 41
 	NT_TYPEARGED            = 42
@@ -76,7 +75,13 @@ const (
 	NT_DOTPIPEOP            = 114
 	NTR_BINOP_LEFT          = 118
 	NTR_BINOP_RIGHT         = 119
-	NT_INLINEOPSTREAM       = 150
+	NT_INLINEOPSTREAM       = 125
+	NT_CLASSDEF             = 150
+	NTR_CLASSDEF_NAME       = 151
+	NT_CLASSFIELD           = 155
+	NT_CLASSTABLE           = 160
+	NTR_CLASSTABLE          = 161
+	NT_OBJINIT              = 165
 	NTR_LIT_VALUE           = 201
 	NT_LIT_BOOL             = 206
 	NT_LIT_INT              = 210
@@ -90,6 +95,5 @@ const (
 	NT_LIT_SET              = 239
 	NT_LIT_PRIMITIVE        = 240
 	NT_VAR_GETTER           = 250
-	NTR_VAR_GETTER_NAME     = 251
 	NT_DOTOP_QUALIFIER      = 253
 )

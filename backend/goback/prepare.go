@@ -61,7 +61,7 @@ func (p *Preparer) createExplicitIndexors() {
 		varName := NodGetChild(listCall, NTR_RECEIVERCALL_BASE).Data.(string)
 		liArgs := []Nod{}
 		listGetter := NodNew(NT_VAR_GETTER)
-		NodSetChild(listGetter, NTR_VAR_GETTER_NAME, NodNewData(NT_IDENTIFIER, varName))
+		NodSetChild(listGetter, NTR_VAR_NAME, NodNewData(NT_IDENTIFIER, varName))
 		varDef := NodGetChild(listCall, NTR_FUNCDEF)
 		varType := NodGetChild(varDef, NTR_TYPE)
 		NodSetChild(listGetter, NTR_TYPE, varType)

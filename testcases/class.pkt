@@ -4,6 +4,6 @@ Point class
 
 main func
     p : Point()
-    p.x : 6
+    p.x : 3
     print p.x
-
+>>>3

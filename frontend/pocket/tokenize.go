@@ -65,6 +65,7 @@ const (
 	TK_MAP           = 126
 	TK_FALSE         = 130
 	TK_TRUE          = 131
+	TK_CLASS         = 150
 )
 
 func Tokenize(input string) []types.Token {
@@ -417,6 +418,8 @@ func (tkzr *TokenizerPocket) checkKeyword(word string) int {
 		return TK_IN
 	} else if word == "pass" {
 		return TK_PASS
+	} else if word == "class" {
+		return TK_CLASS
 	}
 	return -1
 }
