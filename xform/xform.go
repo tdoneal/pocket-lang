@@ -33,10 +33,12 @@ func (x *Xformer) Replace(what Nod, with Nod) {
 }
 
 type Searcher struct {
-	alreadySeen       map[Nod]bool
-	output            []Nod
-	condition         func(Nod) bool
-	nextNodEnumerator func(Nod) []Nod
+	alreadySeen        map[Nod]bool
+	output             []Nod
+	condition          func(Nod) bool
+	nextNodEnumerator  func(Nod) []Nod
+	earlyStopCondition func([]Nod) bool
+	terminated         bool
 }
 
 func SearcherNew() *Searcher {
@@ -48,11 +50,21 @@ func SearcherNew() *Searcher {
 }
 
 func (x *Xformer) SearchRoot(condition func(Nod) bool) []Nod {
-	return x.SearchFor(x.Root,
+	return x.SearchFrom(x.Root,
 		condition,
 		func(n Nod) []Nod {
 			return x.AllOutNodes(n)
-		})
+		}, func(ns []Nod) bool { return false })
+}
+
+func (x *Xformer) SearchNodList(nods []Nod, condition func(Nod) bool) []Nod {
+	rv := []Nod{}
+	for _, ele := range nods {
+		if condition(ele) {
+			rv = append(rv, ele)
+		}
+	}
+	return rv
 }
 
 func (x *Xformer) AllOutNodes(n Nod) []Nod {
@@ -71,10 +83,11 @@ func (x *Xformer) AllInNodes(n Nod) []Nod {
 	return rv
 }
 
-func (x *Xformer) SearchFor(start Nod, condition func(Nod) bool, nextEnumerator func(Nod) []Nod) []Nod {
+func (x *Xformer) SearchFrom(start Nod, condition func(Nod) bool, nextEnumerator func(Nod) []Nod, earlyStop func([]Nod) bool) []Nod {
 	s := SearcherNew()
 	s.condition = condition
 	s.nextNodEnumerator = nextEnumerator
+	s.earlyStopCondition = earlyStop
 	s.search(start)
 	return s.output
 }
@@ -88,11 +101,18 @@ func (x *Xformer) GetNodeTypeCondition(nodeType int) func(Nod) bool {
 }
 
 func (s *Searcher) search(node Nod) {
+	if s.terminated {
+		return
+	}
 	if _, ok := s.alreadySeen[node]; ok {
 		return
 	}
 	if s.condition(node) {
 		s.output = append(s.output, node)
+		if s.earlyStopCondition(s.output) {
+			s.terminated = true
+			return
+		}
 	}
 	s.alreadySeen[node] = true
 	nextNodes := s.nextNodEnumerator(node)

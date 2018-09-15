@@ -1,4 +1,4 @@
-package pocket
+package common
 
 // Represents a set of types
 

@@ -1,4 +1,4 @@
-package pocket
+package common
 
 import (
 	"bytes"
@@ -105,6 +105,8 @@ func (d *Debug) initialize() {
 	ntl[NT_CLASSDEF] = "CLASSDEF"
 	ntl[NTR_CLASSDEF_NAME] = "NAME"
 	ntl[NT_CLASSFIELD] = "CLASSFIELD"
+	ntl[NT_CLASSTABLE] = "CLASSTABLE"
+	ntl[NTR_CLASSTABLE] = "CLASSTABLE"
 	ntl[NT_OBJINIT] = "OBJINIT"
 
 	// mypearged
@@ -211,10 +213,15 @@ func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 	} else if val, ok := node.Data.(*MypeExplicit); ok {
 		d.llPrintMypeObject(val)
 	} else if val, ok := node.Data.(*MypeArged); ok {
-		subPrinter := DebugPrinterNew()
-		subPrinter.PrettyPrint(val.Node)
 		d.buf.WriteString(";; ")
-		d.buf.WriteString(subPrinter.buf.String())
+		if val.Node.NodeType == NT_CLASSDEF { // special handling to avoid infinite recursion
+			clsName := NodGetChild(val.Node, NTR_CLASSDEF_NAME).Data.(string)
+			d.buf.WriteString(clsName)
+		} else {
+			subPrinter := DebugPrinterNew()
+			subPrinter.PrettyPrint(val.Node)
+			d.buf.WriteString(subPrinter.buf.String())
+		}
 	}
 }
 

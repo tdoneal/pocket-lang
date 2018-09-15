@@ -1,347 +1,10 @@
-package pocket
+package xform
 
 import (
 	"fmt"
+	. "pocket-lang/frontend/pocket/common"
 	. "pocket-lang/parse"
-	. "pocket-lang/xform"
-	"strconv"
 )
-
-const (
-	TY_VOID   = 1
-	TY_BOOL   = 2
-	TY_INT    = 3
-	TY_FLOAT  = 4
-	TY_STRING = 5
-	TY_SET    = 6
-	TY_MAP    = 7
-	TY_LIST   = 8
-	TY_OBJECT = 20
-	TY_NUMBER = 22
-	TY_DUCK   = 30
-)
-
-const (
-	VSCOPE_FUNCLOCAL = 1
-	VSCOPE_FUNCPARAM = 2
-)
-
-type XformerPocket struct {
-	*Xformer
-	tempVarCounter int
-}
-
-func Xform(root Nod) Nod {
-	fmt.Println("starting Xform()")
-
-	xformer := &XformerPocket{&Xformer{}, 0}
-
-	xformer.Root = root
-	xformer.Xform()
-	return root
-}
-
-func (x *XformerPocket) Xform() {
-	x.prepare()
-	x.desugar()
-
-	fmt.Println("after desugaring:", PrettyPrint(x.Root))
-
-	x.annotateDotScopes()
-	x.buildClassTable()
-	x.buildFuncDefTables()
-	fmt.Println("after func table:", PrettyPrint(x.Root))
-	x.buildVarDefTables()
-	// now do second pass of resolving functions, specifically those that may refer to variables in a local scope
-	x.linkCallsToVariableFuncdefs()
-	x.checkAllCallsResolved()
-
-	fmt.Println("after building var def tables:", PrettyPrint(x.Root))
-
-	x.solveTypes()
-}
-
-func (x *XformerPocket) prepare() {
-	x.parseInlineOpStreams()
-}
-
-func (x *XformerPocket) desugar() {
-	x.rewriteDotPipesAsFunctionCalls()
-	x.rewriteForInLoops()
-}
-
-func (x *XformerPocket) rewriteDotPipesAsFunctionCalls() {
-	x.SearchReplaceAll(
-		func(n Nod) bool {
-			return n.NodeType == NT_DOTPIPEOP
-		},
-		func(n Nod) Nod {
-			dpFun := NodGetChild(n, NTR_BINOP_RIGHT)
-			if dpFun.NodeType == NT_TYPEBASE {
-				rv := NodNew(NT_OBJINIT)
-				NodSetChild(rv, NTR_RECEIVERCALL_BASE, NodGetChild(n, NTR_BINOP_RIGHT))
-				NodSetChild(rv, NTR_RECEIVERCALL_ARG, NodGetChild(n, NTR_BINOP_LEFT))
-				return rv
-			}
-			panic("unsupported right arg of dotpipe")
-		},
-	)
-}
-
-func (x *XformerPocket) rewriteForInLoops() {
-	forLoops := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_FOR })
-	for _, forLoop := range forLoops {
-		x.Replace(forLoop, x.rewriteForInLoop(forLoop))
-	}
-}
-
-func (x *XformerPocket) getTempVarName() string {
-	rv := "__pkx" + strconv.Itoa(x.tempVarCounter) + "__"
-	x.tempVarCounter++
-	return rv
-}
-
-func (x *XformerPocket) rewriteForInLoop(forLoop Nod) Nod {
-	// rewrites the for <var> in <list> : body syntax
-	// to a lower level form involving a while loop and an index variable
-	rvSeq := []Nod{}
-	loopOver := NodGetChild(forLoop, NTR_FOR_ITEROVER)
-	declaredElementVarName := NodGetChild(forLoop, NTR_FOR_ITERVAR).Data.(string)
-	ndxVarName := x.getTempVarName()
-	iterOverVarName := x.getTempVarName()
-	// generate the effective code: __ndx_var__ : 0
-	ndxVarInitializer := NodNew(NT_VARASSIGN)
-	ndxVarIdentifier := NodNewData(NT_IDENTIFIER, ndxVarName)
-	ndxVarInitValue := NodNewData(NT_LIT_INT, 0)
-	NodSetChild(ndxVarInitializer, NTR_VAR_NAME, ndxVarIdentifier)
-	NodSetChild(ndxVarInitializer, NTR_VARASSIGN_VALUE, ndxVarInitValue)
-
-	// __iterover_var__: <iterover>
-	iterOverVarInitializer := NodNew(NT_VARASSIGN)
-	iterOverVarIdentifier := NodNewData(NT_IDENTIFIER, iterOverVarName)
-	iterOverVarInitValue := loopOver
-	NodSetChild(iterOverVarInitializer, NTR_VAR_NAME, iterOverVarIdentifier)
-	NodSetChild(iterOverVarInitializer, NTR_VARASSIGN_VALUE, iterOverVarInitValue)
-
-	loopBodySeq := []Nod{}
-	// while __ndx__ < seq.len
-	termCond := NodNew(NT_LTOP)
-	termCondNdxVarGetter := NodNewChild(NT_VAR_GETTER, NTR_VAR_NAME,
-		NodNewData(NT_IDENTIFIER, ndxVarName))
-	termCondLenGetter := NodNew(NT_DOTOP)
-	NodSetChild(termCondLenGetter, NTR_BINOP_LEFT,
-		NodNewChild(NT_VAR_GETTER, NTR_VAR_NAME,
-			NodNewData(NT_IDENTIFIER, iterOverVarName)))
-	NodSetChild(termCondLenGetter, NTR_BINOP_RIGHT, NodNewData(NT_IDENTIFIER, "len"))
-	NodSetChild(termCond, NTR_BINOP_LEFT, termCondNdxVarGetter)
-	NodSetChild(termCond, NTR_BINOP_RIGHT, termCondLenGetter)
-
-	// <itervar>: __iterover_var__[__ndx__]
-	iterVarAssigner := NodNew(NT_VARASSIGN)
-	NodSetChild(iterVarAssigner, NTR_VAR_NAME, NodNewData(NT_IDENTIFIER, declaredElementVarName))
-	iterVarAssignerValue := NodNew(NT_RECEIVERCALL)
-	// generate the list indexor as a receiver call
-	NodSetChild(iterVarAssignerValue, NTR_RECEIVERCALL_BASE, NodNewData(NT_IDENTIFIER, iterOverVarName))
-	NodSetChild(iterVarAssignerValue, NTR_RECEIVERCALL_ARG,
-		NodNewChild(NT_VAR_GETTER, NTR_VAR_NAME,
-			NodNewData(NT_IDENTIFIER, ndxVarName)))
-	NodSetChild(iterVarAssigner, NTR_VARASSIGN_VALUE, iterVarAssignerValue)
-	loopBodySeq = append(loopBodySeq, iterVarAssigner)
-
-	// actual user body
-	loopBodySeq = append(loopBodySeq, NodGetChild(forLoop, NTR_FOR_BODY))
-
-	// __ndx__++
-	ndxVarIncrementor := NodNew(NT_VARASSIGN)
-	NodSetChild(ndxVarIncrementor, NTR_VAR_NAME, NodNewData(NT_IDENTIFIER, ndxVarName))
-	ndxVarIncrementorValue := NodNew(NT_ADDOP)
-	NodSetChild(ndxVarIncrementorValue, NTR_BINOP_LEFT, NodNewChild(
-		NT_VAR_GETTER, NTR_VAR_NAME, NodNewData(NT_IDENTIFIER, ndxVarName)))
-	NodSetChild(ndxVarIncrementorValue, NTR_BINOP_RIGHT, NodNewData(
-		NT_LIT_INT, 1))
-	NodSetChild(ndxVarIncrementor, NTR_VARASSIGN_VALUE, ndxVarIncrementorValue)
-	loopBodySeq = append(loopBodySeq, ndxVarIncrementor)
-
-	// put it all together and return
-	whileLoop := NodNew(NT_WHILE)
-	NodSetChild(whileLoop, NTR_WHILE_COND, termCond)
-	NodSetChild(whileLoop, NTR_WHILE_BODY, NodNewChildList(NT_IMPERATIVE, loopBodySeq))
-
-	rvSeq = append(rvSeq, ndxVarInitializer)
-	rvSeq = append(rvSeq, iterOverVarInitializer)
-	rvSeq = append(rvSeq, whileLoop)
-	rv := NodNewChildList(NT_IMPERATIVE, rvSeq)
-	return rv
-
-}
-
-func (x *XformerPocket) annotateDotScopes() {
-	allDotOps := x.SearchRoot(func(n Nod) bool {
-		return n.NodeType == NT_DOTOP
-	})
-
-	// rewrite the right side of dot ops to be simple NT_IDENTIFIERs
-	for _, dotOp := range allDotOps {
-		rightArg := NodGetChild(dotOp, NTR_BINOP_RIGHT)
-		if rightArg.NodeType == NT_VAR_GETTER {
-			varName := NodGetChild(rightArg, NTR_VAR_NAME).Data.(string)
-			newNode := NodNewData(NT_IDENTIFIER, varName)
-			x.Replace(rightArg, newNode)
-		} else if rightArg.NodeType == NT_IDENTIFIER {
-			// pass, everything looks good already
-		} else {
-			panic("illegal expression on right side of dot")
-		}
-	}
-
-}
-
-func isSystemCall(n Nod) bool {
-	if isReceiverCallType(n.NodeType) {
-		base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
-		if callName, ok := base.Data.(string); ok {
-			return isSystemFuncName(callName)
-		}
-	}
-	return false
-}
-
-func (x *XformerPocket) linkCallsToVariableFuncdefs() {
-	// find all unresolved calls that could refer to a local variable
-	unresCalls := x.SearchRoot(func(n Nod) bool {
-		if isReceiverCallType(n.NodeType) && !isSystemCall(n) {
-			if NodGetChild(n, NTR_RECEIVERCALL_BASE).NodeType == NT_IDENTIFIER {
-				if !NodHasChild(n, NTR_FUNCDEF) {
-					return true
-				}
-			}
-		}
-		return false
-	})
-
-	for _, call := range unresCalls {
-		varTable := x.getEnclosingVarTable(call)
-		varDefs := NodGetChildList(varTable)
-		callName := NodGetChild(call, NTR_RECEIVERCALL_BASE).Data.(string)
-		var matchedVarDef Nod
-		for _, varDef := range varDefs {
-			varName := NodGetChild(varDef, NTR_VARDEF_NAME).Data.(string)
-			if callName == varName {
-				matchedVarDef = varDef
-				break
-			}
-		}
-		if matchedVarDef != nil {
-			NodSetChild(call, NTR_FUNCDEF, matchedVarDef)
-		}
-	}
-}
-
-func (x *XformerPocket) getEnclosingVarTable(n Nod) Nod {
-	funcDef := x.findTopLevelFuncDef(n)
-	return NodGetChild(funcDef, NTR_VARTABLE)
-}
-
-func isReceiverCallType(nt int) bool {
-	return nt == NT_RECEIVERCALL || nt == NT_RECEIVERCALL_CMD
-}
-
-func (x *XformerPocket) checkAllCallsResolved() {
-	calls := x.SearchRoot(func(n Nod) bool {
-		return isReceiverCallType(n.NodeType)
-	})
-	for _, call := range calls {
-		base := NodGetChild(call, NTR_RECEIVERCALL_BASE)
-		if isSystemCall(call) || base.NodeType == NT_DOTOP {
-			continue // don't check these
-		}
-
-		if !NodHasChild(call, NTR_FUNCDEF) {
-			panic("unknown function '" + PrettyPrint(base) + "'")
-		}
-	}
-}
-
-func isSystemFuncName(name string) bool {
-	return name == "print" || name == "$li"
-}
-
-func (x *XformerPocket) buildClassTable() {
-	clsDefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_CLASSDEF })
-	clsTable := NodNewChildList(NT_CLASSTABLE, clsDefs)
-	NodSetChild(x.Root, NTR_CLASSTABLE, clsTable)
-}
-
-func (x *XformerPocket) buildFuncDefTables() {
-	funcDefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_FUNCDEF })
-	clsDefs := NodGetChildList(NodGetChild(x.Root, NTR_CLASSTABLE))
-	funcTable := NodNewChildList(NT_FUNCTABLE, funcDefs)
-	NodSetChild(x.Root, NTR_FUNCTABLE, funcTable)
-
-	// link functional calls to their associated def (if found)
-	calls := x.SearchRoot(func(n Nod) bool { return isReceiverCallType(n.NodeType) })
-	for _, call := range calls {
-		base := NodGetChild(call, NTR_RECEIVERCALL_BASE)
-		if callName, ok := base.Data.(string); ok {
-			if isSystemFuncName(callName) {
-				// continue, don't worry about linking system funcs
-				// as by definition there is nothing to point them to
-				continue
-			}
-			fmt.Println("call name", callName)
-			// lookup function in func table (naive linear search for now)
-			var matchedFuncDef Nod
-			for _, funcDef := range funcDefs {
-				funcDefName := NodGetChild(funcDef, NTR_FUNCDEF_NAME).Data.(string)
-				if callName == funcDefName {
-					matchedFuncDef = funcDef
-					break
-				}
-			}
-
-			if matchedFuncDef != nil {
-				NodSetChild(call, NTR_FUNCDEF, matchedFuncDef)
-			}
-		}
-	}
-
-	// link calls to associated object initializer if aproppriate
-	for _, call := range calls {
-		base := NodGetChild(call, NTR_RECEIVERCALL_BASE)
-		if callName, ok := base.Data.(string); ok {
-			// lookup function in class table (indicating an object initializer)
-			var matchedClsDef Nod
-			for _, clsDef := range clsDefs {
-				clsName := NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string)
-				if callName == clsName {
-					matchedClsDef = clsDef
-					break
-				}
-			}
-			if matchedClsDef != nil {
-				// rewrite the call in-place -> object initializer
-				NodSetChild(call, NTR_RECEIVERCALL_BASE, matchedClsDef)
-				call.NodeType = NT_OBJINIT
-			}
-		}
-	}
-}
-
-func (x *XformerPocket) parseInlineOpStreams() {
-	x.applyRewriteOnGraph(&RewriteRule{
-		condition: func(n Nod) bool {
-			return n.NodeType == NT_INLINEOPSTREAM
-		},
-		action: func(n Nod) {
-			x.Replace(n, x.parseInlineOpStream(n))
-		},
-	})
-}
-
-type RewriteRule struct {
-	condition func(n Nod) bool
-	action    func(n Nod)
-}
 
 func (x *XformerPocket) getInitMypeNodFull() Nod {
 	md := MypeArgedNewFull()
@@ -351,55 +14,6 @@ func (x *XformerPocket) getInitMypeNodFull() Nod {
 func (x *XformerPocket) getInitMypeNodEmpty() Nod {
 	md := MypeArgedNewEmpty()
 	return NodNewData(NT_MYPE, md)
-}
-
-func isLiteralNodeType(nt int) bool {
-	return isPrimitiveLiteralNodeType(nt) ||
-		isCollectionLiteralNodeType(nt)
-
-}
-
-func isCollectionLiteralNodeType(nt int) bool {
-	return nt == NT_LIT_MAP || nt == NT_LIT_LIST ||
-		nt == NT_LIT_SET
-}
-
-func isPrimitiveLiteralNodeType(nt int) bool {
-	return nt == NT_LIT_INT || nt == NT_LIT_STRING ||
-		nt == NT_LIT_BOOL || nt == NT_LIT_FLOAT
-}
-
-func getLiteralTypeAnnDataFromNT(nt int) int {
-	lut := map[int]int{
-		NT_LIT_INT:    TY_INT,
-		NT_LIT_STRING: TY_STRING,
-		NT_LIT_BOOL:   TY_BOOL,
-		NT_LIT_FLOAT:  TY_FLOAT,
-		NT_LIT_LIST:   TY_LIST,
-		NT_LIT_SET:    TY_SET,
-		NT_LIT_MAP:    TY_MAP,
-	}
-	if rv, ok := lut[nt]; ok {
-		return rv
-	} else {
-		panic("unknown literal type: " + strconv.Itoa(nt))
-	}
-}
-
-func isBinaryOpType(nt int) bool {
-	return nt == NT_ADDOP || nt == NT_GTOP || nt == NT_LTOP ||
-		nt == NT_GTEQOP || nt == NT_LTEQOP || nt == NT_EQOP ||
-		nt == NT_SUBOP || nt == NT_DIVOP || nt == NT_MULOP ||
-		nt == NT_OROP || nt == NT_ANDOP || nt == NT_MODOP ||
-		nt == NT_DOTOP || nt == NT_DOTPIPEOP
-}
-
-func isVarReferenceNT(nt int) bool {
-	return nt == NT_VAR_GETTER || nt == NT_VARASSIGN || nt == NT_PARAMETER
-}
-
-func isCallType(nt int) bool {
-	return nt == NT_RECEIVERCALL || nt == NT_OBJINIT
 }
 
 func (x *XformerPocket) initializePosNegMypes(n Nod) {
@@ -453,9 +67,12 @@ func (x *XformerPocket) solveTypes() {
 	// apply positive rules
 	positiveRules := x.getAllPositiveMARRules()
 	x.applyRewritesUntilStable(nodes, positiveRules)
+	fmt.Println("after pos rules")
 	// apply negative rules
 	negativeRules := x.getAllNegativeMARRules()
+	fmt.Println("starting apply neg rules")
 	x.applyRewritesUntilStable(nodes, negativeRules)
+
 	fmt.Println("after positive and negative rules:", PrettyPrintMypes(nodes))
 	// generate the "valid" mypes by intersecting the negative with the positive
 	x.generateValidMypes(nodes)
@@ -468,9 +85,7 @@ func (x *XformerPocket) generateValidMypes(nodes []Nod) {
 	for _, node := range nodes {
 		posMype := NodGetChild(node, NTR_MYPE_POS).Data.(Mype)
 		negMype := NodGetChild(node, NTR_MYPE_NEG).Data.(Mype)
-		fmt.Println("inputs were", PrettyPrintNodes([]Nod{posMype.(*MypeArged).Node, negMype.(*MypeArged).Node}))
 		validMype := posMype.Intersection(negMype)
-		fmt.Println("output is", PrettyPrint(validMype.(*MypeArged).Node))
 
 		if validMype.IsEmpty() {
 			panic("couldn't find a valid type for node: " + PrettyPrintMype(node))
@@ -516,10 +131,35 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		marPosObjInitPrim(),
 		marPosObjInitUser(),
 		marPosObjAccessor(),
+		marPosOwnField(),
 	}
 	rv = append(rv, marPosOpEvaluateRules()...)
 	rv = append(rv, x.marPosUserFuncEvaluateRules()...)
 	return rv
+}
+
+func marPosOwnField() *RewriteRule {
+	// refernces to internal class variables -> all (for now)
+	// TODO: support stricter typing
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_VAR_GETTER {
+				varDef := NodGetChild(n, NTR_VARDEF)
+				if scope := NodGetChildOrNil(varDef, NTR_VARDEF_SCOPE); scope != nil {
+					if scope.Data.(int) == VSCOPE_CLASSFIELD {
+						// we don't properly support typed fields yet, so
+						// just say it could be anything
+						return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
+					}
+				}
+
+			}
+			return false
+		},
+		action: func(n Nod) {
+			NodGetChild(n, NTR_MYPE_POS).Data = XMypeNewFull()
+		},
+	}
 }
 
 func marPosObjAccessor() *RewriteRule {
@@ -822,8 +462,6 @@ func marPosVarAssign() *RewriteRule {
 				mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE_POS).Data.(Mype)
 
 				if mypeLHS.WouldChangeFromUnionWith(mypeRHS) {
-					fmt.Println("thought that the union of", PrettyPrint(mypeLHS.(*MypeArged).Node),
-						"and", PrettyPrint(mypeRHS.(*MypeArged).Node), "would result in changes")
 					return true
 				}
 			}
@@ -833,7 +471,6 @@ func marPosVarAssign() *RewriteRule {
 			mypeLHS := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
 			mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE_POS).Data.(Mype)
 			newLHS := mypeLHS.Union(mypeRHS)
-			fmt.Println("created new LHS:", PrettyPrint(newLHS.(*MypeArged).Node))
 			NodGetChild(n, NTR_MYPE_POS).Data = newLHS
 		},
 	}
@@ -1050,235 +687,4 @@ func marPosPrimitiveLiterals() *RewriteRule {
 			NodGetChild(n, NTR_MYPE_POS).Data = XMypeNewSingleBase(ty)
 		},
 	}
-}
-
-func (x *XformerPocket) applyRewritesUntilStable(nods []Nod, rules []*RewriteRule) {
-	nPasses := 0
-	for {
-		maxApplied := 0
-		for _, rule := range rules {
-			nApplied := x.applyRewriteRuleOnJust(nods, rule)
-			if nPasses > 10 && nApplied > 0 {
-				rule.action(nil)
-			}
-			if nApplied > maxApplied {
-				maxApplied = nApplied
-			}
-		}
-		if maxApplied == 0 {
-			break
-		}
-		nPasses++
-		fmt.Println("nPasses", nPasses)
-	}
-}
-
-func (x *XformerPocket) applyRewriteOnGraph(rule *RewriteRule) int {
-	nApplied := 0
-	nods := x.SearchRoot(rule.condition)
-	for _, ele := range nods {
-		rule.action(ele)
-		nApplied++
-	}
-	return nApplied
-}
-
-func (x *XformerPocket) applyRewriteRuleOnJust(nods []Nod, rule *RewriteRule) int {
-	nApplied := 0
-	for _, ele := range nods {
-		if rule.condition(ele) {
-			rule.action(ele)
-			nApplied++
-		}
-	}
-	return nApplied
-}
-
-func (x *XformerPocket) isLocalVarRef(n Nod) bool {
-	if n.NodeType == NT_PARAMETER {
-		return true
-	}
-	if n.NodeType == NT_VARASSIGN || n.NodeType == NT_VAR_GETTER {
-		// make sure to ignore non-local assignments
-		if NodGetChild(n, NTR_VAR_NAME).NodeType == NT_IDENTIFIER {
-			return true
-		}
-	}
-	return false
-}
-
-func (x *XformerPocket) buildVarDefTables() {
-	// find all local variable assignments and construct
-	// the canonical union of variables
-
-	// determine which (top-level) imperatives have which local vars
-	varReferences := x.SearchRoot(func(n Nod) bool {
-		return x.isLocalVarRef(n)
-	})
-	impToVarRef := make(map[Nod][]Nod)
-	for _, ele := range varReferences {
-		funcDef := x.findTopLevelFuncDef(ele)
-		if funcDef == nil {
-			panic("failed to find top level imperative")
-		}
-		impToVarRef[funcDef] = append(impToVarRef[funcDef], ele)
-	}
-
-	// next, generate the vartables for each imperative
-	for imper, varRefs := range impToVarRef {
-		varTable := x.generateVarTableFromLocalVarRefs(varRefs)
-		NodSetChild(imper, NTR_VARTABLE, varTable)
-	}
-
-	x.linkVarsToVarTables()
-	x.computeVariableScopes()
-
-}
-
-func (x *XformerPocket) linkVarsToVarTables() {
-
-	// link up all var assignments and var getters to refer to this unified table
-	varRefs := x.SearchRoot(func(n Nod) bool {
-		return x.isLocalVarRef(n)
-	})
-	for _, varRef := range varRefs {
-		// get the var table associated with this var reference
-		funcDef := x.findTopLevelFuncDef(varRef)
-		if funcDef == nil {
-			panic("failed to find top level imperative")
-		}
-		varTable := NodGetChildOrNil(funcDef, NTR_VARTABLE)
-		if varTable == nil {
-			panic("failed to find vartable for top level imperative")
-		}
-
-		// get the var name as a string, which serves as the lookup key in the var table
-		varName := x.getVarNameFromVarRef(varRef)
-
-		// search the varTable for the name (naive linear search but should always be small list)
-		varDefs := NodGetChildList(varTable)
-		var matchedVarDef Nod
-		for _, varDef := range varDefs {
-			varDefVarName := NodGetChild(varDef, NTR_VARDEF_NAME).Data.(string)
-			if varDefVarName == varName {
-				matchedVarDef = varDef
-				break
-			}
-		}
-		if matchedVarDef == nil {
-			panic("unknown var: '" + varName + "'")
-		}
-		// finally, store a reference to the definition
-		NodSetChild(varRef, NTR_VARDEF, matchedVarDef)
-	}
-
-}
-
-func (x *XformerPocket) computeVariableScopes() {
-	varTables := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARTABLE })
-	for _, varTable := range varTables {
-		varDefs := NodGetChildList(varTable)
-		for _, varDef := range varDefs {
-			varScope := VSCOPE_FUNCLOCAL
-			incomingNods := varDef.In
-			for _, inEdge := range incomingNods {
-				inNod := inEdge.In
-				if inNod.NodeType == NT_PARAMETER {
-					varScope = VSCOPE_FUNCPARAM
-					break
-				}
-			}
-			// scope has been computed, now save it
-			NodSetChild(varDef, NTR_VARDEF_SCOPE, NodNewData(NT_VARDEF_SCOPE, varScope))
-		}
-	}
-}
-
-func (x *XformerPocket) getVarNameFromVarRef(varRef Nod) string {
-	if varRef.NodeType == NT_PARAMETER {
-		return NodGetChild(varRef, NTR_VARDEF_NAME).Data.(string)
-	} else if varRef.NodeType == NT_VAR_GETTER || varRef.NodeType == NT_VARASSIGN {
-		return NodGetChild(varRef, NTR_VAR_NAME).Data.(string)
-	} else {
-		panic("unhandled var ref type")
-	}
-}
-
-func (x *XformerPocket) generateVarTableFromLocalVarRefs(varRefs []Nod) Nod {
-	varDefsByName := make(map[string]Nod)
-	for _, varRef := range varRefs {
-		varName := x.getVarNameFromVarRef(varRef)
-		varDef := NodNew(NT_VARDEF)
-		NodSetChild(varDef, NTR_VARDEF_NAME, NodNewData(NT_IDENTIFIER, varName))
-		varDefsByName[varName] = varDef
-	}
-
-	varDefsList := make([]Nod, 0)
-	for _, varDef := range varDefsByName {
-		varDefsList = append(varDefsList, varDef)
-	}
-	return NodNewChildList(NT_VARTABLE, varDefsList)
-}
-
-func (x *XformerPocket) findTopLevelFuncDef(n Nod) Nod {
-	found := x.SearchFor(n, func(n Nod) bool {
-		return n.NodeType == NT_FUNCDEF
-	}, func(n Nod) []Nod {
-		return x.AllInNodes(n)
-	})
-
-	return found[0]
-}
-
-func (x *XformerPocket) parseInlineOpStream(opStream Nod) Nod {
-	// converts an inline op stream to a proper prioritized tree representation
-	// for now assume all elements are same priority and group left to right
-	priGroups := [][]int{
-		[]int{NT_DOTOP, NT_DOTPIPEOP},
-		[]int{NT_MULOP, NT_DIVOP, NT_MODOP},
-		[]int{NT_ADDOP, NT_SUBOP},
-		[]int{NT_LTOP, NT_LTEQOP, NT_GTOP, NT_GTEQOP, NT_EQOP},
-		[]int{NT_OROP, NT_ANDOP},
-	}
-	opStreamNods := NodGetChildList(opStream)
-	operands := []Nod{}
-	operators := []Nod{}
-	for i := 0; i < len(opStreamNods); i += 2 {
-		operands = append(operands, opStreamNods[i])
-	}
-	for i := 1; i < len(opStreamNods); i += 2 {
-		operators = append(operators, opStreamNods[i])
-	}
-	fmt.Println("operands", PrettyPrintNodes(operands))
-	fmt.Println("operators", PrettyPrintNodes(operators))
-	for _, priGroup := range priGroups {
-		for _, currOp := range priGroup {
-			for i := 0; i < len(operators); i++ {
-				op := operators[i].NodeType
-				if currOp == op {
-					groupedOp := NodNew(op)
-					NodSetChild(groupedOp, NTR_BINOP_LEFT, operands[i])
-					NodSetChild(groupedOp, NTR_BINOP_RIGHT, operands[i+1])
-					// replace 2 operands with single group
-					operands = x.removeNodListAt(operands, i)
-					operands[i] = groupedOp
-					// remove operator
-					operators = x.removeNodListAt(operators, i)
-					i--
-				}
-			}
-		}
-	}
-
-	if len(operands) > 1 {
-		panic("couldn't fully parse inline op stream")
-	} else if len(operands) == 0 {
-		panic("weird state error")
-	}
-
-	return operands[0]
-}
-
-func (x *XformerPocket) removeNodListAt(nods []Nod, removeAt int) []Nod {
-	return append(nods[:removeAt], nods[removeAt+1:]...)
 }

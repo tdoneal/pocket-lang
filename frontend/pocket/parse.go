@@ -2,6 +2,7 @@ package pocket
 
 import (
 	"fmt"
+	. "pocket-lang/frontend/pocket/common"
 	. "pocket-lang/parse"
 	"pocket-lang/types"
 	"strconv"

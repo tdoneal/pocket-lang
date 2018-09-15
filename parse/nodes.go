@@ -63,6 +63,15 @@ func NodGetChild(n Nod, edgeType int) Nod {
 	return n.Out[edgeType].Out
 }
 
+func NodGetParent(n Nod, edgeType int) Nod {
+	for _, inEdge := range n.In {
+		if inEdge.EdgeType == edgeType {
+			return inEdge.In
+		}
+	}
+	panic("parent not found")
+}
+
 func NodGetChildOrNil(n Nod, edgeType int) Nod {
 	rvEdge, ok := n.Out[edgeType]
 	if !ok {

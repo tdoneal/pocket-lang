@@ -1,7 +1,7 @@
 package goback
 
 import (
-	. "pocket-lang/frontend/pocket"
+	. "pocket-lang/frontend/pocket/common"
 	. "pocket-lang/parse"
 	"pocket-lang/xform"
 )

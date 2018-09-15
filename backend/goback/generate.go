@@ -3,7 +3,7 @@ package goback
 import (
 	"bytes"
 	"fmt"
-	. "pocket-lang/frontend/pocket"
+	. "pocket-lang/frontend/pocket/common"
 	. "pocket-lang/parse"
 	"pocket-lang/xform"
 	"strconv"
@@ -628,6 +628,12 @@ func (g *Generator) genLiteralList(n Nod) {
 }
 
 func (g *Generator) genVarGetter(n Nod) {
+	varDef := NodGetChild(n, NTR_VARDEF)
+	if scope := NodGetChildOrNil(varDef, NTR_VARDEF_SCOPE); scope != nil {
+		if scope.Data.(int) == VSCOPE_CLASSFIELD {
+			g.WS("self.")
+		}
+	}
 	varName := NodGetChild(n, NTR_VAR_NAME).Data.(string)
 	g.WS(varName)
 }

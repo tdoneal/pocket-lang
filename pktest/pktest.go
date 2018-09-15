@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"pocket-lang/backend/goback"
 	"pocket-lang/frontend/pocket"
+	"pocket-lang/frontend/pocket/common"
+	"pocket-lang/frontend/pocket/xform"
 	"strings"
 
 	"github.com/davecgh/go-spew/spew"
@@ -61,10 +63,10 @@ func CompileAndRunSrc(inSrc string) string {
 	fmt.Println("final tokens:\n", spew.Sdump(tokens))
 
 	parsed := pocket.Parse(tokens)
-	fmt.Println("final parsed:\n", pocket.PrettyPrint(parsed))
+	fmt.Println("final parsed:\n", common.PrettyPrint(parsed))
 
-	xformed := pocket.Xform(parsed)
-	fmt.Println("final xformed:\n", pocket.PrettyPrint(xformed))
+	xformed := xform.Xform(parsed)
+	fmt.Println("final xformed:\n", common.PrettyPrint(xformed))
 
 	genned := goback.Generate(parsed)
 	fmt.Println("final generated:\n", genned)

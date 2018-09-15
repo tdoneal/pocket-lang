@@ -1,9 +1,6 @@
 
 Point class
-    myfun func() void
-        print 'hi'
-
-main func
-    x : Point()
-    x.myfun()
+    x
+    compute func
+        x : 4
 

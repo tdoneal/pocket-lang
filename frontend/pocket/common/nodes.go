@@ -1,4 +1,4 @@
-package pocket
+package common
 
 const (
 	NT_IMPERATIVE           = 10
@@ -81,7 +81,8 @@ const (
 	NT_CLASSFIELD           = 155
 	NT_CLASSTABLE           = 160
 	NTR_CLASSTABLE          = 161
-	NT_OBJINIT              = 165
+	NTR_TABLE_PARENT        = 164
+	NT_OBJINIT              = 168
 	NTR_LIT_VALUE           = 201
 	NT_LIT_BOOL             = 206
 	NT_LIT_INT              = 210
@@ -96,4 +97,24 @@ const (
 	NT_LIT_PRIMITIVE        = 240
 	NT_VAR_GETTER           = 250
 	NT_DOTOP_QUALIFIER      = 253
+)
+
+const (
+	TY_VOID   = 1
+	TY_BOOL   = 2
+	TY_INT    = 3
+	TY_FLOAT  = 4
+	TY_STRING = 5
+	TY_SET    = 6
+	TY_MAP    = 7
+	TY_LIST   = 8
+	TY_OBJECT = 20
+	TY_NUMBER = 22
+	TY_DUCK   = 30
+)
+
+const (
+	VSCOPE_FUNCLOCAL  = 1
+	VSCOPE_FUNCPARAM  = 2
+	VSCOPE_CLASSFIELD = 3
 )
