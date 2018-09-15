@@ -198,11 +198,25 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 
 }
 
+func (d *DebugPrinter) PrintVarScopeType(ty int) {
+	if ty == VSCOPE_FUNCPARAM {
+		d.buf.WriteString("funcparam")
+	} else if ty == VSCOPE_FUNCLOCAL {
+		d.buf.WriteString("local")
+	} else if ty == VSCOPE_CLASSFIELD {
+		d.buf.WriteString("classfield")
+	} else {
+		d.buf.WriteString(strconv.Itoa(ty))
+	}
+}
+
 func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 	if val, ok := node.Data.(int); ok {
 		d.buf.WriteString(": ")
 		if node.NodeType == NT_TYPE || node.NodeType == NT_TYPEBASE {
 			d.PrintType(val)
+		} else if node.NodeType == NT_VARDEF_SCOPE {
+			d.PrintVarScopeType(val)
 		} else {
 			d.buf.WriteString(strconv.Itoa(val))
 		}

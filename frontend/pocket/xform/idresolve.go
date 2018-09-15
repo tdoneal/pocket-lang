@@ -15,39 +15,9 @@ func (x *XformerPocket) solveIdentifiers() {
 
 func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 	rv := []*RewriteRule{
-		x.IRRClassVarTable(),
-		x.IRRFuncEmptyVarTable(),
 		x.IRRLocalOrClassVar(),
 	}
 	return rv
-}
-
-func (x *XformerPocket) IRRClassVarTable() *RewriteRule {
-	return &RewriteRule{
-		condition: func(n Nod) bool {
-			if n.NodeType == NT_CLASSDEF {
-				return !NodHasChild(n, NTR_VARTABLE)
-			}
-			return false
-		},
-		action: func(n Nod) {
-			x.buildClassVardefTable(n)
-		},
-	}
-}
-
-func (x *XformerPocket) IRRFuncEmptyVarTable() *RewriteRule {
-	return &RewriteRule{
-		condition: func(n Nod) bool {
-			if n.NodeType == NT_FUNCDEF {
-				return !NodHasChild(n, NTR_VARTABLE)
-			}
-			return false
-		},
-		action: func(n Nod) {
-			NodSetChild(n, NTR_VARTABLE, NodNew(NT_VARTABLE))
-		},
-	}
 }
 
 func (x *XformerPocket) IRRLocalOrClassVar() *RewriteRule {
@@ -57,9 +27,7 @@ func (x *XformerPocket) IRRLocalOrClassVar() *RewriteRule {
 				if !NodHasChild(n, NTR_VARDEF) {
 					cCls := x.getContainingClassDef(n)
 					if cCls != nil {
-						if cTable := NodGetChildOrNil(cCls, NTR_VARTABLE); cTable != nil {
-							return true
-						}
+						return true
 					}
 				}
 			}
@@ -69,13 +37,9 @@ func (x *XformerPocket) IRRLocalOrClassVar() *RewriteRule {
 			cCls := x.getContainingClassDef(n)
 			cTable := NodGetChild(cCls, NTR_VARTABLE)
 			varName := x.getLocalVarName(n)
-			fmt.Println("performing vardef annotation on var ", varName, "cCls", PrettyPrint(cCls), "clsTable:", PrettyPrint(cTable))
 
 			clsVarDef := x.varTableLookup(cTable, varName)
 			tfunc := x.getContainingFuncDef(n)
-			if !NodHasChild(tfunc, NTR_VARTABLE) {
-				x.IRRFuncEmptyVarTable().action(tfunc) // create var table if not extant
-			}
 			localVarTable := NodGetChild(tfunc, NTR_VARTABLE)
 			localVarDef := x.varTableLookup(localVarTable, varName)
 			if localVarDef != nil {

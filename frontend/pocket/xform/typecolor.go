@@ -74,11 +74,24 @@ func (x *XformerPocket) solveTypes() {
 	x.applyRewritesUntilStable(nodes, negativeRules)
 
 	fmt.Println("after positive and negative rules:", PrettyPrintMypes(nodes))
+	x.colorTypes()
+}
+
+func (x *XformerPocket) colorTypes() {
 	// generate the "valid" mypes by intersecting the negative with the positive
+	// then output a single "type color" for each myped node
+	nodes := x.SearchRoot(func(n Nod) bool { return NodHasChild(n, NTR_MYPE_POS) })
 	x.generateValidMypes(nodes)
 	fmt.Println("after generating valid mypes:", PrettyPrintMypes(nodes))
 	x.convertValidMypesToFinalTypes()
 	fmt.Println("Final type assignments:", PrettyPrintMypes(nodes))
+
+}
+
+func (x *XformerPocket) getAllSolveTypeRules() []*RewriteRule {
+	positiveRules := x.getAllPositiveMARRules()
+	negativeRules := x.getAllNegativeMARRules()
+	return append(positiveRules, negativeRules...)
 }
 
 func (x *XformerPocket) generateValidMypes(nodes []Nod) {
@@ -134,7 +147,6 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		marPosOwnField(),
 	}
 	rv = append(rv, marPosOpEvaluateRules()...)
-	rv = append(rv, x.marPosUserFuncEvaluateRules()...)
 	return rv
 }
 
@@ -375,6 +387,8 @@ func marPosSysFunc() *RewriteRule {
 }
 
 func (x *XformerPocket) marPosUserFuncEvaluateRules() []*RewriteRule {
+	// TODO: remove and convert into something with less temporal dependencies
+	// on func table already being constructed, etc
 	funcTableNod := NodGetChild(x.Root, NTR_FUNCTABLE)
 	funcDefs := NodGetChildList(funcTableNod)
 	rv := []*RewriteRule{}

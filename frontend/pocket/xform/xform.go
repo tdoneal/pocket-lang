@@ -28,19 +28,56 @@ func (x *XformerPocket) Xform() {
 	x.desugar()
 
 	// fmt.Println("after desugaring:", PrettyPrint(x.Root))
-	x.solveIdentifiers()
-
-	fmt.Println("after solving identifiers", PrettyPrint(x.Root))
-
-	panic("ah")
-
-	// now do second pass of resolving functions, specifically those that may refer to variables in a local scope
-	x.linkCallsToVariableFuncdefs()
+	x.solve()
+	fmt.Println("after solving", PrettyPrint(x.Root))
+	x.colorTypes()
 	x.checkAllCallsResolved()
 
-	fmt.Println("after vars and calls resolved:", PrettyPrint(x.Root))
+	fmt.Println("after xform:", PrettyPrint(x.Root))
+}
 
-	x.solveTypes()
+func (x *XformerPocket) solve() {
+	// resolves identifiers and types to the best of our ability
+	rules := x.getAllSolveRules()
+	nodes := x.getSolvableNodes()
+	x.initializeSolvableNodes(nodes)
+	fmt.Println("after initializing solveable nodes", PrettyPrint(x.Root))
+
+	x.applyRewritesUntilStable(nodes, rules)
+}
+
+func (x *XformerPocket) initializeSolvableNodes(ns []Nod) {
+	for _, n := range ns {
+		x.initializeSolvableNode(n)
+	}
+}
+
+func (x *XformerPocket) initializeSolvableNode(n Nod) {
+	nt := n.NodeType
+	if isMypedValueType(nt) {
+		NodSetChild(n, NTR_MYPE_NEG, x.getInitMypeNodFull())
+		NodSetChild(n, NTR_MYPE_POS, x.getInitMypeNodEmpty())
+	} else if nt == NT_FUNCDEF {
+		NodSetChild(n, NTR_VARTABLE, NodNew(NT_VARTABLE))
+	} else if nt == NT_CLASSDEF {
+		x.buildClassVardefTable(n)
+	} else {
+		panic("couldn't initialize solvable node")
+	}
+}
+
+func (x *XformerPocket) getSolvableNodes() []Nod {
+	return x.SearchRoot(func(n Nod) bool {
+		nt := n.NodeType
+		return isMypedValueType(nt) ||
+			nt == NT_FUNCDEF || nt == NT_CLASSDEF
+	})
+}
+
+func (x *XformerPocket) getAllSolveRules() []*RewriteRule {
+	typeRules := x.getAllSolveTypeRules()
+	idRules := x.getIdentifierRewriteRules()
+	return append(typeRules, idRules...)
 }
 
 func (x *XformerPocket) getContainingNodOrNil(start Nod, condition func(Nod) bool) Nod {
@@ -104,6 +141,7 @@ func isSystemCall(n Nod) bool {
 }
 
 func (x *XformerPocket) linkCallsToVariableFuncdefs() {
+	// TODO: make this part of the standard solve() procedure
 	// find all unresolved calls that could refer to a local variable
 	unresCalls := x.SearchRoot(func(n Nod) bool {
 		if isReceiverCallType(n.NodeType) && !isSystemCall(n) {

@@ -357,7 +357,8 @@ func (g *Generator) genReturn(input Nod) {
 func (g *Generator) genVarAssign(n Nod) {
 
 	lvalue := NodGetChild(n, NTR_VAR_NAME)
-	g.genLValue(lvalue)
+	varDef := NodGetChildOrNil(n, NTR_VARDEF)
+	g.genLValue(lvalue, varDef)
 
 	g.WS(" = ")
 	g.WS("(")
@@ -365,7 +366,16 @@ func (g *Generator) genVarAssign(n Nod) {
 	g.WS(")")
 }
 
-func (g *Generator) genLValue(n Nod) {
+func (g *Generator) genLValue(n Nod, varDef Nod) {
+	// varDef is nil if unknown or not applicable
+
+	// prepend "self." to simple class variables
+	if varDef != nil && NodHasChild(varDef, NTR_VARDEF_SCOPE) {
+		if NodGetChild(varDef, NTR_VARDEF_SCOPE).Data.(int) == VSCOPE_CLASSFIELD &&
+			n.NodeType == NT_IDENTIFIER {
+			g.WS("self.")
+		}
+	}
 	if n.NodeType == NT_DOTOP {
 		g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
 		g.WS(".")
@@ -387,7 +397,7 @@ func (g *Generator) genReceiverCall(n Nod) {
 		}
 	}
 
-	g.genLValue(base)
+	g.genLValue(base, nil)
 	g.WS("(")
 	if NodHasChild(n, NTR_RECEIVERCALL_ARG) {
 		g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
