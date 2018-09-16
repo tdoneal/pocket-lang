@@ -30,9 +30,16 @@ func (d *Debug) initialize() {
 	d.nodeTypeLookup = make(map[int]string)
 	ntl := d.nodeTypeLookup
 	ntl[NT_IDENTIFIER] = "IDENTIFIER"
+	ntl[NT_IDENTIFIER_RVAL] = "IDENTRVAL"
+	ntl[NT_IDENTIFIER_LVAL] = "IDENTLVAL"
+	ntl[NT_IDENTIFIER_RVAL_NOSCOPE] = "IDENTNOSC"
+	ntl[NT_IDENTIFIER_RESOLVED] = "IDENTRESOLVED"
+	ntl[NT_IDENTIFIER_FUNC_NOSCOPE] = "IDENTFUNCNOSC"
+
 	ntl[NT_IMPERATIVE] = "IMPERATIVE"
 	ntl[NT_RECEIVERCALL] = "CALL"
 	ntl[NT_RECEIVERCALL_CMD] = "CALLCMD"
+	ntl[NT_RECEIVERCALL_METHOD] = "CALLMETHOD"
 
 	ntl[NT_LIT_INT] = "INT"
 	ntl[NT_LIT_STRING] = "STRING"
@@ -56,11 +63,14 @@ func (d *Debug) initialize() {
 	ntl[NT_VARINIT] = "VARINIT"
 	ntl[NT_VARTABLE] = "VARTABLE"
 	ntl[NT_VARDEF] = "VARDEF"
-	ntl[NTR_VARDEF_NAME] = "VARNAME"
+	ntl[NTR_VARDEF] = "VARDEF"
+	ntl[NTR_VARDEF_NAME] = "VARDEFNAME"
 	ntl[NT_TOPLEVEL] = "TOPLEVEL"
 	ntl[NT_FUNCDEF] = "FUNCDEF"
 	ntl[NTR_FUNCDEF_NAME] = "NAME"
 	ntl[NTR_FUNCDEF_CODE] = "BODY"
+	ntl[NT_FUNCDEF_RV_PLACEHOLDER] = "RVPLACEHLD"
+	ntl[NT_PASS] = "PASS"
 	ntl[NT_LIT_LIST] = "LIST"
 	ntl[NTR_TYPE] = "TYPE"
 	ntl[NT_TYPEARGED] = "TYPEARGED"
@@ -92,6 +102,8 @@ func (d *Debug) initialize() {
 	ntl[NTR_IF_BODY_TRUE] = "IFTRUE"
 	ntl[NTR_IF_BODY_FALSE] = "ELSE"
 	ntl[NT_BREAK] = "BREAK"
+	ntl[NT_RETURN] = "RETURN"
+	ntl[NTR_RETURN_VALUE] = "RETURNVAL"
 	ntl[NT_VAR_GETTER] = "VARGET"
 	ntl[NT_DOTOP_QUALIFIER] = "QUAL"
 	ntl[NT_PARAMETER] = "PARAM"
@@ -128,6 +140,7 @@ func (d *Debug) initialize() {
 	tl[TY_LIST] = "list"
 	tl[TY_MAP] = "map"
 	tl[TY_SET] = "set"
+	tl[TY_VOID] = "void"
 
 	d.initialized = true
 }
@@ -213,7 +226,7 @@ func (d *DebugPrinter) PrintVarScopeType(ty int) {
 func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 	if val, ok := node.Data.(int); ok {
 		d.buf.WriteString(": ")
-		if node.NodeType == NT_TYPE || node.NodeType == NT_TYPEBASE {
+		if node.NodeType == NT_TYPE || node.NodeType == NT_TYPEBASE || node.NodeType == MATYPE_SINGLE_BASE {
 			d.PrintType(val)
 		} else if node.NodeType == NT_VARDEF_SCOPE {
 			d.PrintVarScopeType(val)

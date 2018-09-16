@@ -1,6 +1,12 @@
-
-Point class
-    x
-    compute func
-        x : 4
-
+main func
+    x : [2, 4]
+    y : x(1)
+    print y
+    i : 0
+    sum : 0
+    while i < 2
+        print(x(i))
+        sum : sum + x(i)
+        i : i + 1
+    print sum
+    

@@ -276,7 +276,7 @@ func (p *ParserPocket) parseValue() Nod {
 		func() Nod { return p.parseValueParenthetical() },
 		func() Nod { return p.parseLiteral() },
 		func() Nod { return p.parseReceiverCall() },
-		func() Nod { return p.parseVarGetter() },
+		func() Nod { return p.parseValueIdentifier() },
 	})
 }
 
@@ -335,7 +335,7 @@ func (p *ParserPocket) parseValueAtomic() Nod {
 		func() Nod { return p.parseValueParenthetical() },
 		func() Nod { return p.parseLiteral() },
 		func() Nod { return p.parseReceiverCall() },
-		func() Nod { return p.parseVarGetter() },
+		func() Nod { return p.parseValueIdentifier() },
 	})
 }
 
@@ -603,8 +603,8 @@ func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {
 	}
 }
 
-func (p *ParserPocket) parseVarGetter() Nod {
-	return NodNewChild(NT_VAR_GETTER, NTR_VAR_NAME, p.parseIdentifier())
+func (p *ParserPocket) parseValueIdentifier() Nod {
+	return NodNewData(NT_IDENTIFIER_RVAL, p.parseTokenAlphanumeric().Data)
 }
 
 func (p *ParserPocket) parseTokenAlphanumeric() *types.Token {

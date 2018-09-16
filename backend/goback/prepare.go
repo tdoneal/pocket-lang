@@ -26,7 +26,8 @@ func (p *Preparer) checkForPrintStatements() {
 	printCalls := p.SearchRoot(func(n Nod) bool {
 		if isReceiverCallType(n.NodeType) {
 			base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
-			if base.NodeType == NT_IDENTIFIER {
+			if base.NodeType == NT_IDENTIFIER || base.NodeType == NT_IDENTIFIER_RESOLVED ||
+				base.NodeType == NT_IDENTIFIER_FUNC_NOSCOPE {
 				if base.Data.(string) == "print" {
 					return true
 				}
@@ -58,33 +59,27 @@ func (p *Preparer) isIndexableType(n Nod) bool {
 func (p *Preparer) createExplicitIndexors() {
 	listCalls := p.SearchRoot(func(n Nod) bool {
 		if isReceiverCallType(n.NodeType) {
-			if funcDef := NodGetChildOrNil(n, NTR_FUNCDEF); funcDef != nil {
-				if funcDef.NodeType == NT_VARDEF {
-					if p.isIndexableType(NodGetChild(funcDef, NTR_TYPE)) {
-						return true
-					}
+			base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+			if base.NodeType == NT_VAR_GETTER {
+				vDef := NodGetChild(base, NTR_VARDEF)
+				if p.isIndexableType(NodGetChild(vDef, NTR_TYPE)) {
+					return true
 				}
 			}
 		}
 		return false
 	})
 	for _, listCall := range listCalls {
-		varName := NodGetChild(listCall, NTR_RECEIVERCALL_BASE).Data.(string)
-		liArgs := []Nod{}
-		listGetter := NodNew(NT_VAR_GETTER)
-		NodSetChild(listGetter, NTR_VAR_NAME, NodNewData(NT_IDENTIFIER, varName))
-		varDef := NodGetChild(listCall, NTR_FUNCDEF)
-		varType := NodGetChild(varDef, NTR_TYPE)
-		NodSetChild(listGetter, NTR_TYPE, varType)
-		NodSetChild(listGetter, NTR_VARDEF, varDef)
-		liArgs = append(liArgs, listGetter)
-		listIndex := p.interpretAsListIndex(NodGetChild(listCall, NTR_RECEIVERCALL_ARG))
-		liArgs = append(liArgs, listIndex)
-		listNod := NodNewChildList(NT_LIT_LIST, liArgs)
+		listCall.NodeType = NT_COLLECTION_INDEXOR
 
-		// copy info into the extant list call
-		NodSetChild(listCall, NTR_RECEIVERCALL_BASE, NodNewData(NT_IDENTIFIER, "$li"))
-		NodSetChild(listCall, NTR_RECEIVERCALL_ARG, listNod)
+		// convert [i] syntax into (i) syntax if applicable
+		arg := NodGetChild(listCall, NTR_RECEIVERCALL_ARG)
+		if arg.NodeType == NT_LIT_LIST {
+			listEles := NodGetChildList(arg)
+			if len(listEles) == 1 {
+				p.Replace(arg, listEles[0])
+			}
+		}
 	}
 
 }

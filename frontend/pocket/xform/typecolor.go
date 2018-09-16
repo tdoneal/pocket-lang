@@ -23,7 +23,7 @@ func (x *XformerPocket) initializePosNegMypes(n Nod) {
 
 func isMypedValueType(nt int) bool {
 	return isLiteralNodeType(nt) || isBinaryOpType(nt) ||
-		isVarReferenceNT(nt) || isCallType(nt)
+		isRValVarReferenceNT(nt) || isCallType(nt)
 }
 
 func (x *XformerPocket) initializeAllMypes() []Nod {
@@ -89,9 +89,76 @@ func (x *XformerPocket) colorTypes() {
 }
 
 func (x *XformerPocket) getAllSolveTypeRules() []*RewriteRule {
+	generalRules := x.getAllGeneralMARRules()
 	positiveRules := x.getAllPositiveMARRules()
 	negativeRules := x.getAllNegativeMARRules()
-	return append(positiveRules, negativeRules...)
+	rv := append(generalRules, positiveRules...)
+	rv = append(rv, negativeRules...)
+	return rv
+}
+
+func (x *XformerPocket) getAllGeneralMARRules() []*RewriteRule {
+	// get type annotation rules that don't apply specifically to
+	// positive or negative mypes
+	return []*RewriteRule{
+		x.marGenLinkVarRefsToVarDef(),
+		x.marRemoveMypesFromDotopQualifiers(),
+	}
+}
+
+func (x *XformerPocket) marRemoveMypesFromDotopQualifiers() *RewriteRule {
+	// there is no inherent type of the right side of a dot expression
+	// e.g.  in obj.x, the ".x" should be typeless
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_DOTOP_QUALIFIER {
+				if NodHasChild(n, NTR_MYPE_POS) {
+					return true
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			NodRemoveChild(n, NTR_MYPE_POS)
+			NodRemoveChild(n, NTR_MYPE_NEG)
+		},
+	}
+}
+
+func (x *XformerPocket) marGenLinkVarRefsToVarDef() *RewriteRule {
+	// link up mypes of variable references to point to the same
+	// mypes as their definitions
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_VAR_GETTER || n.NodeType == NT_VARASSIGN || n.NodeType == NT_PARAMETER {
+				if varDef := NodGetChildOrNil(n, NTR_VARDEF); varDef != nil {
+					if !NodHasChild(varDef, NTR_MYPE_POS) {
+						return true // handle the case if the vardef isn't initialized mype-wise
+					}
+					varDefMypePos := NodGetChild(varDef, NTR_MYPE_POS)
+					myMypePos := NodGetChild(n, NTR_MYPE_POS)
+					if varDefMypePos != myMypePos {
+						return true
+					}
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			varDef := NodGetChild(n, NTR_VARDEF)
+			if !NodHasChild(varDef, NTR_MYPE_POS) {
+				// intialize the mypes of the var def
+				// optimization: initialize them to our defs
+				NodSetChild(varDef, NTR_MYPE_POS, NodGetChild(n, NTR_MYPE_POS))
+				NodSetChild(varDef, NTR_MYPE_NEG, NodGetChild(n, NTR_MYPE_NEG))
+				return
+			}
+
+			// if here, inherit the mypes from the extant vardef
+			NodSetChild(n, NTR_MYPE_POS, NodGetChild(varDef, NTR_MYPE_POS))
+			NodSetChild(n, NTR_MYPE_NEG, NodGetChild(varDef, NTR_MYPE_NEG))
+		},
+	}
 }
 
 func (x *XformerPocket) generateValidMypes(nodes []Nod) {
@@ -101,7 +168,11 @@ func (x *XformerPocket) generateValidMypes(nodes []Nod) {
 		validMype := posMype.Intersection(negMype)
 
 		if validMype.IsEmpty() {
-			panic("couldn't find a valid type for node: " + PrettyPrintMype(node))
+			if node.NodeType == NT_RECEIVERCALL_CMD || node.NodeType == NT_FUNCDEF_RV_PLACEHOLDER {
+				// this is acceptable for these node types
+			} else {
+				panic("couldn't find a valid type for node: " + PrettyPrintMype(node))
+			}
 		}
 		NodSetChild(node, NTR_MYPE_VALID, NodNewData(NT_MYPE, validMype))
 		NodRemoveChild(node, NTR_MYPE_POS)
@@ -145,9 +216,38 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		marPosObjInitUser(),
 		marPosObjAccessor(),
 		marPosOwnField(),
+		marPosFuncCallUser(),
+		marPosReturnValue(),
 	}
 	rv = append(rv, marPosOpEvaluateRules()...)
 	return rv
+}
+
+func marPosFuncCallUser() *RewriteRule {
+	// calls to user functions should link to the funcdef's return type
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_RECEIVERCALL || n.NodeType == NT_RECEIVERCALL_CMD {
+				if NodHasChild(n, NTR_FUNCDEF) {
+					fDef := NodGetChild(n, NTR_FUNCDEF)
+					myPosMype := NodGetChild(n, NTR_MYPE_POS)
+					fDefRVPosMype := NodGetChild(NodGetChild(fDef, NTR_RETURNVAL_PLACEHOLDER), NTR_MYPE_POS)
+					if myPosMype != fDefRVPosMype {
+						return true
+					}
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			// link ourselves to the func def's return type
+			fDef := NodGetChild(n, NTR_FUNCDEF)
+			rvPlaceholder := NodGetChild(fDef, NTR_RETURNVAL_PLACEHOLDER)
+			NodSetChild(n, NTR_MYPE_POS, NodGetChild(rvPlaceholder, NTR_MYPE_POS))
+			NodSetChild(n, NTR_MYPE_NEG, NodGetChild(rvPlaceholder, NTR_MYPE_NEG))
+
+		},
+	}
 }
 
 func marPosOwnField() *RewriteRule {
@@ -155,7 +255,7 @@ func marPosOwnField() *RewriteRule {
 	// TODO: support stricter typing
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_VAR_GETTER {
+			if n.NodeType == NT_VAR_GETTER && NodHasChild(n, NTR_VARDEF) {
 				varDef := NodGetChild(n, NTR_VARDEF)
 				if scope := NodGetChildOrNil(varDef, NTR_VARDEF_SCOPE); scope != nil {
 					if scope.Data.(int) == VSCOPE_CLASSFIELD {
@@ -178,7 +278,7 @@ func marPosObjAccessor() *RewriteRule {
 	// obj.property -> all (for now)
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_DOTOP {
+			if n.NodeType == NT_DOTOP || n.NodeType == NT_RECEIVERCALL_METHOD {
 				// we don't properly support typed fields yet, so
 				// just say it could be anything
 				return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
@@ -343,6 +443,8 @@ func XMypeArgedNodToFinalType(n Nod) Nod {
 		} else {
 			return NodNewData(NT_TYPEBASE, TY_DUCK)
 		}
+	} else if n.NodeType == MATYPE_EMPTY {
+		return NodNewData(NT_TYPEBASE, TY_VOID)
 	} else {
 		panic("unhandled")
 	}
@@ -353,10 +455,10 @@ func marPosVarFunc() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if isReceiverCallType(n.NodeType) {
-				if funcDef := NodGetChildOrNil(n, NTR_FUNCDEF); funcDef != nil {
-					if funcDef.NodeType == NT_VARDEF {
-						return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
-					}
+				// alternate syntax: vargetter is the base of the call
+				// TODO: possibly remove in favor of the FUNCDEF syntax
+				if NodGetChild(n, NTR_RECEIVERCALL_BASE).NodeType == NT_VAR_GETTER {
+					return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
 				}
 			}
 			return false
@@ -372,10 +474,13 @@ func marPosSysFunc() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if isReceiverCallType(n.NodeType) {
-				rcName := NodGetChild(n, NTR_RECEIVERCALL_BASE).Data.(string)
-				if isSystemFuncName(rcName) {
-					pMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
-					return !pMype.IsFull()
+				baseNod := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+				if baseNod.NodeType == NT_IDENTIFIER_FUNC_NOSCOPE {
+					rcName := baseNod.Data.(string)
+					if isSystemFuncName(rcName) {
+						pMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+						return !pMype.IsFull()
+					}
 				}
 			}
 			return false
@@ -490,6 +595,31 @@ func marPosVarAssign() *RewriteRule {
 	}
 }
 
+func marPosReturnValue() *RewriteRule {
+	// propagate return values into the placeholder
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_RETURN {
+				if lhs := NodGetChildOrNil(n, NTR_RETURNVAL_PLACEHOLDER); lhs != nil {
+					mypeLHS := NodGetChild(lhs, NTR_MYPE_POS).Data.(Mype)
+					mypeRHS := NodGetChild(NodGetChild(n, NTR_RETURN_VALUE), NTR_MYPE_POS).Data.(Mype)
+					if mypeLHS.WouldChangeFromUnionWith(mypeRHS) {
+						return true
+					}
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			lhs := NodGetChild(n, NTR_RETURNVAL_PLACEHOLDER)
+			mypeLHS := NodGetChild(lhs, NTR_MYPE_POS).Data.(Mype)
+			mypeRHS := NodGetChild(NodGetChild(n, NTR_RETURN_VALUE), NTR_MYPE_POS).Data.(Mype)
+			newLHS := mypeLHS.Union(mypeRHS)
+			NodGetChild(lhs, NTR_MYPE_POS).Data = newLHS
+		},
+	}
+}
+
 func marNegVarAssign() *RewriteRule {
 	// propagate var type restrictions from lhs -> rhs
 	return &RewriteRule{
@@ -551,27 +681,42 @@ func marGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
 		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_FLOAT, TY_FLOAT},
 		&MypeOpEvaluateRule{NT_ADDOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
 		&MypeOpEvaluateRule{NT_ADDOP, TY_STRING, TY_STRING, TY_STRING},
+
 		&MypeOpEvaluateRule{NT_SUBOP, TY_INT, TY_INT, TY_INT},
 		&MypeOpEvaluateRule{NT_SUBOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_SUBOP, TY_INT, TY_FLOAT, TY_FLOAT},
+
 		&MypeOpEvaluateRule{NT_MULOP, TY_INT, TY_INT, TY_INT},
 		&MypeOpEvaluateRule{NT_MULOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_MULOP, TY_INT, TY_FLOAT, TY_FLOAT},
+
 		&MypeOpEvaluateRule{NT_DIVOP, TY_INT, TY_INT, TY_INT},
 		&MypeOpEvaluateRule{NT_DIVOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_DIVOP, TY_INT, TY_FLOAT, TY_FLOAT},
+
 		&MypeOpEvaluateRule{NT_MODOP, TY_INT, TY_INT, TY_INT},
 		&MypeOpEvaluateRule{NT_MODOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
+		&MypeOpEvaluateRule{NT_MODOP, TY_INT, TY_FLOAT, TY_FLOAT},
+
 		&MypeOpEvaluateRule{NT_GTOP, TY_INT, TY_INT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_GTOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
+
 		&MypeOpEvaluateRule{NT_LTOP, TY_INT, TY_INT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_LTOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
+
 		&MypeOpEvaluateRule{NT_GTEQOP, TY_INT, TY_INT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_GTEQOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
+
 		&MypeOpEvaluateRule{NT_LTEQOP, TY_INT, TY_INT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_LTEQOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
+
 		&MypeOpEvaluateRule{NT_EQOP, TY_INT, TY_INT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_EQOP, TY_FLOAT, TY_FLOAT, TY_BOOL},
 		&MypeOpEvaluateRule{NT_EQOP, TY_STRING, TY_STRING, TY_BOOL},
 		&MypeOpEvaluateRule{NT_EQOP, TY_BOOL, TY_BOOL, TY_BOOL},
+
 		&MypeOpEvaluateRule{NT_OROP, TY_BOOL, TY_BOOL, TY_BOOL},
+
 		&MypeOpEvaluateRule{NT_ANDOP, TY_BOOL, TY_BOOL, TY_BOOL},
 	}
 }
@@ -665,9 +810,16 @@ func createPosRewriteRuleFromOpEvaluateRule(oer *MypeOpEvaluateRule) *RewriteRul
 					NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_MYPE_POS).Data.(Mype),
 				}
 
+				matchLowHigh := (argMypes[0].ContainsSingleType(oer.operandLow) &&
+					argMypes[1].ContainsSingleType(oer.operandHigh))
+				matchHighLow := (argMypes[1].ContainsSingleType(oer.operandLow) &&
+					argMypes[0].ContainsSingleType(oer.operandHigh))
+
+				fmt.Println("oer.operator", oer.operator, "opHigh", oer.operandHigh,
+					"opLow", oer.operandLow, "matchLowHigh", matchLowHigh, "matchHighLow", matchHighLow)
+
 				// todo: ensure we have precise semantics for arged types
-				if argMypes[0].ContainsSingleType(oer.operandLow) &&
-					argMypes[1].ContainsSingleType(oer.operandHigh) {
+				if matchLowHigh || matchHighLow {
 					if !resultMype.ContainsSingleType(oer.result) {
 						return true
 					}

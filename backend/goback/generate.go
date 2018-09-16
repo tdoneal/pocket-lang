@@ -89,13 +89,14 @@ func (g *Generator) genFuncInType(n Nod) {
 }
 
 func (g *Generator) genFuncOutType(n Nod) {
-	if typeInt, ok := n.Data.(int); ok {
+	rvType := NodGetChild(n, NTR_TYPE)
+	if typeInt, ok := rvType.Data.(int); ok {
 		if typeInt == TY_VOID {
 			// in go there is no void keyword, so we don't output anything here
 			return
 		}
 	}
-	g.genType(n)
+	g.genType(rvType)
 }
 
 func (g *Generator) genParameterList(n Nod) {
@@ -131,9 +132,7 @@ func (g *Generator) genFuncDefInner(n Nod, rcvrDef Nod) {
 
 	g.WS(")")
 
-	if outType := NodGetChildOrNil(n, NTR_FUNCDEF_OUTTYPE); outType != nil {
-		g.genFuncOutType(outType)
-	}
+	g.genFuncOutType(NodGetChild(n, NTR_RETURNVAL_PLACEHOLDER))
 
 	g.WS(" {\n")
 
@@ -380,7 +379,8 @@ func (g *Generator) genLValue(n Nod, varDef Nod) {
 		g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
 		g.WS(".")
 		g.WS(NodGetChild(n, NTR_BINOP_RIGHT).Data.(string))
-	} else if n.NodeType == NT_IDENTIFIER {
+	} else if n.NodeType == NT_IDENTIFIER || n.NodeType == NT_IDENTIFIER_RESOLVED ||
+		n.NodeType == NT_IDENTIFIER_FUNC_NOSCOPE {
 		g.WS(n.Data.(string))
 	} else {
 		g.WS("lvalue")
@@ -398,12 +398,35 @@ func (g *Generator) genReceiverCall(n Nod) {
 	}
 
 	g.genLValue(base, nil)
-	g.WS("(")
-	if NodHasChild(n, NTR_RECEIVERCALL_ARG) {
-		g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
-	}
-	g.WS(")")
 
+	arg := NodGetChildOrNil(n, NTR_RECEIVERCALL_ARG)
+
+	g.genArg(arg)
+}
+
+func (g *Generator) genReceiverCallMethod(n Nod) {
+	base := NodGetChild(n, NTR_RECEIVERCALL_METHOD_BASE)
+	name := NodGetChild(n, NTR_RECEIVERCALL_METHOD_NAME).Data.(string)
+
+	g.genValue(base)
+
+	g.WS(".")
+	g.WS(name)
+
+	arg := NodGetChildOrNil(n, NTR_RECEIVERCALL_ARG)
+
+	g.genArg(arg)
+
+}
+
+func (g *Generator) genArg(arg Nod) {
+	if arg == nil || arg.NodeType == NT_EMPTYARGLIST {
+		g.WS("()")
+	} else {
+		g.WS("(")
+		g.genValue(arg)
+		g.WS(")")
+	}
 }
 
 func (g *Generator) genListIndexor(n Nod) {
@@ -434,6 +457,10 @@ func (g *Generator) genValue(n Nod) {
 		g.genLiteralMap(n)
 	} else if nt == NT_RECEIVERCALL {
 		g.genReceiverCall(n)
+	} else if nt == NT_RECEIVERCALL_METHOD {
+		g.genReceiverCallMethod(n)
+	} else if nt == NT_COLLECTION_INDEXOR {
+		g.genCollectionIndexor(n)
 	} else if nt == NT_OBJINIT {
 		g.genObjInit(n)
 	} else if nt == NT_DOTOP {
@@ -445,6 +472,16 @@ func (g *Generator) genValue(n Nod) {
 	} else {
 		g.WS("value")
 	}
+}
+
+func (g *Generator) genCollectionIndexor(n Nod) {
+	base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+	arg := NodGetChild(n, NTR_RECEIVERCALL_ARG)
+
+	g.genValue(base)
+	g.WS("[")
+	g.genValue(arg)
+	g.WS("]")
 }
 
 func (g *Generator) genObjInit(n Nod) {

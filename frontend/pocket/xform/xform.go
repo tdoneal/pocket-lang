@@ -27,7 +27,8 @@ func (x *XformerPocket) Xform() {
 	x.prepare()
 	x.desugar()
 
-	// fmt.Println("after desugaring:", PrettyPrint(x.Root))
+	fmt.Println("after desugaring:", PrettyPrint(x.Root))
+
 	x.solve()
 	fmt.Println("after solving", PrettyPrint(x.Root))
 	x.colorTypes()
@@ -41,7 +42,7 @@ func (x *XformerPocket) solve() {
 	rules := x.getAllSolveRules()
 	nodes := x.getSolvableNodes()
 	x.initializeSolvableNodes(nodes)
-	fmt.Println("after initializing solveable nodes", PrettyPrint(x.Root))
+	// fmt.Println("after initializing solveable nodes", PrettyPrint(x.Root))
 
 	x.applyRewritesUntilStable(nodes, rules)
 }
@@ -55,12 +56,20 @@ func (x *XformerPocket) initializeSolvableNodes(ns []Nod) {
 func (x *XformerPocket) initializeSolvableNode(n Nod) {
 	nt := n.NodeType
 	if isMypedValueType(nt) {
-		NodSetChild(n, NTR_MYPE_NEG, x.getInitMypeNodFull())
-		NodSetChild(n, NTR_MYPE_POS, x.getInitMypeNodEmpty())
+		x.initializePosNegMypes(n)
 	} else if nt == NT_FUNCDEF {
 		NodSetChild(n, NTR_VARTABLE, NodNew(NT_VARTABLE))
+		rvPlaceholder := NodNew(NT_FUNCDEF_RV_PLACEHOLDER)
+		NodSetChild(n, NTR_RETURNVAL_PLACEHOLDER, rvPlaceholder)
+		x.initializePosNegMypes(rvPlaceholder)
 	} else if nt == NT_CLASSDEF {
 		x.buildClassVardefTable(n)
+		x.buildClassFuncdefTable(n)
+	} else if nt == NT_TOPLEVEL {
+		x.buildClassTable()
+		x.buildRootFuncTable()
+	} else if nt == NT_IDENTIFIER || nt == NT_RETURN {
+		// purposeful pass
 	} else {
 		panic("couldn't initialize solvable node")
 	}
@@ -68,10 +77,15 @@ func (x *XformerPocket) initializeSolvableNode(n Nod) {
 
 func (x *XformerPocket) getSolvableNodes() []Nod {
 	return x.SearchRoot(func(n Nod) bool {
-		nt := n.NodeType
-		return isMypedValueType(nt) ||
-			nt == NT_FUNCDEF || nt == NT_CLASSDEF
+		return x.isSolvableNode(n)
 	})
+}
+
+func (x *XformerPocket) isSolvableNode(n Nod) bool {
+	nt := n.NodeType
+	return isMypedValueType(nt) ||
+		nt == NT_FUNCDEF || nt == NT_CLASSDEF ||
+		nt == NT_TOPLEVEL || nt == NT_IDENTIFIER || nt == NT_RETURN
 }
 
 func (x *XformerPocket) getAllSolveRules() []*RewriteRule {
@@ -99,17 +113,18 @@ func (x *XformerPocket) SearchOneFrom(start Nod, condition func(Nod) bool, direc
 
 func (x *XformerPocket) prepare() {
 	x.parseInlineOpStreams()
+	x.prepareDotOps()
 }
 
 func (x *XformerPocket) buildIdentifierTables() {
-	x.annotateDotScopes()
+	// x.annotateDotScopes()
 	x.buildClassTable()
-	x.buildFuncDefTables()
+	// x.buildFuncDefTables()
 	x.buildLocalVarDefTables()
 	x.buildTableHierarchy()
 }
 
-func (x *XformerPocket) annotateDotScopes() {
+func (x *XformerPocket) prepareDotOps() {
 	allDotOps := x.SearchRoot(func(n Nod) bool {
 		return n.NodeType == NT_DOTOP
 	})
@@ -119,10 +134,24 @@ func (x *XformerPocket) annotateDotScopes() {
 		rightArg := NodGetChild(dotOp, NTR_BINOP_RIGHT)
 		if rightArg.NodeType == NT_VAR_GETTER {
 			varName := NodGetChild(rightArg, NTR_VAR_NAME).Data.(string)
-			newNode := NodNewData(NT_IDENTIFIER, varName)
+			newNode := NodNewData(NT_DOTOP_QUALIFIER, varName)
 			x.Replace(rightArg, newNode)
-		} else if rightArg.NodeType == NT_IDENTIFIER {
-			// pass, everything looks good already
+		} else if rightArg.NodeType == NT_IDENTIFIER || rightArg.NodeType == NT_IDENTIFIER_RVAL {
+			rightArg.NodeType = NT_DOTOP_QUALIFIER
+		} else if rightArg.NodeType == NT_RECEIVERCALL {
+			rcBase := NodGetChild(rightArg, NTR_RECEIVERCALL_BASE)
+			if !(rcBase.NodeType == NT_IDENTIFIER) {
+				panic("illegal call on right side of dot")
+			}
+			methArg := NodGetChild(rightArg, NTR_RECEIVERCALL_ARG)
+			methBase := NodGetChild(dotOp, NTR_BINOP_LEFT)
+			// rewrite as method call
+			methCall := NodNew(NT_RECEIVERCALL_METHOD)
+			NodSetChild(methCall, NTR_RECEIVERCALL_METHOD_BASE, methBase)
+			NodSetChild(methCall, NTR_RECEIVERCALL_METHOD_NAME, rcBase)
+			NodSetChild(methCall, NTR_RECEIVERCALL_ARG, methArg)
+			x.Replace(dotOp, methCall)
+
 		} else {
 			panic("illegal expression on right side of dot")
 		}
@@ -187,7 +216,7 @@ func (x *XformerPocket) checkAllCallsResolved() {
 	})
 	for _, call := range calls {
 		base := NodGetChild(call, NTR_RECEIVERCALL_BASE)
-		if isSystemCall(call) || base.NodeType == NT_DOTOP {
+		if isSystemCall(call) || base.NodeType == NT_DOTOP || base.NodeType == NT_VAR_GETTER {
 			continue // don't check these
 		}
 
@@ -258,12 +287,14 @@ func isBinaryOpType(nt int) bool {
 		nt == NT_DOTOP || nt == NT_DOTPIPEOP
 }
 
-func isVarReferenceNT(nt int) bool {
-	return nt == NT_VAR_GETTER || nt == NT_VARASSIGN || nt == NT_PARAMETER
+func isRValVarReferenceNT(nt int) bool {
+	return nt == NT_VAR_GETTER || nt == NT_VARASSIGN || nt == NT_PARAMETER ||
+		nt == NT_IDENTIFIER_RVAL
 }
 
 func isCallType(nt int) bool {
-	return nt == NT_RECEIVERCALL || nt == NT_OBJINIT
+	return nt == NT_RECEIVERCALL || nt == NT_RECEIVERCALL_CMD ||
+		nt == NT_RECEIVERCALL_METHOD || nt == NT_OBJINIT
 }
 
 func (x *XformerPocket) applyRewritesUntilStable(nods []Nod, rules []*RewriteRule) {
