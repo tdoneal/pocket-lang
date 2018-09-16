@@ -116,14 +116,6 @@ func (x *XformerPocket) prepare() {
 	x.prepareDotOps()
 }
 
-func (x *XformerPocket) buildIdentifierTables() {
-	// x.annotateDotScopes()
-	x.buildClassTable()
-	// x.buildFuncDefTables()
-	x.buildLocalVarDefTables()
-	x.buildTableHierarchy()
-}
-
 func (x *XformerPocket) prepareDotOps() {
 	allDotOps := x.SearchRoot(func(n Nod) bool {
 		return n.NodeType == NT_DOTOP
@@ -167,43 +159,6 @@ func isSystemCall(n Nod) bool {
 		}
 	}
 	return false
-}
-
-func (x *XformerPocket) linkCallsToVariableFuncdefs() {
-	// TODO: make this part of the standard solve() procedure
-	// find all unresolved calls that could refer to a local variable
-	unresCalls := x.SearchRoot(func(n Nod) bool {
-		if isReceiverCallType(n.NodeType) && !isSystemCall(n) {
-			if NodGetChild(n, NTR_RECEIVERCALL_BASE).NodeType == NT_IDENTIFIER {
-				if !NodHasChild(n, NTR_FUNCDEF) {
-					return true
-				}
-			}
-		}
-		return false
-	})
-
-	for _, call := range unresCalls {
-		varTable := x.getEnclosingVarTable(call)
-		varDefs := NodGetChildList(varTable)
-		callName := NodGetChild(call, NTR_RECEIVERCALL_BASE).Data.(string)
-		var matchedVarDef Nod
-		for _, varDef := range varDefs {
-			varName := NodGetChild(varDef, NTR_VARDEF_NAME).Data.(string)
-			if callName == varName {
-				matchedVarDef = varDef
-				break
-			}
-		}
-		if matchedVarDef != nil {
-			NodSetChild(call, NTR_FUNCDEF, matchedVarDef)
-		}
-	}
-}
-
-func (x *XformerPocket) getEnclosingVarTable(n Nod) Nod {
-	funcDef := x.findTopLevelFuncDef(n)
-	return NodGetChild(funcDef, NTR_VARTABLE)
 }
 
 func isReceiverCallType(nt int) bool {
@@ -303,8 +258,10 @@ func (x *XformerPocket) applyRewritesUntilStable(nods []Nod, rules []*RewriteRul
 		maxApplied := 0
 		for _, rule := range rules {
 			nApplied := x.applyRewriteRuleOnJust(nods, rule)
-			if nPasses > 10 && nApplied > 0 { // we should never need more than 10 passes
+			if nPasses > 20 && nApplied > 0 { // we should never need more than 20 passes
+				fmt.Println("Warning: 20 passes exceed, likely cycle detected")
 				rule.action(nil) // try to break it to get a good debug trace
+				panic("too many passes, could not solve")
 			}
 			if nApplied > maxApplied {
 				maxApplied = nApplied
@@ -338,19 +295,6 @@ func (x *XformerPocket) applyRewriteRuleOnJust(nods []Nod, rule *RewriteRule) in
 		}
 	}
 	return nApplied
-}
-
-func (x *XformerPocket) isLocalVarRef(n Nod) bool {
-	if n.NodeType == NT_PARAMETER {
-		return true
-	}
-	if n.NodeType == NT_VARASSIGN || n.NodeType == NT_VAR_GETTER {
-		// make sure to ignore non-local assignments
-		if NodGetChild(n, NTR_VAR_NAME).NodeType == NT_IDENTIFIER {
-			return true
-		}
-	}
-	return false
 }
 
 func (x *XformerPocket) parseInlineOpStream(opStream Nod) Nod {

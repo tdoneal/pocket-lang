@@ -6,13 +6,6 @@ import (
 	. "pocket-lang/parse"
 )
 
-func (x *XformerPocket) solveIdentifiers() {
-	allNods := x.SearchRoot(func(n Nod) bool { return true })
-	rules := x.getIdentifierRewriteRules()
-	x.applyRewritesUntilStable(allNods, rules)
-
-}
-
 func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 	rv := []*RewriteRule{
 		x.IRRBaseIdentifiers(),
@@ -436,10 +429,6 @@ func (x *XformerPocket) getContainingClassDef(n Nod) Nod {
 	return x.getContainingNodOrNil(n, func(n Nod) bool { return n.NodeType == NT_CLASSDEF })
 }
 
-func (x *XformerPocket) getLocalVarName(n Nod) string {
-	return NodGetChild(n, NTR_VAR_NAME).Data.(string)
-}
-
 func (x *XformerPocket) varTableLookup(vt Nod, varName string) Nod {
 	vDefs := NodGetChildList(vt)
 	for _, vDef := range vDefs {
@@ -488,25 +477,6 @@ func (x *XformerPocket) addVarToVartable(vt Nod, varDef Nod) {
 	NodSetOutList(vt, eList)
 }
 
-func (x *XformerPocket) buildTableHierarchy() {
-	// links vartables to their "parents"
-	// in preparation for final variable resolving
-	// for example, a local vartable's parent might be a class vartable
-
-	varTables := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARTABLE })
-
-	for _, varTable := range varTables {
-		container := NodGetParent(varTable, NTR_VARTABLE)
-		parentContainer := x.getContainingNodOrNil(container, func(n Nod) bool {
-			return NodHasChild(n, NTR_VARTABLE) && n != container
-		})
-		if parentContainer != nil {
-			parentVarTable := NodGetChild(parentContainer, NTR_VARTABLE)
-			NodSetChild(varTable, NTR_TABLE_PARENT, parentVarTable)
-		}
-	}
-}
-
 func (x *XformerPocket) buildClassTable() {
 	clsDefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_CLASSDEF })
 	clsTable := NodNewChildList(NT_CLASSTABLE, clsDefs)
@@ -545,152 +515,4 @@ func (x *XformerPocket) buildRootFuncTable() {
 	funcDefs := x.SearchNodList(topLevelUnits, func(n Nod) bool { return n.NodeType == NT_FUNCDEF })
 	funcTable := NodNewChildList(NT_FUNCTABLE, funcDefs)
 	NodSetChild(x.Root, NTR_FUNCTABLE, funcTable)
-}
-
-func (x *XformerPocket) buildLocalVarDefTables() {
-	// find all local variable assignments and construct
-	// the canonical union of variables
-
-	// determine which (top-level) imperatives have which local vars
-	localVarWrites := x.SearchRoot(func(n Nod) bool {
-		return x.isLocalVarRef(n) && (n.NodeType == NT_PARAMETER || n.NodeType == NT_VARASSIGN)
-	})
-	impToVarRef := make(map[Nod][]Nod)
-	for _, varRef := range localVarWrites {
-		funcDef := x.findTopLevelFuncDef(varRef)
-		if funcDef == nil {
-			panic("failed to find top level imperative")
-		}
-		impToVarRef[funcDef] = append(impToVarRef[funcDef], varRef)
-	}
-
-	// next, generate the vartables for each imperative
-	for imper, varRefs := range impToVarRef {
-		varTable := x.generateVarTableFromLocalVarRefs(varRefs)
-		NodSetChild(imper, NTR_VARTABLE, varTable)
-	}
-
-	x.linkVarsToVarTables()
-	x.computeVariableScopes()
-
-}
-
-func (x *XformerPocket) linkVarsToVarTables() {
-
-	// link up all unresolved var assignments and var getters to refer to this unified table
-	varRefs := x.SearchRoot(func(n Nod) bool {
-		return n.NodeType == NT_VAR_GETTER || n.NodeType == NT_VARASSIGN ||
-			n.NodeType == NT_PARAMETER
-	})
-	for _, varRef := range varRefs {
-		// get the var table associated with this var reference
-
-		parentContainer := x.getContainingNodOrNil(varRef, func(n Nod) bool {
-			return NodHasChild(n, NTR_VARTABLE)
-		})
-
-		if parentContainer == nil {
-			panic("failed to find any variable table for var ref")
-		}
-
-		imParent := parentContainer
-		imVartable := NodGetChild(imParent, NTR_VARTABLE)
-
-		// get the var name as a string, which serves as the lookup key in the var table
-		varName := x.getVarNameFromVarRef(varRef)
-
-		// search the varTable for the name (naive linear search but should always be small list)
-		matchedVarDef := x.searchVarTableForNameDeep(imVartable, varName)
-		if matchedVarDef == nil {
-			panic("unknown var: '" + varName + "'")
-		}
-		// finally, store a reference to the definition
-		NodSetChild(varRef, NTR_VARDEF, matchedVarDef)
-	}
-
-}
-
-func (x *XformerPocket) searchVarTableForNameDeep(varTable Nod, varName string) Nod {
-	// search the varTable for the name (naive linear search but should always be small list)
-	varDefs := NodGetChildList(varTable)
-	for _, varDef := range varDefs {
-		varDefVarName := NodGetChild(varDef, NTR_VARDEF_NAME).Data.(string)
-		if varDefVarName == varName {
-			return varDef
-		}
-	}
-	// recurse to parent if nothing found locally
-	if parentTable := NodGetChildOrNil(varTable, NTR_TABLE_PARENT); parentTable != nil {
-		return x.searchVarTableForNameDeep(parentTable, varName)
-	}
-	return nil
-}
-
-func (x *XformerPocket) computeVariableScopes() {
-	// varTables := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARTABLE })
-	// for _, varTable := range varTables {
-	// 	varDefs := NodGetChildList(varTable)
-	// 	for _, varDef := range varDefs {
-	// 		varScope := VSCOPE_FUNCLOCAL
-	// 		incomingNods := varDef.In
-	// 		for _, inEdge := range incomingNods {
-	// 			inNod := inEdge.In
-	// 			if inNod.NodeType == NT_PARAMETER {
-	// 				varScope = VSCOPE_FUNCPARAM
-	// 				break
-	// 			}
-	// 		}
-	// 		// scope has been computed, now save it
-	// 		NodSetChild(varDef, NTR_VARDEF_SCOPE, NodNewData(NT_VARDEF_SCOPE, varScope))
-	// 	}
-	// }
-}
-
-func (x *XformerPocket) getVarNameFromVarRef(varRef Nod) string {
-	if varRef.NodeType == NT_PARAMETER {
-		return NodGetChild(varRef, NTR_VARDEF_NAME).Data.(string)
-	} else if varRef.NodeType == NT_VAR_GETTER || varRef.NodeType == NT_VARASSIGN {
-		return NodGetChild(varRef, NTR_VAR_NAME).Data.(string)
-	} else {
-		panic("unhandled var ref type")
-	}
-}
-
-func (x *XformerPocket) generateVarTableFromLocalVarRefs(varRefs []Nod) Nod {
-	// incoming var refs are either parameters or assignments
-	// an assignment defines a local variable iff no name match at the outer
-	// class level
-
-	varDefsByName := make(map[string]Nod)
-
-	for _, varRef := range varRefs {
-		varName := x.getVarNameFromVarRef(varRef)
-		varDef := NodNew(NT_VARDEF)
-
-		// annotate scope if we can
-		var scope = -1
-		if varRef.NodeType == NT_PARAMETER {
-			scope = VSCOPE_FUNCPARAM
-		} else if varRef.NodeType == NT_VARASSIGN {
-			scope = VSCOPE_FUNCLOCAL
-		}
-		if scope != -1 {
-			NodSetChild(varDef, NTR_VARDEF_SCOPE, NodNewData(NT_VARDEF_SCOPE, scope))
-		}
-
-		NodSetChild(varDef, NTR_VARDEF_NAME, NodNewData(NT_IDENTIFIER, varName))
-		varDefsByName[varName] = varDef
-	}
-
-	varDefsList := make([]Nod, 0)
-	for _, varDef := range varDefsByName {
-		varDefsList = append(varDefsList, varDef)
-	}
-	return NodNewChildList(NT_VARTABLE, varDefsList)
-}
-
-func (x *XformerPocket) findTopLevelFuncDef(n Nod) Nod {
-	return x.getContainingNodOrNil(n, func(n Nod) bool {
-		return n.NodeType == NT_FUNCDEF
-	})
 }

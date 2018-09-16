@@ -6,6 +6,52 @@ import (
 	. "pocket-lang/parse"
 )
 
+func (x *XformerPocket) getAllSolveTypeRules() []*RewriteRule {
+	generalRules := x.getAllGeneralMARRules()
+	positiveRules := x.getAllPositiveMARRules()
+	negativeRules := x.getAllNegativeMARRules()
+	rv := append(generalRules, positiveRules...)
+	rv = append(rv, negativeRules...)
+	return rv
+}
+
+func (x *XformerPocket) getAllGeneralMARRules() []*RewriteRule {
+	// get type annotation rules that don't apply specifically to
+	// positive or negative mypes
+	return []*RewriteRule{
+		x.marGenLinkVarRefsToVarDef(),
+		x.marRemoveMypesFromDotopQualifiers(),
+	}
+}
+
+func (x *XformerPocket) getAllNegativeMARRules() []*RewriteRule {
+	rv := []*RewriteRule{
+		marNegDeclaredType(),
+		marNegVarAssign(),
+	}
+	rv = append(rv, marNegOpRestrictRules()...)
+	return rv
+}
+
+func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
+	rv := []*RewriteRule{
+		marPosPrimitiveLiterals(),
+		marPosCollectionLiterals(),
+		marPosVarAssign(),
+		marPosPublicParameter(),
+		marPosSysFunc(),
+		marPosVarFunc(),
+		marPosObjInitPrim(),
+		marPosObjInitUser(),
+		marPosObjAccessor(),
+		marPosOwnField(),
+		marPosFuncCallUser(),
+		marPosReturnValue(),
+	}
+	rv = append(rv, marPosOpEvaluateRules()...)
+	return rv
+}
+
 func (x *XformerPocket) getInitMypeNodFull() Nod {
 	md := MypeArgedNewFull()
 	return NodNewData(NT_MYPE, md)
@@ -26,57 +72,6 @@ func isMypedValueType(nt int) bool {
 		isRValVarReferenceNT(nt) || isCallType(nt)
 }
 
-func (x *XformerPocket) initializeAllMypes() []Nod {
-	// initializes all mypes and returns a list of myped nodes
-
-	// first: initialize all positive and negative in the vartable
-	varDefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_VARDEF })
-	for _, value := range varDefs {
-		x.initializePosNegMypes(value)
-	}
-
-	// next gather all value nodes
-	// TODO: multi-function support
-	values := x.SearchRoot(func(n Nod) bool {
-		return isMypedValueType(n.NodeType)
-	})
-
-	// assign an initial mype to all value nodes
-	for _, value := range values {
-		// special case of local variables: we don't want a mype per *instance* of a variable accessor,
-		// we want a single mype per *definition* of a variable, so we point it as such
-		// todo: support non-local variables
-		if x.isLocalVarRef(value) {
-			// we implement this by pointing the type to the unified variable table
-			varDef := NodGetChild(value, NTR_VARDEF)
-			NodSetChild(value, NTR_MYPE_NEG, NodGetChild(varDef, NTR_MYPE_NEG))
-			NodSetChild(value, NTR_MYPE_POS, NodGetChild(varDef, NTR_MYPE_POS))
-		} else {
-			x.initializePosNegMypes(value)
-		}
-	}
-
-	return append(values, varDefs...)
-}
-
-func (x *XformerPocket) solveTypes() {
-	// // assign a concrete type to every node
-	nodes := x.initializeAllMypes()
-	fmt.Println("after initial mype assignments:", PrettyPrintMypes(nodes))
-	// apply repeated solve rules until convergence (for system 1 semantics)
-	// apply positive rules
-	positiveRules := x.getAllPositiveMARRules()
-	x.applyRewritesUntilStable(nodes, positiveRules)
-	fmt.Println("after pos rules")
-	// apply negative rules
-	negativeRules := x.getAllNegativeMARRules()
-	fmt.Println("starting apply neg rules")
-	x.applyRewritesUntilStable(nodes, negativeRules)
-
-	fmt.Println("after positive and negative rules:", PrettyPrintMypes(nodes))
-	x.colorTypes()
-}
-
 func (x *XformerPocket) colorTypes() {
 	// generate the "valid" mypes by intersecting the negative with the positive
 	// then output a single "type color" for each myped node
@@ -86,24 +81,6 @@ func (x *XformerPocket) colorTypes() {
 	x.convertValidMypesToFinalTypes()
 	fmt.Println("Final type assignments:", PrettyPrintMypes(nodes))
 
-}
-
-func (x *XformerPocket) getAllSolveTypeRules() []*RewriteRule {
-	generalRules := x.getAllGeneralMARRules()
-	positiveRules := x.getAllPositiveMARRules()
-	negativeRules := x.getAllNegativeMARRules()
-	rv := append(generalRules, positiveRules...)
-	rv = append(rv, negativeRules...)
-	return rv
-}
-
-func (x *XformerPocket) getAllGeneralMARRules() []*RewriteRule {
-	// get type annotation rules that don't apply specifically to
-	// positive or negative mypes
-	return []*RewriteRule{
-		x.marGenLinkVarRefsToVarDef(),
-		x.marRemoveMypesFromDotopQualifiers(),
-	}
 }
 
 func (x *XformerPocket) marRemoveMypesFromDotopQualifiers() *RewriteRule {
@@ -193,34 +170,6 @@ func (x *XformerPocket) convertValidMypesToFinalTypes() {
 			NodRemoveChild(n, NTR_MYPE_VALID)
 		},
 	})
-}
-
-func (x *XformerPocket) getAllNegativeMARRules() []*RewriteRule {
-	rv := []*RewriteRule{
-		marNegDeclaredType(),
-		marNegVarAssign(),
-	}
-	rv = append(rv, marNegOpRestrictRules()...)
-	return rv
-}
-
-func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
-	rv := []*RewriteRule{
-		marPosPrimitiveLiterals(),
-		marPosCollectionLiterals(),
-		marPosVarAssign(),
-		marPosPublicParameter(),
-		marPosSysFunc(),
-		marPosVarFunc(),
-		marPosObjInitPrim(),
-		marPosObjInitUser(),
-		marPosObjAccessor(),
-		marPosOwnField(),
-		marPosFuncCallUser(),
-		marPosReturnValue(),
-	}
-	rv = append(rv, marPosOpEvaluateRules()...)
-	return rv
 }
 
 func marPosFuncCallUser() *RewriteRule {
@@ -491,61 +440,6 @@ func marPosSysFunc() *RewriteRule {
 	}
 }
 
-func (x *XformerPocket) marPosUserFuncEvaluateRules() []*RewriteRule {
-	// TODO: remove and convert into something with less temporal dependencies
-	// on func table already being constructed, etc
-	funcTableNod := NodGetChild(x.Root, NTR_FUNCTABLE)
-	funcDefs := NodGetChildList(funcTableNod)
-	rv := []*RewriteRule{}
-	for _, funcDef := range funcDefs {
-		rule := x.marPosGenFuncEvaluateRule(funcDef)
-		if rule != nil {
-			rv = append(rv, rule)
-		}
-	}
-	fmt.Println("generated evaluation rules for ", len(rv), "funcdefs")
-	return rv
-}
-
-func marPosGFERCondition(call Nod, funcDef Nod) bool {
-	callMype := NodGetChild(call, NTR_MYPE_POS).Data.(Mype)
-	declaredDefType := NodGetChild(funcDef, NTR_FUNCDEF_OUTTYPE)
-	funcOutMype := XMypeNewSingle(declaredDefType)
-	if callMype.WouldChangeFromUnionWith(funcOutMype) {
-		return true
-	}
-	return false
-}
-
-func marPosGFERAction(call Nod) {
-	funcDef := NodGetChild(call, NTR_FUNCDEF)
-	declaredDefType := NodGetChild(funcDef, NTR_FUNCDEF_OUTTYPE)
-	funcOutMype := XMypeNewSingle(declaredDefType)
-	NodGetChild(call, NTR_MYPE_POS).Data = funcOutMype
-}
-
-func (x *XformerPocket) marPosGenFuncEvaluateRule(funcDef Nod) *RewriteRule {
-	// generates the rule that replaces a function call with its return type
-	if outType := NodGetChildOrNil(funcDef, NTR_FUNCDEF_OUTTYPE); outType != nil {
-		return &RewriteRule{
-			condition: func(n Nod) bool {
-				if n.NodeType == NT_RECEIVERCALL {
-					if callDef := NodGetChildOrNil(n, NTR_FUNCDEF); callDef != nil {
-						if callDef == funcDef {
-							return marPosGFERCondition(n, callDef)
-						}
-					}
-
-				}
-				return false
-			},
-			action: marPosGFERAction,
-		}
-	} else {
-		return nil
-	}
-}
-
 func marPosPublicParameter() *RewriteRule {
 	// assume that assignments to this parameter are in fact called
 	// with every allowable type
@@ -677,6 +571,7 @@ type MypeOpEvaluateRule struct {
 func marGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
 	// define type propagation rules of the form (int + int) -> int
 	return []*MypeOpEvaluateRule{
+		// TODO: potentially compress this table
 		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_INT, TY_INT},
 		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_FLOAT, TY_FLOAT},
 		&MypeOpEvaluateRule{NT_ADDOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
