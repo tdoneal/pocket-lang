@@ -108,6 +108,16 @@ func (ma *MypeArged) Intersection(other Mype) Mype {
 				return MypeArgedNewEmpty()
 			}
 		}
+		if (ma.NodeType == NT_CLASSDEF && otherMa.NodeType != NT_CLASSDEF) ||
+			(ma.NodeType != NT_CLASSDEF && otherMa.NodeType == NT_CLASSDEF) {
+			return MypeArgedNewEmpty()
+		}
+		if ma.NodeType == NT_CLASSDEF && otherMa.NodeType == NT_CLASSDEF {
+			if ma.Node == otherMa.Node {
+				return ma
+			}
+			return MypeArgedNewEmpty()
+		}
 		// from here on refer to big and small rather than ma and otherMa
 		big, small := MAGetCanonOrder(ma, otherMa)
 		if big.NodeType == MATYPE_UNION && (small.NodeType == MATYPE_SINGLE_BASE ||
@@ -246,6 +256,7 @@ func (ma *MypeArged) WouldChangeFromUnionWith(other Mype) bool {
 func MAGetCanonOrder(ma0 *MypeArged, ma1 *MypeArged) (*MypeArged, *MypeArged) {
 	big := ma0
 	small := ma1
+	// TODO: simplify this and just use the ordering defined by the integers
 	if (big.NodeType == MATYPE_SINGLE_BASE && small.NodeType == MATYPE_UNION) ||
 		(big.NodeType == MATYPE_SINGLE_BASE && small.NodeType == MATYPE_SINGLE_ARGED) ||
 		(big.NodeType == MATYPE_SINGLE_ARGED && small.NodeType == MATYPE_UNION) {
@@ -312,6 +323,9 @@ func (ma *MypeArged) WouldChangeFromIntersectionWith(other Mype) bool {
 			if isEq {
 				return false
 			}
+		}
+		if ma.NodeType == NT_CLASSDEF && otherMa.NodeType == NT_CLASSDEF {
+			return ma.Node != otherMa.Node
 		}
 		if ma.NodeType == MATYPE_UNION && otherMa.NodeType == MATYPE_UNION {
 			return ma.WouldChangeFromXSectWithUU(otherMa)

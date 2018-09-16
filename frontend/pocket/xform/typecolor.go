@@ -343,6 +343,8 @@ func XMypeNewSingle(n Nod) Mype {
 		base := NodGetChild(n, NTR_TYPEARGED_BASE)
 		arg := NodGetChild(n, NTR_TYPEARGED_ARG)
 		return MypeArgedNewSingleArged(base.Data.(int), XMypeNewSingle(arg))
+	} else if n.NodeType == NT_CLASSDEF {
+		return XMypeNewSingleClassDef(n)
 	} else {
 		fmt.Println("FAIL: XMypeNewSingle on", PrettyPrint(n))
 		panic("cannot generate single mype")
@@ -542,10 +544,15 @@ func marNegDeclaredType() *RewriteRule {
 		condition: func(n Nod) bool {
 			if n.NodeType == NT_PARAMETER || n.NodeType == NT_VARASSIGN {
 				if typeDeclNod := NodGetChildOrNil(n, NTR_TYPE_DECL); typeDeclNod != nil {
-					negMype := NodGetChild(n, NTR_MYPE_NEG).Data.(Mype)
-					declMype := XMypeNewSingle(typeDeclNod)
-					if negMype.WouldChangeFromIntersectionWith(declMype) {
-						return true
+					if typeDeclNod.NodeType == NT_TYPEBASE || typeDeclNod.NodeType == NT_CLASSDEF {
+						negMype := NodGetChild(n, NTR_MYPE_NEG).Data.(Mype)
+						declMype := XMypeNewSingle(typeDeclNod)
+						if negMype.WouldChangeFromIntersectionWith(declMype) {
+							return true
+						}
+					} else {
+						fmt.Println("interesting situation: got type decl but wasn't supported:",
+							PrettyPrint(typeDeclNod))
 					}
 				}
 			}

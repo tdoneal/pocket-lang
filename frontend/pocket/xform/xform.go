@@ -139,7 +139,7 @@ func (x *XformerPocket) prepareDotOps() {
 			methBase := NodGetChild(dotOp, NTR_BINOP_LEFT)
 			// rewrite as method call
 			methCall := NodNew(NT_RECEIVERCALL_METHOD)
-			NodSetChild(methCall, NTR_RECEIVERCALL_METHOD_BASE, methBase)
+			NodSetChild(methCall, NTR_RECEIVERCALL_BASE, methBase)
 			NodSetChild(methCall, NTR_RECEIVERCALL_METHOD_NAME, rcBase)
 			NodSetChild(methCall, NTR_RECEIVERCALL_ARG, methArg)
 			x.Replace(dotOp, methCall)
@@ -147,6 +147,29 @@ func (x *XformerPocket) prepareDotOps() {
 		} else {
 			panic("illegal expression on right side of dot")
 		}
+	}
+
+	// rewrite certain forms of callcmd to be method calls
+	callCmds := x.SearchRoot(func(n Nod) bool {
+		if n.NodeType == NT_RECEIVERCALL_CMD {
+			base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+			if base.NodeType == NT_DOTOP {
+				return true
+			}
+		}
+		return false
+	})
+	for _, callCmd := range callCmds {
+		dotOp := NodGetChild(callCmd, NTR_RECEIVERCALL_BASE)
+		methArg := NodGetChild(callCmd, NTR_RECEIVERCALL_ARG)
+		methBase := NodGetChild(dotOp, NTR_BINOP_LEFT)
+		methName := NodGetChild(dotOp, NTR_BINOP_RIGHT)
+		// rewrite as method call
+		methCall := NodNew(NT_RECEIVERCALL_METHOD)
+		NodSetChild(methCall, NTR_RECEIVERCALL_BASE, methBase)
+		NodSetChild(methCall, NTR_RECEIVERCALL_METHOD_NAME, methName)
+		NodSetChild(methCall, NTR_RECEIVERCALL_ARG, methArg)
+		x.Replace(callCmd, methCall)
 	}
 
 }

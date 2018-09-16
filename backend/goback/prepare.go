@@ -9,6 +9,11 @@ import (
 const (
 	PNTR_GOIMPORTS = 284000 + iota
 	PNT_DUCK_BINOP
+	PNT_DUCK_FIELD_READ
+	PNT_DUCK_FIELD_WRITE
+	PNTR_DUCK_FIELD_WRITE_OBJ
+	PNTR_DUCK_FIELD_WRITE_NAME
+	PNTR_DUCK_FIELD_WRITE_VAL
 )
 
 type Preparer struct {
@@ -51,8 +56,10 @@ func (p *Preparer) isIndexableType(n Nod) bool {
 		return bt == TY_LIST || bt == TY_MAP
 	} else if n.NodeType == NT_TYPEARGED {
 		return p.isIndexableType(NodGetChild(n, NTR_TYPEARGED_BASE))
+	} else if n.NodeType == NT_CLASSDEF {
+		return false
 	} else {
-		panic("unhandled type of type")
+		panic("unhandled type")
 	}
 }
 
@@ -97,6 +104,59 @@ func (p *Preparer) interpretAsListIndex(arg Nod) Nod {
 }
 
 func (p *Preparer) rewriteDuckedOps() {
+	p.rewriteDuckedOpsObjFieldWrite()
+	p.rewriteDuckedOpsObjFieldRead()
+	p.rewriteDuckedOpsBinary()
+}
+
+func (p *Preparer) rewriteDuckedOpsObjFieldRead() {
+	// rewrite obj.x -> P__duck_field_read(obj, "x")
+	p.SearchReplaceAll(func(n Nod) bool {
+		if n.NodeType == NT_DOTOP {
+			leftType := NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_TYPE)
+			if leftType.NodeType == NT_TYPEBASE && leftType.Data.(int) == TY_DUCK {
+				return true
+			}
+		}
+		return false
+	}, func(n Nod) Nod {
+		rv := NodNew(PNT_DUCK_FIELD_READ)
+		NodSetChild(rv, NTR_BINOP_LEFT, NodGetChild(n, NTR_BINOP_LEFT))
+		NodSetChild(rv, NTR_BINOP_RIGHT, NodGetChild(n, NTR_BINOP_RIGHT))
+		return rv
+	})
+}
+
+func (p *Preparer) rewriteDuckedOpsObjFieldWrite() {
+	// rewrite obj.x : val -> P__duck_field_write(obj, "x", val)
+	duckAssigns := p.SearchRoot(func(n Nod) bool {
+		if n.NodeType == NT_VARASSIGN {
+			lhs := NodGetChild(n, NTR_VAR_NAME)
+			if lhs.NodeType == NT_DOTOP {
+				obj := NodGetChild(lhs, NTR_BINOP_LEFT)
+				objType := NodGetChild(obj, NTR_TYPE)
+				if objType.NodeType == NT_TYPEBASE && objType.Data.(int) == TY_DUCK {
+					return true
+				}
+			}
+		}
+		return false
+	})
+
+	for _, duckAssign := range duckAssigns {
+		dotOp := NodGetChild(duckAssign, NTR_VAR_NAME)
+		obj := NodGetChild(dotOp, NTR_BINOP_LEFT)
+		qual := NodGetChild(dotOp, NTR_BINOP_RIGHT)
+		val := NodGetChild(duckAssign, NTR_VARASSIGN_VALUE)
+		duckWrite := NodNew(PNT_DUCK_FIELD_WRITE)
+		NodSetChild(duckWrite, PNTR_DUCK_FIELD_WRITE_OBJ, obj)
+		NodSetChild(duckWrite, PNTR_DUCK_FIELD_WRITE_NAME, qual)
+		NodSetChild(duckWrite, PNTR_DUCK_FIELD_WRITE_VAL, val)
+		p.Replace(duckAssign, duckWrite)
+	}
+}
+
+func (p *Preparer) rewriteDuckedOpsBinary() {
 	// search for: any binary ops with ducked args
 	p.SearchReplaceAll(func(n Nod) bool {
 		if isBinaryInlineOpType(n.NodeType) {
@@ -113,5 +173,4 @@ func (p *Preparer) rewriteDuckedOps() {
 		NodSetChild(rv, NTR_BINOP_RIGHT, NodGetChild(n, NTR_BINOP_RIGHT))
 		return rv
 	})
-
 }

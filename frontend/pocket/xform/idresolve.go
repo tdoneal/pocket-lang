@@ -10,11 +10,13 @@ func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 	rv := []*RewriteRule{
 		x.IRRBaseIdentifiers(),
 		x.IRRBaseCallIdentifiers(),
+		x.IRRTypeDeclIdentifiers(),
 		x.IRRParametersToLocals(),
 		x.IRRNoscopesClass(),
 		x.IRRNoscopesLocals(),
 		x.IRRNoscopesFuncGlobal(),
 		x.IRRNoscopesFuncObjInit(),
+		x.IRRNoscopesType(),
 		x.IRRNoscopesFuncLocalVar(),
 		// TODO: somehow re-use the var lookup framework to resolve certain Noscope Funcs
 		x.IRRSimpleVarWrites(),
@@ -24,6 +26,26 @@ func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 		x.IRRResolveMethodCalls(),
 	}
 	return rv
+}
+
+func (x *XformerPocket) IRRTypeDeclIdentifiers() *RewriteRule {
+	// make progress on identifiers directly within type declarations
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_VARASSIGN {
+				if typeDecl := NodGetChildOrNil(n, NTR_TYPE_DECL); typeDecl != nil {
+					if typeDecl.NodeType == NT_IDENTIFIER {
+						return true
+					}
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			typeDecl := NodGetChild(n, NTR_TYPE_DECL)
+			typeDecl.NodeType = NT_IDENTIFIER_TYPE_NOSCOPE
+		},
+	}
 }
 
 func (x *XformerPocket) IRRReturnToPlaceholder() *RewriteRule {
@@ -68,6 +90,30 @@ func (x *XformerPocket) IRRParametersToLocals() *RewriteRule {
 			}
 			// if we got here, it's a new local variable for sure
 			x.linkNewVarDefWithName(n, fTable, idtext, VSCOPE_FUNCPARAM)
+		},
+	}
+}
+
+func (x *XformerPocket) IRRNoscopesType() *RewriteRule {
+	// make progress on single-word references to known types
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+
+			if n.NodeType == NT_IDENTIFIER_TYPE_NOSCOPE {
+
+				idtext := n.Data.(string)
+				cDef := x.globalClassDefLookup(idtext)
+
+				if cDef != nil {
+					return true
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			cDef := x.globalClassDefLookup(n.Data.(string))
+			n.NodeType = NT_IDENTIFIER_RESOLVED
+			x.Replace(n, cDef)
 		},
 	}
 }

@@ -76,7 +76,8 @@ func (g *Generator) genClassDef(n Nod) {
 }
 
 func (g *Generator) genClassField(n Nod) {
-	g.WS(NodGetChild(n, NTR_VARDEF_NAME).Data.(string))
+	pkFieldName := NodGetChild(n, NTR_VARDEF_NAME).Data.(string)
+	g.WS(g.convertToGoFieldName(pkFieldName))
 	g.WS(" interface{}")
 }
 
@@ -260,7 +261,7 @@ func (g *Generator) getGenTypeArged(n Nod) string {
 }
 
 func isReceiverCallType(nt int) bool {
-	return nt == NT_RECEIVERCALL || nt == NT_RECEIVERCALL_CMD
+	return nt == NT_RECEIVERCALL || nt == NT_RECEIVERCALL_CMD || nt == NT_RECEIVERCALL_METHOD
 }
 
 func (g *Generator) genImperativeUnit(n Nod) {
@@ -282,10 +283,26 @@ func (g *Generator) genImperativeUnit(n Nod) {
 		g.genImperative(n)
 	} else if n.NodeType == NT_PASS {
 		g.genPass(n)
+	} else if n.NodeType == PNT_DUCK_FIELD_WRITE {
+		g.genDuckFieldWrite(n)
 	} else {
 		g.WS("command")
 	}
 	g.WS("\n")
+}
+
+func (g *Generator) genDuckFieldWrite(n Nod) {
+	obj := NodGetChild(n, PNTR_DUCK_FIELD_WRITE_OBJ)
+	name := NodGetChild(n, PNTR_DUCK_FIELD_WRITE_NAME)
+	val := NodGetChild(n, PNTR_DUCK_FIELD_WRITE_VAL)
+	g.WS("P__duck_field_write(")
+	g.genValue(obj)
+	g.WS(", ")
+	fieldName := name.Data.(string)
+	g.genLiteralStringRaw(g.convertToGoFieldName(fieldName))
+	g.WS(", ")
+	g.genValue(val)
+	g.WS(")")
 }
 
 func (g *Generator) genPass(n Nod) {
@@ -378,7 +395,8 @@ func (g *Generator) genLValue(n Nod, varDef Nod) {
 	if n.NodeType == NT_DOTOP {
 		g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
 		g.WS(".")
-		g.WS(NodGetChild(n, NTR_BINOP_RIGHT).Data.(string))
+		fieldName := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string)
+		g.WS(g.convertToGoFieldName(fieldName))
 	} else if n.NodeType == NT_IDENTIFIER || n.NodeType == NT_IDENTIFIER_RESOLVED ||
 		n.NodeType == NT_IDENTIFIER_FUNC_NOSCOPE {
 		g.WS(n.Data.(string))
@@ -388,6 +406,12 @@ func (g *Generator) genLValue(n Nod, varDef Nod) {
 }
 
 func (g *Generator) genReceiverCall(n Nod) {
+
+	if n.NodeType == NT_RECEIVERCALL_METHOD {
+		g.genReceiverCallMethod(n)
+		return
+	}
+
 	base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
 
 	if rcvName, ok := base.Data.(string); ok {
@@ -405,7 +429,7 @@ func (g *Generator) genReceiverCall(n Nod) {
 }
 
 func (g *Generator) genReceiverCallMethod(n Nod) {
-	base := NodGetChild(n, NTR_RECEIVERCALL_METHOD_BASE)
+	base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
 	name := NodGetChild(n, NTR_RECEIVERCALL_METHOD_NAME).Data.(string)
 
 	g.genValue(base)
@@ -464,14 +488,29 @@ func (g *Generator) genValue(n Nod) {
 	} else if nt == NT_OBJINIT {
 		g.genObjInit(n)
 	} else if nt == NT_DOTOP {
-		g.genDotOp(n)
+		g.genValueDotOp(n)
 	} else if g.isBinaryInlineDuckOpType(n.NodeType) {
 		g.genDuckOp(n)
 	} else if isBinaryInlineOpType(n.NodeType) {
 		g.genBinaryInlineOp(n)
+	} else if n.NodeType == PNT_DUCK_FIELD_READ {
+		g.genDuckFieldRead(n)
 	} else {
 		g.WS("value")
 	}
+}
+
+func (g *Generator) genDuckFieldRead(n Nod) {
+	g.WS("P__duck_field_read(")
+	g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
+	g.WS(", ")
+	pkFieldName := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string)
+	g.genLiteralStringRaw(g.convertToGoFieldName(pkFieldName))
+	g.WS(")")
+}
+
+func (g *Generator) convertToGoFieldName(pkFieldName string) string {
+	return "P" + pkFieldName // gotta capitalize these names so Go treats them as public
 }
 
 func (g *Generator) genCollectionIndexor(n Nod) {
@@ -528,7 +567,7 @@ func (g *Generator) isBinaryInlineDuckOpType(nt int) bool {
 	return nt == PNT_DUCK_BINOP
 }
 
-func (g *Generator) genDotOp(n Nod) {
+func (g *Generator) genValueDotOp(n Nod) {
 	qualName := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string)
 	objNod := NodGetChild(n, NTR_BINOP_LEFT)
 	if qualName == "len" {
@@ -540,7 +579,7 @@ func (g *Generator) genDotOp(n Nod) {
 		g.genValue(objNod)
 		g.WS(")")
 		g.WS(".")
-		g.WS(qualName)
+		g.WS(g.convertToGoFieldName(qualName))
 	}
 }
 
@@ -564,8 +603,12 @@ func (g *Generator) genLiteralBool(n Nod) {
 }
 
 func (g *Generator) genLiteralString(n Nod) {
+	g.genLiteralStringRaw(n.Data.(string))
+}
+
+func (g *Generator) genLiteralStringRaw(s string) {
 	g.WS("\"")
-	g.WS(n.Data.(string))
+	g.WS(s)
 	g.WS("\"")
 }
 
@@ -676,12 +719,19 @@ func (g *Generator) genLiteralList(n Nod) {
 
 func (g *Generator) genVarGetter(n Nod) {
 	varDef := NodGetChild(n, NTR_VARDEF)
+	isClassField := false
 	if scope := NodGetChildOrNil(varDef, NTR_VARDEF_SCOPE); scope != nil {
 		if scope.Data.(int) == VSCOPE_CLASSFIELD {
-			g.WS("self.")
+			isClassField = true
 		}
 	}
+
 	varName := NodGetChild(n, NTR_VAR_NAME).Data.(string)
+
+	if isClassField {
+		varName = g.convertToGoFieldName(varName)
+		g.WS("self.")
+	}
 	g.WS(varName)
 }
 

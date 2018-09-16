@@ -1,0 +1,28 @@
+
+Foo class
+    w
+
+main func
+    f : Foo()
+    f.w : 6
+    thang(f)
+
+thang func(x)
+    print x.w
+
+
+>>>6>>>
+
+Foo class
+    w
+
+main func
+    f : Foo()
+    f.w : 1
+    thang(f)
+    print f.w
+
+thang func(x)
+    x.w : 2
+
+>>>2

@@ -212,3 +212,16 @@ func P__duck_defeq(a duck, b duck) bool {
 func __pk_duck_ftoa(f float64) string {
 	return strconv.FormatFloat(f, 'g', -1, 64)
 }
+
+func P__duck_field_read(obj duck, field string) duck {
+	val := reflect.Indirect(reflect.ValueOf(obj))
+	fieldVal := val.FieldByName(field)
+	return fieldVal.Interface()
+}
+
+func P__duck_field_write(obj duck, name string, value duck) {
+	structValue := reflect.Indirect(reflect.ValueOf(obj))
+	structFieldValue := structValue.FieldByName(name)
+	val := reflect.ValueOf(value)
+	structFieldValue.Set(val)
+}

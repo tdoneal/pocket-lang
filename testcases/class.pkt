@@ -26,6 +26,16 @@ main func
     r.width : 3
     r.height: 4
     print r.area()
->>>12
+>>>12>>>
+# test type decl of class
+Point class
+    y
+
+main func
+    x Point : Point()
+    x.y : 2
+    print x.y
+>>>2
+
 
 

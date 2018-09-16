@@ -1,4 +1,8 @@
-main func # test comment
-    print 'hi'
 
+Point class
+    y
 
+main func
+    x Point : Point()
+    x.y : 2
+    print x.y

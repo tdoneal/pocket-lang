@@ -481,7 +481,11 @@ func (p *ParserPocket) parseType() Nod {
 }
 
 func (p *ParserPocket) parseTypeBase() Nod {
-	return p.parseLiteralKeyword()
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseLiteralKeyword() },
+		// TODO: add support for scoped type identifiers (e.g Geometry.Point)
+		func() Nod { return p.parseIdentifier() },
+	})
 }
 
 func (p *ParserPocket) parseTypeArged() Nod {
@@ -623,9 +627,7 @@ func (p *ParserPocket) parseCommand() Nod {
 	NodSetChild(rv, NTR_RECEIVERCALL_BASE, target)
 	parenArg := p.ParseAtMostOne(func() Nod { return p.parseCommandParentheticalArg() })
 	if parenArg != nil {
-		if parenArg.NodeType != NT_EMPTYARGLIST {
-			NodSetChild(rv, NTR_RECEIVERCALL_ARG, parenArg)
-		}
+		NodSetChild(rv, NTR_RECEIVERCALL_ARG, parenArg)
 	} else {
 		args := p.ParseManyGreedy(func() Nod { return p.parseValue() })
 		if len(args) > 1 {
@@ -633,6 +635,9 @@ func (p *ParserPocket) parseCommand() Nod {
 		}
 		if len(args) > 0 {
 			NodSetChild(rv, NTR_RECEIVERCALL_ARG, args[0])
+		}
+		if len(args) == 0 {
+			NodSetChild(rv, NTR_RECEIVERCALL_ARG, NodNew(NT_EMPTYARGLIST))
 		}
 	}
 
