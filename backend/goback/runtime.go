@@ -194,20 +194,20 @@ func P__duck_div(a duck, b duck) duck {
 func P__duck_mod(a duck, b duck) duck {
 	return P__duck_primbinop(a, b, __pk_dot_asym_mod)
 }
-func P__duck_gt(a duck, b duck) duck {
-	return P__duck_primbinop(a, b, __pk_dot_asym_gt)
+func P__duck_gt(a duck, b duck) bool {
+	return P__duck_primbinop(a, b, __pk_dot_asym_gt).(bool)
 }
-func P__duck_gteq(a duck, b duck) duck {
-	return P__duck_primbinop(a, b, __pk_dot_asym_gteq)
+func P__duck_gteq(a duck, b duck) bool {
+	return P__duck_primbinop(a, b, __pk_dot_asym_gteq).(bool)
 }
-func P__duck_lt(a duck, b duck) duck {
-	return P__duck_primbinop(a, b, __pk_dot_asym_lt)
+func P__duck_lt(a duck, b duck) bool {
+	return P__duck_primbinop(a, b, __pk_dot_asym_lt).(bool)
 }
-func P__duck_lteq(a duck, b duck) duck {
-	return P__duck_primbinop(a, b, __pk_dot_asym_lteq)
+func P__duck_lteq(a duck, b duck) bool {
+	return P__duck_primbinop(a, b, __pk_dot_asym_lteq).(bool)
 }
-func P__duck_defeq(a duck, b duck) duck {
-	return P__duck_primbinop(a, b, __pk_dot_asym_defeq)
+func P__duck_defeq(a duck, b duck) bool {
+	return P__duck_primbinop(a, b, __pk_dot_asym_defeq).(bool)
 }
 func __pk_duck_ftoa(f float64) string {
 	return strconv.FormatFloat(f, 'g', -1, 64)

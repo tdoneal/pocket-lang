@@ -307,45 +307,6 @@ func (x *XformerPocket) IRRNoscopesFuncLocalVar() *RewriteRule {
 	}
 }
 
-func (x *XformerPocket) IRRNoscopesFuncsOld() *RewriteRule {
-	// make progress towards resolving NT_IDENTIFIER_FUNC_NOSCOPE: lookup in all tables
-	return &RewriteRule{
-		condition: func(n Nod) bool {
-			if n.NodeType == NT_IDENTIFIER_FUNC_NOSCOPE {
-				return true // no need to wait on anything else, can perform lookup now
-			}
-			return false
-		},
-		action: func(n Nod) {
-			idtext := n.Data.(string)
-			fTable := NodGetChild(x.Root, NTR_FUNCTABLE)
-			fDef := x.funcTableLookup(fTable, idtext)
-			isSys := isSystemFuncName(idtext)
-			if fDef == nil {
-				// check if object initializer
-				cTable := NodGetChild(x.Root, NTR_CLASSTABLE)
-				cDef := x.classTableLookup(cTable, idtext)
-				if cDef != nil {
-					// rewrite as object initializer
-					parentCall := NodGetParent(n, NTR_RECEIVERCALL_BASE)
-					parentCall.NodeType = NT_OBJINIT
-					NodSetChild(parentCall, NTR_RECEIVERCALL_BASE, cDef)
-					n.NodeType = NT_IDENTIFIER_RESOLVED
-					return
-				}
-			}
-			if fDef == nil && !isSys {
-				panic("unknown function '" + idtext + "'")
-			}
-			n.NodeType = NT_IDENTIFIER_RESOLVED
-			if !isSys {
-				parentCall := NodGetParent(n, NTR_RECEIVERCALL_BASE)
-				NodSetChild(parentCall, NTR_FUNCDEF, fDef)
-			}
-		},
-	}
-}
-
 func (x *XformerPocket) IRRNoscopesLocals() *RewriteRule {
 	// make progress towards resolving NT_IDENTIFIER_RVAL_NOSCOPEs: check for local variable
 	return &RewriteRule{

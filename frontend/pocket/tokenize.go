@@ -176,6 +176,7 @@ func (tkzr *TokenizerPocket) cleanUpDanglingIndents() {
 
 func (tkzr *TokenizerPocket) processComment() {
 	if isEOL(tkzr.CurrRune()) {
+		tkzr.emitEOLIfNotRedundant()
 		tkzr.State = TKS_INIT
 		tkzr.isPreline = true
 		tkzr.Incr()
@@ -323,13 +324,17 @@ func (tkzr *TokenizerPocket) processTab() {
 
 func (tkzr *TokenizerPocket) processEOL() {
 
+	tkzr.emitEOLIfNotRedundant()
+	tkzr.isPreline = true
+	tkzr.IncrLine()
+}
+
+func (tkzr *TokenizerPocket) emitEOLIfNotRedundant() {
 	if len(tkzr.Outtoks) == 0 || tkzr.Outtoks[len(tkzr.Outtoks)-1].Type == TK_EOL {
 		// skip token emission
 	} else {
 		tkzr.EmitTokenRune(TK_EOL, '\n')
 	}
-	tkzr.isPreline = true
-	tkzr.IncrLine()
 }
 
 func (tkzr *TokenizerPocket) processAlphanum() {

@@ -1,0 +1,19 @@
+
+main func
+    print fact(7)
+
+fact func(i int)
+    if i<=1
+        return 1
+    return i * fact(i-1)
+
+>>>5040>>>
+main func
+    print fact(7)
+
+fact func(i) # no type decl: make sure same code works with duck typing
+    if i<=1
+        return 1
+    return i * fact(i-1)
+
+>>>5040

@@ -19,3 +19,6 @@ main func
     print 'end'
     # and again
 >>>end>>>
+main func # test comment
+    print 'hi'
+>>>hi
