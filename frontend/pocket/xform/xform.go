@@ -65,10 +65,14 @@ func (x *XformerPocket) initializeSolvableNode(n Nod) {
 	} else if nt == NT_CLASSDEF {
 		x.buildClassVardefTable(n)
 		x.buildClassFuncdefTable(n)
+		cVarDefs := NodGetChildList(NodGetChild(n, NTR_VARTABLE))
+		for _, cVarDef := range cVarDefs {
+			x.initializePosNegMypes(cVarDef)
+		}
 	} else if nt == NT_TOPLEVEL {
 		x.buildClassTable()
 		x.buildRootFuncTable()
-	} else if nt == NT_IDENTIFIER || nt == NT_RETURN {
+	} else if nt == NT_IDENTIFIER || nt == NT_RETURN || nt == NT_CLASSFIELD {
 		// purposeful pass
 	} else {
 		panic("couldn't initialize solvable node")
@@ -84,7 +88,7 @@ func (x *XformerPocket) getSolvableNodes() []Nod {
 func (x *XformerPocket) isSolvableNode(n Nod) bool {
 	nt := n.NodeType
 	return isMypedValueType(nt) ||
-		nt == NT_FUNCDEF || nt == NT_CLASSDEF ||
+		nt == NT_FUNCDEF || nt == NT_CLASSDEF || nt == NT_CLASSFIELD ||
 		nt == NT_TOPLEVEL || nt == NT_IDENTIFIER || nt == NT_RETURN
 }
 
@@ -128,8 +132,15 @@ func (x *XformerPocket) prepareDotOps() {
 			varName := NodGetChild(rightArg, NTR_VAR_NAME).Data.(string)
 			newNode := NodNewData(NT_DOTOP_QUALIFIER, varName)
 			x.Replace(rightArg, newNode)
+			panic("unsupported")
 		} else if rightArg.NodeType == NT_IDENTIFIER || rightArg.NodeType == NT_IDENTIFIER_RVAL {
-			rightArg.NodeType = NT_DOTOP_QUALIFIER
+			// rewrite as object field accessor
+			fieldAccess := NodNew(NT_OBJFIELD_ACCESSOR)
+			obj := NodGetChild(dotOp, NTR_BINOP_LEFT)
+			fieldName := NodGetChild(dotOp, NTR_BINOP_RIGHT)
+			NodSetChild(fieldAccess, NTR_RECEIVERCALL_BASE, obj)
+			NodSetChild(fieldAccess, NTR_OBJFIELD_ACCESSOR_NAME, fieldName)
+			x.Replace(dotOp, fieldAccess)
 		} else if rightArg.NodeType == NT_RECEIVERCALL {
 			rcBase := NodGetChild(rightArg, NTR_RECEIVERCALL_BASE)
 			if !(rcBase.NodeType == NT_IDENTIFIER) {
@@ -154,16 +165,19 @@ func (x *XformerPocket) prepareDotOps() {
 		if n.NodeType == NT_RECEIVERCALL_CMD {
 			base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
 			if base.NodeType == NT_DOTOP {
+				panic("state error, these should be rewritten by now")
+			}
+			if base.NodeType == NT_OBJFIELD_ACCESSOR {
 				return true
 			}
 		}
 		return false
 	})
 	for _, callCmd := range callCmds {
-		dotOp := NodGetChild(callCmd, NTR_RECEIVERCALL_BASE)
+		fieldAccessor := NodGetChild(callCmd, NTR_RECEIVERCALL_BASE)
 		methArg := NodGetChild(callCmd, NTR_RECEIVERCALL_ARG)
-		methBase := NodGetChild(dotOp, NTR_BINOP_LEFT)
-		methName := NodGetChild(dotOp, NTR_BINOP_RIGHT)
+		methBase := NodGetChild(fieldAccessor, NTR_RECEIVERCALL_BASE)
+		methName := NodGetChild(fieldAccessor, NTR_OBJFIELD_ACCESSOR_NAME)
 		// rewrite as method call
 		methCall := NodNew(NT_RECEIVERCALL_METHOD)
 		NodSetChild(methCall, NTR_RECEIVERCALL_BASE, methBase)

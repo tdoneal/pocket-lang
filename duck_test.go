@@ -7,11 +7,21 @@ import (
 )
 
 func TestDuck(t *testing.T) {
-	tstFieldWrites()
+	tstMethodCalls()
 }
 
 type MyClass struct {
 	Px int
+}
+
+func (*MyClass) Meth(a interface{}) interface{} {
+	return a.(int) + 5
+}
+
+func tstMethodCalls() {
+	obj := &MyClass{1}
+	result := P__duck_method_call(obj, "Meth", 3)
+	fmt.Println("result", result.(int))
 }
 
 func tstFieldWrites() {

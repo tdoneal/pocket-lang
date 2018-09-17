@@ -14,6 +14,7 @@ const (
 	PNTR_DUCK_FIELD_WRITE_OBJ
 	PNTR_DUCK_FIELD_WRITE_NAME
 	PNTR_DUCK_FIELD_WRITE_VAL
+	PNT_DUCK_METHOD_CALL
 )
 
 type Preparer struct {
@@ -106,23 +107,48 @@ func (p *Preparer) interpretAsListIndex(arg Nod) Nod {
 func (p *Preparer) rewriteDuckedOps() {
 	p.rewriteDuckedOpsObjFieldWrite()
 	p.rewriteDuckedOpsObjFieldRead()
+	p.rewriteDuckedOpsObjMethodCall()
 	p.rewriteDuckedOpsBinary()
+}
+
+func (p *Preparer) rewriteDuckedOpsObjMethodCall() {
+	// rewrite obj.x(arg) -> P__duck_method_call(obj, "x", arg)
+	duckCalls := p.SearchRoot(func(n Nod) bool {
+		if n.NodeType == NT_RECEIVERCALL_METHOD {
+			baseType := NodGetChild(NodGetChild(n, NTR_RECEIVERCALL_BASE), NTR_TYPE)
+			if baseType.NodeType == NT_TYPEBASE && baseType.Data.(int) == TY_DUCK {
+				return true
+			}
+		}
+		return false
+	})
+
+	for _, duckCall := range duckCalls {
+		duckCall.NodeType = PNT_DUCK_METHOD_CALL
+	}
+}
+
+func (p *Preparer) isDucklike(typeNod Nod) bool {
+	if typeNod == nil || (typeNod.NodeType == NT_TYPEBASE && typeNod.Data.(int) == TY_DUCK) {
+		return true
+	}
+	return false
 }
 
 func (p *Preparer) rewriteDuckedOpsObjFieldRead() {
 	// rewrite obj.x -> P__duck_field_read(obj, "x")
 	p.SearchReplaceAll(func(n Nod) bool {
-		if n.NodeType == NT_DOTOP {
-			leftType := NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_TYPE)
-			if leftType.NodeType == NT_TYPEBASE && leftType.Data.(int) == TY_DUCK {
+		if n.NodeType == NT_OBJFIELD_ACCESSOR {
+			leftType := NodGetChildOrNil(NodGetChild(n, NTR_RECEIVERCALL_BASE), NTR_TYPE)
+			if p.isDucklike(leftType) {
 				return true
 			}
 		}
 		return false
 	}, func(n Nod) Nod {
 		rv := NodNew(PNT_DUCK_FIELD_READ)
-		NodSetChild(rv, NTR_BINOP_LEFT, NodGetChild(n, NTR_BINOP_LEFT))
-		NodSetChild(rv, NTR_BINOP_RIGHT, NodGetChild(n, NTR_BINOP_RIGHT))
+		NodSetChild(rv, NTR_RECEIVERCALL_BASE, NodGetChild(n, NTR_RECEIVERCALL_BASE))
+		NodSetChild(rv, NTR_OBJFIELD_ACCESSOR_NAME, NodGetChild(n, NTR_OBJFIELD_ACCESSOR_NAME))
 		return rv
 	})
 }
@@ -132,10 +158,10 @@ func (p *Preparer) rewriteDuckedOpsObjFieldWrite() {
 	duckAssigns := p.SearchRoot(func(n Nod) bool {
 		if n.NodeType == NT_VARASSIGN {
 			lhs := NodGetChild(n, NTR_VAR_NAME)
-			if lhs.NodeType == NT_DOTOP {
-				obj := NodGetChild(lhs, NTR_BINOP_LEFT)
-				objType := NodGetChild(obj, NTR_TYPE)
-				if objType.NodeType == NT_TYPEBASE && objType.Data.(int) == TY_DUCK {
+			if lhs.NodeType == NT_OBJFIELD_ACCESSOR {
+				obj := NodGetChild(lhs, NTR_RECEIVERCALL_BASE)
+				objType := NodGetChildOrNil(obj, NTR_TYPE)
+				if p.isDucklike(objType) {
 					return true
 				}
 			}
@@ -144,9 +170,9 @@ func (p *Preparer) rewriteDuckedOpsObjFieldWrite() {
 	})
 
 	for _, duckAssign := range duckAssigns {
-		dotOp := NodGetChild(duckAssign, NTR_VAR_NAME)
-		obj := NodGetChild(dotOp, NTR_BINOP_LEFT)
-		qual := NodGetChild(dotOp, NTR_BINOP_RIGHT)
+		objAccessor := NodGetChild(duckAssign, NTR_VAR_NAME)
+		obj := NodGetChild(objAccessor, NTR_RECEIVERCALL_BASE)
+		qual := NodGetChild(objAccessor, NTR_OBJFIELD_ACCESSOR_NAME)
 		val := NodGetChild(duckAssign, NTR_VARASSIGN_VALUE)
 		duckWrite := NodNew(PNT_DUCK_FIELD_WRITE)
 		NodSetChild(duckWrite, PNTR_DUCK_FIELD_WRITE_OBJ, obj)

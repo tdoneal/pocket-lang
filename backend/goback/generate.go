@@ -78,7 +78,8 @@ func (g *Generator) genClassDef(n Nod) {
 func (g *Generator) genClassField(n Nod) {
 	pkFieldName := NodGetChild(n, NTR_VARDEF_NAME).Data.(string)
 	g.WS(g.convertToGoFieldName(pkFieldName))
-	g.WS(" interface{}")
+	g.WS(" ")
+	g.genType(NodGetChild(NodGetChild(n, NTR_VARDEF), NTR_TYPE))
 }
 
 func (g *Generator) genFuncInType(n Nod) {
@@ -285,10 +286,34 @@ func (g *Generator) genImperativeUnit(n Nod) {
 		g.genPass(n)
 	} else if n.NodeType == PNT_DUCK_FIELD_WRITE {
 		g.genDuckFieldWrite(n)
+	} else if n.NodeType == PNT_DUCK_METHOD_CALL {
+		g.genDuckMethodCall(n)
 	} else {
 		g.WS("command")
 	}
 	g.WS("\n")
+}
+
+func (g *Generator) genDuckMethodCall(n Nod) {
+	base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+	name := NodGetChild(n, NTR_RECEIVERCALL_METHOD_NAME).Data.(string)
+	arg := NodGetChildOrNil(n, NTR_RECEIVERCALL_ARG)
+
+	g.WS("P__duck_method_call(")
+	g.genValue(base)
+	g.WS(", ")
+	g.genLiteralStringRaw(name)
+	g.WS(", ")
+	g.genDuckMethodCallArg(arg)
+	g.WS(")")
+}
+
+func (g *Generator) genDuckMethodCallArg(n Nod) {
+	if n.NodeType == NT_EMPTYARGLIST {
+		g.WS("nil")
+	} else {
+		g.genValue(n)
+	}
 }
 
 func (g *Generator) genDuckFieldWrite(n Nod) {
@@ -393,9 +418,15 @@ func (g *Generator) genLValue(n Nod, varDef Nod) {
 		}
 	}
 	if n.NodeType == NT_DOTOP {
+		// TODO: remove this path, it's rather lazy
 		g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
 		g.WS(".")
 		fieldName := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string)
+		g.WS(g.convertToGoFieldName(fieldName))
+	} else if n.NodeType == NT_OBJFIELD_ACCESSOR {
+		g.genValue(NodGetChild(n, NTR_RECEIVERCALL_BASE))
+		g.WS(".")
+		fieldName := NodGetChild(n, NTR_OBJFIELD_ACCESSOR_NAME).Data.(string)
 		g.WS(g.convertToGoFieldName(fieldName))
 	} else if n.NodeType == NT_IDENTIFIER || n.NodeType == NT_IDENTIFIER_RESOLVED ||
 		n.NodeType == NT_IDENTIFIER_FUNC_NOSCOPE {
@@ -489,22 +520,34 @@ func (g *Generator) genValue(n Nod) {
 		g.genObjInit(n)
 	} else if nt == NT_DOTOP {
 		g.genValueDotOp(n)
+	} else if nt == NT_OBJFIELD_ACCESSOR {
+		g.genObjFieldAccessor(n)
 	} else if g.isBinaryInlineDuckOpType(n.NodeType) {
 		g.genDuckOp(n)
 	} else if isBinaryInlineOpType(n.NodeType) {
 		g.genBinaryInlineOp(n)
 	} else if n.NodeType == PNT_DUCK_FIELD_READ {
 		g.genDuckFieldRead(n)
+	} else if n.NodeType == PNT_DUCK_METHOD_CALL {
+		g.genDuckMethodCall(n)
 	} else {
 		g.WS("value")
 	}
 }
 
+func (g *Generator) genObjFieldAccessor(n Nod) {
+	obj := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+	fieldName := NodGetChild(n, NTR_OBJFIELD_ACCESSOR_NAME).Data.(string)
+	g.genValue(obj)
+	g.WS(".")
+	g.WS(g.convertToGoFieldName(fieldName))
+}
+
 func (g *Generator) genDuckFieldRead(n Nod) {
 	g.WS("P__duck_field_read(")
-	g.genValue(NodGetChild(n, NTR_BINOP_LEFT))
+	g.genValue(NodGetChild(n, NTR_RECEIVERCALL_BASE))
 	g.WS(", ")
-	pkFieldName := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string)
+	pkFieldName := NodGetChild(n, NTR_OBJFIELD_ACCESSOR_NAME).Data.(string)
 	g.genLiteralStringRaw(g.convertToGoFieldName(pkFieldName))
 	g.WS(")")
 }

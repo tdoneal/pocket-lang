@@ -25,4 +25,38 @@ main func
 thang func(x)
     x.w : 2
 
->>>2
+>>>2>>>
+
+main func
+    thing(Point())
+
+thing func(x)
+    x.Thang()
+
+Point class
+    Thang func
+        print 'thang'
+
+>>>thang>>>
+
+main func
+    thing(Point())
+
+thing func(x)
+    print(x.Thang(1))
+
+Point class
+    Thang func(x)
+        return x + 2
+
+>>>3>>>
+
+main func
+    thing(Point())
+
+thing func(x)
+    print(x.Thang(1, 2))
+
+Point class
+    Thang func(x, y)
+        return x + y

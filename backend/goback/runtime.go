@@ -225,3 +225,23 @@ func P__duck_field_write(obj duck, name string, value duck) {
 	val := reflect.ValueOf(value)
 	structFieldValue.Set(val)
 }
+
+func P__duck_method_call(obj duck, name string, arg duck) duck {
+	objval := reflect.ValueOf(obj)
+	var argvals []reflect.Value
+	if arg == nil {
+		argvals = []reflect.Value{}
+	} else {
+		argvals = []reflect.Value{reflect.Indirect(reflect.ValueOf(arg))}
+	}
+	method := objval.MethodByName(name)
+	if !method.IsValid() {
+		panic("unknown method " + name)
+	}
+	// outval := objval.MethodByName(name).Call([]reflect.Value{argval})[0]
+	outvals := method.Call(argvals)
+	if len(outvals) == 0 {
+		return nil
+	}
+	return outvals[0].Interface()
+}

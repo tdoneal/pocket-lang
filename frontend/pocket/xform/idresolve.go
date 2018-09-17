@@ -32,7 +32,7 @@ func (x *XformerPocket) IRRTypeDeclIdentifiers() *RewriteRule {
 	// make progress on identifiers directly within type declarations
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_VARASSIGN {
+			if n.NodeType == NT_VARASSIGN || n.NodeType == NT_CLASSFIELD {
 				if typeDecl := NodGetChildOrNil(n, NTR_TYPE_DECL); typeDecl != nil {
 					if typeDecl.NodeType == NT_IDENTIFIER {
 						return true
@@ -498,6 +498,7 @@ func (x *XformerPocket) buildClassVardefTable(clsDef Nod) {
 			varDef := NodNew(NT_VARDEF)
 			NodSetChild(varDef, NTR_VARDEF_NAME, NodGetChild(clsUnit, NTR_VARDEF_NAME))
 			NodSetChild(varDef, NTR_VARDEF_SCOPE, NodNewData(NT_VARDEF_SCOPE, VSCOPE_CLASSFIELD))
+			NodSetChild(clsUnit, NTR_VARDEF, varDef)
 			varDefs = append(varDefs, varDef)
 		}
 	}

@@ -35,7 +35,66 @@ main func
     x Point : Point()
     x.y : 2
     print x.y
->>>2
+>>>2>>>
+# test typed class fields
+
+Point class
+    x int
+
+main func
+    p : Point()
+    p.x : 7
+    print p.x
+>>>7>>>
+# classes refer to other classes
+
+Rectangle class
+    topLeft Point
+
+Point class
+    x int
+
+main func
+    r : Rectangle()
+    p : Point()
+    r.topLeft : p
+    r.topLeft.x : 3
+    print p.x
+    
+>>>3>>>
+# classes can refer to themselves
+Node class
+    child Node
+    data int
+
+main func
+    n : Node()
+    m : Node()
+    m.data : 2
+    n.child : m
+    print n.child.data
+>>> 2>>>
+
+# class fields can be typed, and their default value depends on the type
+Foo class
+    x int
+
+main func
+    f : Foo()
+    print f.x
+>>> 0>>>
+
+# class methods properly read the type of their class fields
+Rectangle class
+    width int
+    height int
+    area func() int
+        return width * height
+
+main func
+    r : Rectangle()
+    print r.area()
+>>> 0
 
 
 

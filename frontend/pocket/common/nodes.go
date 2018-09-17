@@ -93,6 +93,8 @@ const (
 	NT_CLASSDEF                  = 150
 	NTR_CLASSDEF_NAME            = 151
 	NT_CLASSFIELD                = 155
+	NT_OBJFIELD_ACCESSOR         = 157
+	NTR_OBJFIELD_ACCESSOR_NAME   = 158
 	NT_CLASSTABLE                = 160
 	NTR_CLASSTABLE               = 161
 	NTR_TABLE_PARENT             = 164

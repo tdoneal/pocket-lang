@@ -39,12 +39,12 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		marPosCollectionLiterals(),
 		marPosVarAssign(),
 		marPosPublicParameter(),
+		marPosPublicClassField(),
 		marPosSysFunc(),
 		marPosVarFunc(),
 		marPosObjInitPrim(),
 		marPosObjInitUser(),
-		marPosObjAccessor(),
-		marPosOwnField(),
+		// marPosOwnField(),
 		marPosFuncCallUser(),
 		marPosReturnValue(),
 	}
@@ -145,7 +145,8 @@ func (x *XformerPocket) generateValidMypes(nodes []Nod) {
 		validMype := posMype.Intersection(negMype)
 
 		if validMype.IsEmpty() {
-			if node.NodeType == NT_RECEIVERCALL_CMD || node.NodeType == NT_FUNCDEF_RV_PLACEHOLDER {
+			if node.NodeType == NT_RECEIVERCALL_CMD || node.NodeType == NT_FUNCDEF_RV_PLACEHOLDER ||
+				node.NodeType == NT_RECEIVERCALL_METHOD {
 				// this is acceptable for these node types
 			} else {
 				panic("couldn't find a valid type for node: " + PrettyPrintMype(node))
@@ -199,46 +200,30 @@ func marPosFuncCallUser() *RewriteRule {
 	}
 }
 
-func marPosOwnField() *RewriteRule {
-	// refernces to internal class variables -> all (for now)
-	// TODO: support stricter typing
-	return &RewriteRule{
-		condition: func(n Nod) bool {
-			if n.NodeType == NT_VAR_GETTER && NodHasChild(n, NTR_VARDEF) {
-				varDef := NodGetChild(n, NTR_VARDEF)
-				if scope := NodGetChildOrNil(varDef, NTR_VARDEF_SCOPE); scope != nil {
-					if scope.Data.(int) == VSCOPE_CLASSFIELD {
-						// we don't properly support typed fields yet, so
-						// just say it could be anything
-						return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
-					}
-				}
+// func marPosOwnField() *RewriteRule {
+// 	// refernces to internal class variables -> all (for now)
+// 	// TODO: support stricter typing
+// 	return &RewriteRule{
+// 		condition: func(n Nod) bool {
+// 			if n.NodeType == NT_VAR_GETTER && NodHasChild(n, NTR_VARDEF) {
+// 				varDef := NodGetChild(n, NTR_VARDEF)
+// 				if scope := NodGetChildOrNil(varDef, NTR_VARDEF_SCOPE); scope != nil {
+// 					if scope.Data.(int) == VSCOPE_CLASSFIELD {
 
-			}
-			return false
-		},
-		action: func(n Nod) {
-			NodGetChild(n, NTR_MYPE_POS).Data = XMypeNewFull()
-		},
-	}
-}
+// 						// we don't properly support typed fields yet, so
+// 						// just say it could be anything
+// 						return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
+// 					}
+// 				}
 
-func marPosObjAccessor() *RewriteRule {
-	// obj.property -> all (for now)
-	return &RewriteRule{
-		condition: func(n Nod) bool {
-			if n.NodeType == NT_DOTOP || n.NodeType == NT_RECEIVERCALL_METHOD {
-				// we don't properly support typed fields yet, so
-				// just say it could be anything
-				return !NodGetChild(n, NTR_MYPE_POS).Data.(Mype).IsFull()
-			}
-			return false
-		},
-		action: func(n Nod) {
-			NodGetChild(n, NTR_MYPE_POS).Data = XMypeNewFull()
-		},
-	}
-}
+// 			}
+// 			return false
+// 		},
+// 		action: func(n Nod) {
+// 			NodGetChild(n, NTR_MYPE_POS).Data = XMypeNewFull()
+// 		},
+// 	}
+// }
 
 func marPosObjInitUser() *RewriteRule {
 	// Type.new(x) or Type(x) returns type Type for user-defined classes
@@ -464,6 +449,41 @@ func marPosPublicParameter() *RewriteRule {
 				allowedMype = XMypeNewSingle(typeDecl)
 			}
 			NodGetChild(n, NTR_MYPE_POS).Data = allowedMype
+		},
+	}
+}
+
+func marPosPublicClassFieldGetCandMype(classField Nod) Mype {
+	// get the assumed maximal type from a class field using its type decl
+	typeDecl := NodGetChildOrNil(classField, NTR_TYPE_DECL)
+	if typeDecl == nil {
+		return XMypeNewFull()
+	}
+	if typeDecl.NodeType == NT_CLASSDEF || typeDecl.NodeType == NT_TYPEBASE {
+		return XMypeNewSingle(typeDecl)
+	}
+	return nil // means we can't deduce anything now
+}
+
+func marPosPublicClassField() *RewriteRule {
+	// assume that assignments to this field are maximal
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_CLASSFIELD {
+				varDef := NodGetChild(n, NTR_VARDEF)
+				curPosMype := NodGetChild(varDef, NTR_MYPE_POS).Data.(Mype)
+				candMype := marPosPublicClassFieldGetCandMype(n)
+				if candMype != nil && curPosMype.WouldChangeFromUnionWith(candMype) {
+					return true
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			varDef := NodGetChild(n, NTR_VARDEF)
+			curPosMype := NodGetChild(varDef, NTR_MYPE_POS).Data.(Mype)
+			candMype := marPosPublicClassFieldGetCandMype(n)
+			NodGetChild(varDef, NTR_MYPE_POS).Data = curPosMype.Union(candMype)
 		},
 	}
 }

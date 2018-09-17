@@ -1,8 +1,15 @@
 
+# classes refer to other classes
+
+Rectangle class
+    topLeft Point
+
 Point class
-    y
+    x int
 
 main func
-    x Point : Point()
-    x.y : 2
-    print x.y
+    r : Rectangle()
+    p : Point()
+    r.topLeft : p
+    r.topLeft.x : 3
+    print p.x
