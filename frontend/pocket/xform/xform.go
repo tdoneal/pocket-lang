@@ -32,6 +32,7 @@ func (x *XformerPocket) Xform() {
 	x.solve()
 	fmt.Println("after solving", PrettyPrint(x.Root))
 	x.colorTypes()
+	x.checkAllVarsResolved()
 	x.checkAllCallsResolved()
 
 	fmt.Println("after xform:", PrettyPrint(x.Root))
@@ -42,9 +43,9 @@ func (x *XformerPocket) solve() {
 	rules := x.getAllSolveRules()
 	nodes := x.getSolvableNodes()
 	x.initializeSolvableNodes(nodes)
-	// fmt.Println("after initializing solveable nodes", PrettyPrint(x.Root))
+	fmt.Println("after initializing solveable nodes", PrettyPrint(x.Root))
 
-	x.applyRewritesUntilStable(nodes, rules)
+	x.applyGraphRewritesUntilStable(rules)
 }
 
 func (x *XformerPocket) initializeSolvableNodes(ns []Nod) {
@@ -54,14 +55,21 @@ func (x *XformerPocket) initializeSolvableNodes(ns []Nod) {
 }
 
 func (x *XformerPocket) initializeSolvableNode(n Nod) {
+	// TODO: start modularizing this, or move some of the logic to the solve rules
 	nt := n.NodeType
-	if isMypedValueType(nt) {
+	if isMypedValueType(nt) || nt == NT_VARDEF {
 		x.initializePosNegMypes(n)
 	} else if nt == NT_FUNCDEF {
-		NodSetChild(n, NTR_VARTABLE, NodNew(NT_VARTABLE))
+		varTable := NodNew(NT_VARTABLE)
+		NodSetChild(n, NTR_VARTABLE, varTable)
 		rvPlaceholder := NodNew(NT_FUNCDEF_RV_PLACEHOLDER)
 		NodSetChild(n, NTR_RETURNVAL_PLACEHOLDER, rvPlaceholder)
 		x.initializePosNegMypes(rvPlaceholder)
+
+		// initialize the self def into the var table if applicable
+		if selfDef := NodGetChildOrNil(n, NTR_METHOD_SELFDEF); selfDef != nil {
+			x.addVarToVartable(varTable, selfDef)
+		}
 	} else if nt == NT_CLASSDEF {
 		x.buildClassVardefTable(n)
 		x.buildClassFuncdefTable(n)
@@ -72,10 +80,8 @@ func (x *XformerPocket) initializeSolvableNode(n Nod) {
 	} else if nt == NT_TOPLEVEL {
 		x.buildClassTable()
 		x.buildRootFuncTable()
-	} else if nt == NT_IDENTIFIER || nt == NT_RETURN || nt == NT_CLASSFIELD {
-		// purposeful pass
 	} else {
-		panic("couldn't initialize solvable node")
+		// purposeful pass
 	}
 }
 
@@ -86,10 +92,7 @@ func (x *XformerPocket) getSolvableNodes() []Nod {
 }
 
 func (x *XformerPocket) isSolvableNode(n Nod) bool {
-	nt := n.NodeType
-	return isMypedValueType(nt) ||
-		nt == NT_FUNCDEF || nt == NT_CLASSDEF || nt == NT_CLASSFIELD ||
-		nt == NT_TOPLEVEL || nt == NT_IDENTIFIER || nt == NT_RETURN
+	return true
 }
 
 func (x *XformerPocket) getAllSolveRules() []*RewriteRule {
@@ -118,6 +121,28 @@ func (x *XformerPocket) SearchOneFrom(start Nod, condition func(Nod) bool, direc
 func (x *XformerPocket) prepare() {
 	x.parseInlineOpStreams()
 	x.prepareDotOps()
+	x.addImplicitSelvesToMethods()
+}
+
+func (x *XformerPocket) addImplicitSelvesToMethods() {
+	methods := x.SearchRoot(func(n Nod) bool {
+		if n.NodeType == NT_FUNCDEF {
+			cCls := x.getContainingClassDef(n)
+			if cCls != nil {
+				return true
+			}
+		}
+		return false
+	})
+
+	for _, method := range methods {
+		cCls := x.getContainingClassDef(method)
+		selfDef := NodNew(NT_VARDEF)
+		NodSetChild(selfDef, NTR_VARDEF_NAME, NodNewData(NT_IDENTIFIER_RESOLVED, "self"))
+		NodSetChild(selfDef, NTR_VARDEF_SCOPE, NodNewData(NT_VARDEF_SCOPE, VSCOPE_FUNCPARAM))
+		NodSetChild(selfDef, NTR_TYPE_DECL, cCls)
+		NodSetChild(method, NTR_METHOD_SELFDEF, selfDef)
+	}
 }
 
 func (x *XformerPocket) prepareDotOps() {
@@ -202,6 +227,22 @@ func isReceiverCallType(nt int) bool {
 	return nt == NT_RECEIVERCALL || nt == NT_RECEIVERCALL_CMD
 }
 
+func (x *XformerPocket) checkAllVarsResolved() {
+	getters := x.SearchRoot(func(n Nod) bool {
+		return n.NodeType == NT_VAR_GETTER
+	})
+	for _, getter := range getters {
+		if !NodHasChild(getter, NTR_VARDEF) {
+			varBase := NodGetChild(getter, NTR_VAR_NAME)
+			// for now, only error if the variable is simple
+			if varBase.NodeType == NT_IDENTIFIER ||
+				varBase.NodeType == NT_IDENTIFIER_RVAL_NOSCOPE {
+				panic("unknown variable '" + varBase.Data.(string) + "'")
+			}
+		}
+	}
+}
+
 func (x *XformerPocket) checkAllCallsResolved() {
 	calls := x.SearchRoot(func(n Nod) bool {
 		return isReceiverCallType(n.NodeType)
@@ -281,7 +322,7 @@ func isBinaryOpType(nt int) bool {
 
 func isRValVarReferenceNT(nt int) bool {
 	return nt == NT_VAR_GETTER || nt == NT_VARASSIGN || nt == NT_PARAMETER ||
-		nt == NT_IDENTIFIER_RVAL
+		nt == NT_IDENTIFIER_RVAL || nt == NT_IDENTIFIER_RVAL_NOSCOPE
 }
 
 func isCallType(nt int) bool {
@@ -289,7 +330,34 @@ func isCallType(nt int) bool {
 		nt == NT_RECEIVERCALL_METHOD || nt == NT_OBJINIT
 }
 
-func (x *XformerPocket) applyRewritesUntilStable(nods []Nod, rules []*RewriteRule) {
+func (x *XformerPocket) applyGraphRewritesUntilStable(rules []*RewriteRule) {
+	// repeatedly apply rewrite rules, allowing for new nodes to pop in or out of existence
+	// by re-generating the node list after each pass
+	nPasses := 0
+	for {
+		maxApplied := 0
+		allNods := x.SearchRoot(func(n Nod) bool { return true })
+		for _, rule := range rules {
+			nApplied := x.applyRewriteRuleOnJust(allNods, rule)
+			if nPasses > 20 && nApplied > 0 { // we should never need more than 20 passes
+				fmt.Println("Warning: 20 passes exceed, likely cycle detected")
+				rule.action(nil) // try to break it to get a good debug trace
+				panic("too many passes, could not solve")
+			}
+			if nApplied > maxApplied {
+				maxApplied = nApplied
+			}
+		}
+		if maxApplied == 0 {
+			break
+		}
+		nPasses++
+		fmt.Println("nPasses", nPasses)
+	}
+	fmt.Println("exiting applyrwus")
+}
+
+func (x *XformerPocket) applyRewritesUntilStableR(nods []Nod, rules []*RewriteRule) {
 	nPasses := 0
 	for {
 		maxApplied := 0

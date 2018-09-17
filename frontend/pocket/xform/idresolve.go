@@ -1,7 +1,6 @@
 package xform
 
 import (
-	"fmt"
 	. "pocket-lang/frontend/pocket/common"
 	. "pocket-lang/parse"
 )
@@ -15,6 +14,7 @@ func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 		x.IRRNoscopesClass(),
 		x.IRRNoscopesLocals(),
 		x.IRRNoscopesFuncGlobal(),
+		x.IRRNoscopesFuncOwnClass(),
 		x.IRRNoscopesFuncObjInit(),
 		x.IRRNoscopesType(),
 		x.IRRNoscopesFuncLocalVar(),
@@ -201,7 +201,6 @@ func (x *XformerPocket) IRRResolveMethodCalls() *RewriteRule {
 			return false
 		},
 		action: func(n Nod) {
-			fmt.Println("apply irrresolvmeth on", PrettyPrint(n))
 			methName := NodGetChild(n, NTR_RECEIVERCALL_METHOD_NAME).Data.(string)
 			// look up method in func table of all known classes
 			clss := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_CLASSDEF })
@@ -270,6 +269,47 @@ func (x *XformerPocket) IRRNoscopesClass() *RewriteRule {
 	}
 }
 
+func (x *XformerPocket) IRRNoscopesFuncOwnClass() *RewriteRule {
+	// make progress towards resolving NT_IDENTIFIER_FUNC_NOSCOPE: lookup in own class func table
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_IDENTIFIER_FUNC_NOSCOPE {
+				idtext := n.Data.(string)
+				cCls := x.getContainingClassDef(n)
+				if cCls != nil {
+					fTable := NodGetChild(cCls, NTR_FUNCTABLE)
+					fDef := x.funcTableLookup(fTable, idtext)
+					if fDef != nil {
+						return true
+					}
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			// area() -> self.area()
+
+			idtext := n.Data.(string)
+			cCls := x.getContainingClassDef(n)
+			fTable := NodGetChild(cCls, NTR_FUNCTABLE)
+			fDef := x.funcTableLookup(fTable, idtext)
+
+			parentCall := NodGetParent(n, NTR_RECEIVERCALL_BASE)
+			NodSetChild(parentCall, NTR_FUNCDEF, fDef)
+			parentCall.NodeType = NT_RECEIVERCALL_METHOD
+
+			NodSetChild(parentCall, NTR_RECEIVERCALL_METHOD_NAME, n)
+			n.NodeType = NT_IDENTIFIER_RESOLVED
+
+			newBase := NodNewData(NT_IDENTIFIER_RVAL_NOSCOPE, "self")
+			NodSetChild(parentCall, NTR_RECEIVERCALL_BASE, newBase)
+
+			x.initializeSolvableNode(newBase)
+
+		},
+	}
+}
+
 func (x *XformerPocket) IRRNoscopesFuncGlobal() *RewriteRule {
 	// make progress towards resolving NT_IDENTIFIER_FUNC_NOSCOPE: lookup in global func table
 	return &RewriteRule{
@@ -279,7 +319,7 @@ func (x *XformerPocket) IRRNoscopesFuncGlobal() *RewriteRule {
 				fTable := NodGetChild(x.Root, NTR_FUNCTABLE)
 				fDef := x.funcTableLookup(fTable, idtext)
 				if fDef != nil {
-					return true // no need to wait on anything else, can perform lookup now
+					return true
 				}
 			}
 			return false
@@ -304,7 +344,7 @@ func (x *XformerPocket) IRRNoscopesFuncObjInit() *RewriteRule {
 				cTable := NodGetChild(x.Root, NTR_CLASSTABLE)
 				cDef := x.classTableLookup(cTable, idtext)
 				if cDef != nil {
-					return true // no need to wait on anything else, can perform lookup now
+					return true
 				}
 			}
 			return false
@@ -332,7 +372,7 @@ func (x *XformerPocket) IRRNoscopesFuncLocalVar() *RewriteRule {
 				vTable := NodGetChild(fDef, NTR_VARTABLE)
 				vDef := x.varTableLookup(vTable, idtext)
 				if vDef != nil {
-					return true // no need to wait on anything else, can perform lookup now
+					return true
 				}
 			}
 			return false
@@ -345,10 +385,12 @@ func (x *XformerPocket) IRRNoscopesFuncLocalVar() *RewriteRule {
 			// rewrite as call to variable
 			parentCall := NodGetParent(n, NTR_RECEIVERCALL_BASE)
 			varGetter := NodNew(NT_VAR_GETTER)
+			x.initializeSolvableNode(varGetter)
 			NodSetChild(varGetter, NTR_VAR_NAME, n)
 			NodSetChild(varGetter, NTR_VARDEF, vDef)
 			NodSetChild(parentCall, NTR_RECEIVERCALL_BASE, varGetter)
 			n.NodeType = NT_IDENTIFIER_RESOLVED
+
 		},
 	}
 }
@@ -502,6 +544,7 @@ func (x *XformerPocket) buildClassVardefTable(clsDef Nod) {
 			varDefs = append(varDefs, varDef)
 		}
 	}
+
 	varTable := NodNewChildList(NT_VARTABLE, varDefs)
 	NodSetChild(clsDef, NTR_VARTABLE, varTable)
 }

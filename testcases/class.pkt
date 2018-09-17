@@ -94,7 +94,22 @@ Rectangle class
 main func
     r : Rectangle()
     print r.area()
->>> 0
+>>> 0 >>>
+
+# internal class methods can refer to their sibling methods
+
+Rectangle class
+
+    area func() int
+        return 3
+
+    twicearea func() int
+        return area()
+
+main func
+    r : Rectangle()
+    print r.twicearea()
+>>> 3
 
 
 

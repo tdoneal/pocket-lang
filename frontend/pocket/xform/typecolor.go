@@ -40,6 +40,7 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		marPosVarAssign(),
 		marPosPublicParameter(),
 		marPosPublicClassField(),
+		x.marPosSelf(),
 		marPosSysFunc(),
 		marPosVarFunc(),
 		marPosObjInitPrim(),
@@ -107,12 +108,14 @@ func (x *XformerPocket) marGenLinkVarRefsToVarDef() *RewriteRule {
 	// mypes as their definitions
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_VAR_GETTER || n.NodeType == NT_VARASSIGN || n.NodeType == NT_PARAMETER {
+			if n.NodeType == NT_VAR_GETTER || n.NodeType == NT_VARASSIGN ||
+				n.NodeType == NT_PARAMETER {
 				if varDef := NodGetChildOrNil(n, NTR_VARDEF); varDef != nil {
 					if !NodHasChild(varDef, NTR_MYPE_POS) {
 						return true // handle the case if the vardef isn't initialized mype-wise
 					}
 					varDefMypePos := NodGetChild(varDef, NTR_MYPE_POS)
+					fmt.Println("var ref", PrettyPrint(n))
 					myMypePos := NodGetChild(n, NTR_MYPE_POS)
 					if varDefMypePos != myMypePos {
 						return true
@@ -177,7 +180,8 @@ func marPosFuncCallUser() *RewriteRule {
 	// calls to user functions should link to the funcdef's return type
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_RECEIVERCALL || n.NodeType == NT_RECEIVERCALL_CMD {
+			if n.NodeType == NT_RECEIVERCALL || n.NodeType == NT_RECEIVERCALL_CMD ||
+				n.NodeType == NT_RECEIVERCALL_METHOD {
 				if NodHasChild(n, NTR_FUNCDEF) {
 					fDef := NodGetChild(n, NTR_FUNCDEF)
 					myPosMype := NodGetChild(n, NTR_MYPE_POS)
@@ -488,6 +492,34 @@ func marPosPublicClassField() *RewriteRule {
 	}
 }
 
+func (x *XformerPocket) marPosSelf() *RewriteRule {
+	// type of 'self' is the current class
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_VARDEF {
+				varName := NodGetChild(n, NTR_VARDEF_NAME).Data.(string)
+				if varName == "self" {
+					cCls := x.getContainingClassDef(n)
+					if cCls != nil {
+						curPosMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+						candMype := XMypeNewSingleClassDef(cCls)
+						if curPosMype.WouldChangeFromUnionWith(candMype) {
+							return true
+						}
+					}
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			cCls := x.getContainingClassDef(n)
+			curPosMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+			candMype := XMypeNewSingleClassDef(cCls)
+			NodGetChild(n, NTR_MYPE_POS).Data = curPosMype.Union(candMype)
+		},
+	}
+}
+
 func marPosVarAssign() *RewriteRule {
 	// propagate var assign values from rhs -> lhs
 	return &RewriteRule{
@@ -562,7 +594,8 @@ func marNegVarAssign() *RewriteRule {
 func marNegDeclaredType() *RewriteRule {
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_PARAMETER || n.NodeType == NT_VARASSIGN {
+			if n.NodeType == NT_PARAMETER || n.NodeType == NT_VARASSIGN ||
+				n.NodeType == NT_VARDEF {
 				if typeDeclNod := NodGetChildOrNil(n, NTR_TYPE_DECL); typeDeclNod != nil {
 					if typeDeclNod.NodeType == NT_TYPEBASE || typeDeclNod.NodeType == NT_CLASSDEF {
 						negMype := NodGetChild(n, NTR_MYPE_NEG).Data.(Mype)

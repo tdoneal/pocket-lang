@@ -92,6 +92,7 @@ const (
 	NT_COLLECTION_INDEXOR        = 126
 	NT_CLASSDEF                  = 150
 	NTR_CLASSDEF_NAME            = 151
+	NTR_METHOD_SELFDEF           = 153
 	NT_CLASSFIELD                = 155
 	NT_OBJFIELD_ACCESSOR         = 157
 	NTR_OBJFIELD_ACCESSOR_NAME   = 158

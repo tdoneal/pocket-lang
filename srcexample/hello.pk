@@ -1,15 +1,12 @@
 
-# classes refer to other classes
-
-Rectangle class
-    topLeft Point
-
-Point class
-    x int
-
 main func
-    r : Rectangle()
-    p : Point()
-    r.topLeft : p
-    r.topLeft.x : 3
-    print p.x
+    x : [2, 4]
+    y : x(1)
+    print y
+    i : 0
+    sum : 0
+    while i < 2
+        print(x(i))
+        sum : sum + x(i)
+        i : i + 1
+    print sum
