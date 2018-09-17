@@ -1,12 +1,6 @@
 
 main func
-    x : [2, 4]
-    y : x(1)
-    print y
-    i : 0
-    sum : 0
-    while i < 2
-        print(x(i))
-        sum : sum + x(i)
-        i : i + 1
-    print sum
+    print foo(foo(3)) + foo(2)
+
+foo func(x int) int
+    return x * x

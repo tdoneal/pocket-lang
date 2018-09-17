@@ -199,6 +199,9 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 		for _, edge := range node.Out {
 			d.PrintNodeType(edge.EdgeType)
 			d.buf.WriteString("->")
+			if edge.EdgeType == NTR_FUNCDEF || edge.EdgeType == NTR_VARDEF {
+				continue // don't traverse these edges by default; they tend to make the results unreadable
+			}
 			d.internalPrettyPrint(edge.Out)
 			if cnt < (len(node.Out) - 1) {
 				d.printEOL()
