@@ -52,37 +52,86 @@ func (x *XformerPocket) initializeSolvableNodes(ns []Nod) {
 	for _, n := range ns {
 		x.initializeSolvableNode(n)
 	}
+	x.buildNamespaceHierarchy()
+}
+
+func (x *XformerPocket) buildNamespaceHierarchy() {
+	// connects the name spaces to their "searchable" parents
+	allns := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_NAMESPACE })
+	for _, ns := range allns {
+		synContainer := NodGetParent(ns, NTR_NAMESPACE)
+		parentContainer := x.getContainingNodOrNil(synContainer,
+			func(ni Nod) bool { return NodHasChild(ni, NTR_NAMESPACE) && ni != synContainer })
+		if parentContainer != nil {
+			parentNs := NodGetChild(parentContainer, NTR_NAMESPACE)
+			NodSetChild(ns, NTR_NAMESPACE_PARENT, parentNs)
+		}
+	}
 }
 
 func (x *XformerPocket) initializeSolvableNode(n Nod) {
 	// TODO: start modularizing this, or move some of the logic to the solve rules
 	nt := n.NodeType
 	if isMypedValueType(nt) || nt == NT_VARDEF {
-		x.initializePosNegMypes(n)
+		x.ISNMyped(n)
 	} else if nt == NT_FUNCDEF {
-		varTable := NodNew(NT_VARTABLE)
-		NodSetChild(n, NTR_VARTABLE, varTable)
-		rvPlaceholder := NodNew(NT_FUNCDEF_RV_PLACEHOLDER)
-		NodSetChild(n, NTR_RETURNVAL_PLACEHOLDER, rvPlaceholder)
-		x.initializePosNegMypes(rvPlaceholder)
-
-		// initialize the self def into the var table if applicable
-		if selfDef := NodGetChildOrNil(n, NTR_METHOD_SELFDEF); selfDef != nil {
-			x.addVarToVartable(varTable, selfDef)
-		}
+		x.ISNFuncDef(n)
 	} else if nt == NT_CLASSDEF {
-		x.buildClassVardefTable(n)
-		x.buildClassFuncdefTable(n)
-		cVarDefs := NodGetChildList(NodGetChild(n, NTR_VARTABLE))
-		for _, cVarDef := range cVarDefs {
-			x.initializePosNegMypes(cVarDef)
-		}
+		x.ISNClassDef(n)
 	} else if nt == NT_TOPLEVEL {
-		x.buildClassTable()
-		x.buildRootFuncTable()
+		x.ISNRoot(n)
 	} else {
 		// purposeful pass
 	}
+}
+
+func (x *XformerPocket) ISNMyped(n Nod) {
+	x.initializePosNegMypes(n)
+}
+
+func (x *XformerPocket) ISNRoot(n Nod) {
+	x.buildClassTable()
+	x.buildRootFuncTable()
+	x.ISNInitNamespace(x.Root, false, true, true)
+}
+
+func (x *XformerPocket) ISNInitNamespace(n Nod, hasVars bool, hasFuncs bool, hasClasses bool) {
+	tlNamespace := NodNew(NT_NAMESPACE)
+	if hasVars {
+		NodSetChild(tlNamespace, NTR_VARTABLE, NodGetChild(n, NTR_VARTABLE))
+	}
+	if hasFuncs {
+		NodSetChild(tlNamespace, NTR_FUNCTABLE, NodGetChild(n, NTR_FUNCTABLE))
+	}
+	if hasClasses {
+		NodSetChild(tlNamespace, NTR_CLASSTABLE, NodGetChild(n, NTR_CLASSTABLE))
+	}
+	NodSetChild(n, NTR_NAMESPACE, tlNamespace)
+}
+
+func (x *XformerPocket) ISNClassDef(n Nod) {
+	x.buildClassVardefTable(n)
+	x.buildClassFuncdefTable(n)
+	cVarDefs := NodGetChildList(NodGetChild(n, NTR_VARTABLE))
+	for _, cVarDef := range cVarDefs {
+		x.initializePosNegMypes(cVarDef)
+	}
+	x.ISNInitNamespace(n, true, true, false)
+}
+
+func (x *XformerPocket) ISNFuncDef(n Nod) {
+	varTable := NodNew(NT_VARTABLE)
+	NodSetChild(n, NTR_VARTABLE, varTable)
+	rvPlaceholder := NodNew(NT_FUNCDEF_RV_PLACEHOLDER)
+	NodSetChild(n, NTR_RETURNVAL_PLACEHOLDER, rvPlaceholder)
+	x.initializePosNegMypes(rvPlaceholder)
+
+	// initialize the self def into the var table if applicable
+	if selfDef := NodGetChildOrNil(n, NTR_METHOD_SELFDEF); selfDef != nil {
+		x.addVarToVartable(varTable, selfDef)
+	}
+
+	x.ISNInitNamespace(n, true, false, false)
 }
 
 func (x *XformerPocket) getSolvableNodes() []Nod {
@@ -122,6 +171,47 @@ func (x *XformerPocket) prepare() {
 	x.parseInlineOpStreams()
 	x.prepareDotOps()
 	x.addImplicitSelvesToMethods()
+	x.annotateKeywordArgs()
+}
+
+func (x *XformerPocket) annotateKeywordArgs() {
+	candCalls := x.SearchRoot(func(n Nod) bool {
+		if n.NodeType == NT_RECEIVERCALL || n.NodeType == NT_RECEIVERCALL_CMD {
+			arg := NodGetChild(n, NTR_RECEIVERCALL_ARG)
+			if arg.NodeType == NT_LIT_MAP {
+				allSeemKWArg := true
+				kvpairs := NodGetChildList(arg)
+				for _, kvpair := range kvpairs {
+					key := NodGetChild(kvpair, NTR_KVPAIR_KEY)
+					if key.NodeType == NT_IDENTIFIER_RVAL {
+						//pass
+					} else {
+						allSeemKWArg = false
+						break
+					}
+				}
+				if allSeemKWArg {
+					return true
+				}
+			}
+		}
+		return false
+	})
+
+	for _, call := range candCalls {
+		arg := NodGetChild(call, NTR_RECEIVERCALL_ARG)
+		arg.NodeType = NT_KWARGS
+		kvpairs := NodGetChildList(arg)
+		for _, kvpair := range kvpairs {
+			key := NodGetChild(kvpair, NTR_KVPAIR_KEY)
+			val := NodGetChild(kvpair, NTR_KVPAIR_VAL)
+			kwarg := NodNew(NT_KWARG)
+			NodSetChild(kwarg, NTR_VAR_NAME, key)
+			key.NodeType = NT_IDENTIFIER_KWARG
+			NodSetChild(kwarg, NTR_VARASSIGN_VALUE, val)
+			x.Replace(kvpair, kwarg)
+		}
+	}
 }
 
 func (x *XformerPocket) addImplicitSelvesToMethods() {

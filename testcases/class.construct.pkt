@@ -1,0 +1,18 @@
+
+Foo class
+    x
+
+main func
+    f : Foo(5)
+    print f.x
+>>>5>>>
+Foo class
+    x
+    y
+
+main func
+    f : Foo[2, 5]
+    print f.y
+    print f.x
+>>>5
+2

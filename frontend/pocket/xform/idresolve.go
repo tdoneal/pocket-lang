@@ -18,6 +18,7 @@ func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 		x.IRRNoscopesFuncObjInit(),
 		x.IRRNoscopesType(),
 		x.IRRNoscopesFuncLocalVar(),
+		x.IRRKeywordArgs(),
 		// TODO: somehow re-use the var lookup framework to resolve certain Noscope Funcs
 		x.IRRSimpleVarWrites(),
 		x.IRRPlainObjInit(),
@@ -26,6 +27,41 @@ func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 		x.IRRResolveMethodCalls(),
 	}
 	return rv
+}
+
+func (x *XformerPocket) IRRKeywordArgs() *RewriteRule {
+	// make progress on keyword arguments
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_IDENTIFIER_KWARG {
+				varName := n.Data.(string)
+				parentKwArg := NodGetParent(n, NTR_VAR_NAME)
+				parentKwargs := NodGetParentByOrNil(parentKwArg, func(n Nod) bool { return n.NodeType == NT_KWARGS })
+				parentCall := NodGetParent(parentKwargs, NTR_RECEIVERCALL_ARG)
+				if NodHasChild(parentCall, NTR_FUNCDEF) {
+					fDef := NodGetChild(parentCall, NTR_FUNCDEF)
+					fvTable := NodGetChild(fDef, NTR_VARTABLE)
+					vDef := x.varTableLookup(fvTable, varName)
+					if vDef != nil {
+						return true
+					}
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			varName := n.Data.(string)
+			parentKwArg := NodGetParent(n, NTR_VAR_NAME)
+			parentKwargs := NodGetParentByOrNil(parentKwArg,
+				func(n Nod) bool { return n.NodeType == NT_KWARGS })
+			parentCall := NodGetParent(parentKwargs, NTR_RECEIVERCALL_ARG)
+			fDef := NodGetChild(parentCall, NTR_FUNCDEF)
+			fvTable := NodGetChild(fDef, NTR_VARTABLE)
+			vDef := x.varTableLookup(fvTable, varName)
+			NodSetChild(parentKwArg, NTR_VARDEF, vDef)
+			n.NodeType = NT_IDENTIFIER_RESOLVED
+		},
+	}
 }
 
 func (x *XformerPocket) IRRTypeDeclIdentifiers() *RewriteRule {

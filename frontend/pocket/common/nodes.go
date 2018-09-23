@@ -24,6 +24,7 @@ const (
 	NT_IDENTIFIER_LVAL           = 34
 	NT_IDENTIFIER_FUNC_NOSCOPE   = 35
 	NT_IDENTIFIER_TYPE_NOSCOPE   = 36
+	NT_IDENTIFIER_KWARG          = 37
 	NT_IDENTIFIER_RESOLVED       = 40
 	NT_TYPEBASE                  = 41
 	NT_TYPEARGED                 = 42
@@ -112,6 +113,11 @@ const (
 	NTR_KVPAIR_VAL               = 238
 	NT_LIT_SET                   = 239
 	NT_LIT_PRIMITIVE             = 240
+	NTR_NAMESPACE                = 244
+	NT_NAMESPACE                 = 245
+	NTR_NAMESPACE_PARENT         = 246
+	NT_KWARGS                    = 248
+	NT_KWARG                     = 249
 	NT_VAR_GETTER                = 250
 	NT_DOTOP_QUALIFIER           = 253
 )

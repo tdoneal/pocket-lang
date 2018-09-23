@@ -567,7 +567,6 @@ func (g *Generator) genCollectionIndexor(n Nod) {
 }
 
 func (g *Generator) genObjInit(n Nod) {
-	// for now only will work for primitive types (outputs as go casts)
 	baseNod := NodGetChild(n, NTR_RECEIVERCALL_BASE)
 	// argNod := NodGetChild(n, NTR_RECEIVERCALL_ARG)
 
@@ -576,34 +575,31 @@ func (g *Generator) genObjInit(n Nod) {
 		clsName := NodGetChild(baseNod, NTR_CLASSDEF_NAME).Data.(string)
 		g.WS("&")
 		g.WS(clsName)
-		g.WS("{")
-		g.WS("}")
+		g.genObjInitArg(NodGetChild(n, NTR_RECEIVERCALL_ARG))
 	} else {
 		panic("couldn't handle obj init base:" + PrettyPrint(baseNod))
 	}
+}
 
-	// if argNodType.NodeType == NT_TYPEBASE {
-	// 	argNodType := NodGetChild(NodGetChild(n, NTR_RECEIVERCALL_ARG), NTR_TYPE)
+func (g *Generator) genObjInitArg(n Nod) {
+	g.WS("{")
+	if n.NodeType == NT_EMPTYARGLIST {
+		// pass
+	} else if n.NodeType == NT_LIT_LIST {
+		g.genArgListInternals(n)
+	} else {
+		g.genValue(n)
+	}
+	g.WS("}")
+}
 
-	// 	fmt.Println("curr type gen", PrettyPrint(argNodType))
-	// 	if argNodType.Data.(int) == TY_DUCK {
-	// 		// use go type assertions
-	// 		g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
-	// 		g.WS(".")
-	// 		g.WS("(")
-	// 		g.genType(NodGetChild(n, NTR_RECEIVERCALL_BASE))
-	// 		g.WS(")")
-	// 	} else {
-	// 		// use go casts
-	// 		g.genType(NodGetChild(n, NTR_RECEIVERCALL_BASE))
-	// 		g.WS("(")
-	// 		g.genValue(NodGetChild(n, NTR_RECEIVERCALL_ARG))
-	// 		g.WS(")")
-	// 	}
-	// } else {
-	// 	g.WS("(object initializer)")
-	// }
-
+func (g *Generator) genArgListInternals(n Nod) {
+	// assumes input is a lit_list for now
+	args := NodGetChildList(n)
+	for _, arg := range args {
+		g.genValue(arg)
+		g.WS(", ")
+	}
 }
 
 func (g *Generator) isBinaryInlineDuckOpType(nt int) bool {

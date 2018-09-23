@@ -4,3 +4,18 @@ main func
 main func
     print(1 + 1)
 >>>2>>>
+
+foo func(x int)
+    return x
+
+main func
+    print foo{x:3}
+
+>>>3>>>
+foo func()
+    print 16
+
+main func
+    foo{}
+>>>16
+

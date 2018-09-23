@@ -1,6 +1,7 @@
 
-main func
-    print foo(foo(3)) + foo(2)
+foo func(x int)
+    return x
 
-foo func(x int) int
-    return x * x
+main func
+    print foo{x:2}
+

@@ -26,6 +26,35 @@ func (p *Preparer) Prepare(code Nod) {
 	p.checkForPrintStatements()
 	p.createExplicitIndexors()
 	p.rewriteDuckedOps()
+	p.serializeKeywordArgs()
+}
+
+func (p *Preparer) serializeKeywordArgs() {
+	kwargCalls := p.SearchRoot(func(n Nod) bool {
+		if isReceiverCallType(n.NodeType) {
+			arg := NodGetChild(n, NTR_RECEIVERCALL_ARG)
+			if arg.NodeType == NT_KWARGS {
+				return true
+			}
+		}
+		return false
+	})
+
+	for _, call := range kwargCalls {
+		arg := NodGetChild(call, NTR_RECEIVERCALL_ARG)
+		kwargs := NodGetChildList(arg)
+		if len(kwargs) > 1 {
+			panic("multi-kwargs not yet supported")
+		}
+		// serialArgs := []Nod{}
+		var newArg Nod
+		if len(kwargs) == 1 {
+			newArg = NodGetChild(kwargs[0], NTR_VARASSIGN_VALUE)
+		} else {
+			newArg = NodNew(NT_EMPTYARGLIST)
+		}
+		p.Replace(arg, newArg)
+	}
 }
 
 func (p *Preparer) checkForPrintStatements() {

@@ -115,7 +115,6 @@ func (x *XformerPocket) marGenLinkVarRefsToVarDef() *RewriteRule {
 						return true // handle the case if the vardef isn't initialized mype-wise
 					}
 					varDefMypePos := NodGetChild(varDef, NTR_MYPE_POS)
-					fmt.Println("var ref", PrettyPrint(n))
 					myMypePos := NodGetChild(n, NTR_MYPE_POS)
 					if varDefMypePos != myMypePos {
 						return true
