@@ -18,7 +18,8 @@ func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 		x.IRRNoscopesFuncObjInit(),
 		x.IRRNoscopesType(),
 		x.IRRNoscopesFuncLocalVar(),
-		x.IRRKeywordArgs(),
+		x.IRRKeywordArgsFuncDef(),
+		x.IRRKeywordArgsObjInit(),
 		// TODO: somehow re-use the var lookup framework to resolve certain Noscope Funcs
 		x.IRRSimpleVarWrites(),
 		x.IRRPlainObjInit(),
@@ -29,8 +30,44 @@ func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 	return rv
 }
 
-func (x *XformerPocket) IRRKeywordArgs() *RewriteRule {
-	// make progress on keyword arguments
+func (x *XformerPocket) IRRKeywordArgsObjInit() *RewriteRule {
+	// make progress on keyword arguments that refer to object initializer fields
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_IDENTIFIER_KWARG {
+				varName := n.Data.(string)
+				parentKwArg := NodGetParent(n, NTR_VAR_NAME)
+				parentKwargs := NodGetParentByOrNil(parentKwArg, func(n Nod) bool { return n.NodeType == NT_KWARGS })
+				parentCall := NodGetParent(parentKwargs, NTR_RECEIVERCALL_ARG)
+				base := NodGetChild(parentCall, NTR_RECEIVERCALL_BASE)
+				if parentCall.NodeType == NT_OBJINIT && base.NodeType == NT_CLASSDEF {
+					cDef := base
+					cvTable := NodGetChild(cDef, NTR_VARTABLE)
+					vDef := x.varTableLookup(cvTable, varName)
+					if vDef != nil {
+						return true
+					}
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			varName := n.Data.(string)
+			parentKwArg := NodGetParent(n, NTR_VAR_NAME)
+			parentKwargs := NodGetParentByOrNil(parentKwArg,
+				func(n Nod) bool { return n.NodeType == NT_KWARGS })
+			parentCall := NodGetParent(parentKwargs, NTR_RECEIVERCALL_ARG)
+			cDef := NodGetChild(parentCall, NTR_RECEIVERCALL_BASE)
+			cvTable := NodGetChild(cDef, NTR_VARTABLE)
+			vDef := x.varTableLookup(cvTable, varName)
+			NodSetChild(parentKwArg, NTR_VARDEF, vDef)
+			n.NodeType = NT_IDENTIFIER_RESOLVED
+		},
+	}
+}
+
+func (x *XformerPocket) IRRKeywordArgsFuncDef() *RewriteRule {
+	// make progress on keyword arguments that refer to function parameters
 	return &RewriteRule{
 		condition: func(n Nod) bool {
 			if n.NodeType == NT_IDENTIFIER_KWARG {

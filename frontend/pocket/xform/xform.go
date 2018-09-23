@@ -331,6 +331,13 @@ func (x *XformerPocket) checkAllVarsResolved() {
 			}
 		}
 	}
+
+	x.SearchRoot(func(n Nod) bool {
+		if n.NodeType == NT_IDENTIFIER_KWARG {
+			panic("unresolved keyword argument: '" + n.Data.(string) + "'")
+		}
+		return false
+	})
 }
 
 func (x *XformerPocket) checkAllCallsResolved() {

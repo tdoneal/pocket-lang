@@ -587,10 +587,23 @@ func (g *Generator) genObjInitArg(n Nod) {
 		// pass
 	} else if n.NodeType == NT_LIT_LIST {
 		g.genArgListInternals(n)
+	} else if n.NodeType == NT_KWARGS {
+		g.genObjInitKwargs(n)
 	} else {
 		g.genValue(n)
 	}
 	g.WS("}")
+}
+
+func (g *Generator) genObjInitKwargs(n Nod) {
+	kwargs := NodGetChildList(n)
+	for _, kwarg := range kwargs {
+		fieldName := NodGetChild(kwarg, NTR_VAR_NAME).Data.(string)
+		g.WS(g.convertToGoFieldName(fieldName))
+		g.WS(": ")
+		g.genValue(NodGetChild(kwarg, NTR_VARASSIGN_VALUE))
+		g.WS(", ")
+	}
 }
 
 func (g *Generator) genArgListInternals(n Nod) {
