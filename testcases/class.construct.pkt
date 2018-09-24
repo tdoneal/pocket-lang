@@ -17,6 +17,15 @@ main func
 >>>5
 2
 >>>
+Point class
+    x
+    y
+
+main func
+    p : Point{y:9}
+    print p.y
+
+>>>9>>>
 
 Point class
     x

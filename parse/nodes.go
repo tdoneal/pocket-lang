@@ -130,11 +130,22 @@ func NodSetChild(n Nod, edgeType int, child Nod) {
 }
 
 func NodRemoveChild(n Nod, edgeType int) {
+	// completely detatches a node from its parent
+	// removes a child from parent, and also removes the child's old reference to the parent
 	edge := n.Out[edgeType]
 	child := edge.Out
 	childInEdgeNdx := sliceIndex(len(child.In), func(i int) bool { return child.In[i] == edge })
 	delete(n.Out, edgeType)
 	slicePEdgeRemove(child.In, childInEdgeNdx)
+}
+
+func NodDeepCopyDownwards(n Nod) Nod {
+	rv := NodNew(n.NodeType)
+	rv.Data = n.Data
+	for edgeType, edge := range n.Out {
+		NodSetChild(rv, edgeType, NodDeepCopyDownwards(edge.Out))
+	}
+	return rv
 }
 
 func sliceIndex(limit int, predicate func(int) bool) int {

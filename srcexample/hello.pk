@@ -1,11 +1,6 @@
 
-Point class
-    x
-    y
-
 main func
-    p : Point{y:2,x:3}
-    print p.x
-    print p.y
-    
+    x : 1
+    x +: 2
+    print x
 

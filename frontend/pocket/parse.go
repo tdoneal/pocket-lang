@@ -26,33 +26,75 @@ func Parse(tokens []types.Token) Nod {
 	return parser.parseTopLevel()
 }
 
+func (p *ParserPocket) parseTopLevel() Nod {
+	units := p.ParseManyGreedy(func() Nod {
+		return p.parseTopLevelUnit()
+	})
+
+	fmt.Println("top level units:", PrettyPrintNodes(units))
+
+	if !p.IsEOF() {
+		p.RaiseParseError("failed to consume all input")
+	}
+
+	return NodNewChildList(NT_TOPLEVEL, units)
+}
+
+func (p *ParserPocket) parseTopLevelUnit() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseFuncDef() },
+		func() Nod { return p.parseClassDef() },
+	})
+}
+
 func (p *ParserPocket) parseFuncDef() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseFuncDefOneline() },
+		func() Nod { return p.parseFuncDefClassic() },
+	})
+}
+
+func (p *ParserPocket) parseFuncDefOneline() Nod {
+	fDef := NodNew(NT_FUNCDEF)
+	p.parseFuncHeaderInto(fDef)
+	p.ParseToken(TK_COLON)
+	fval := p.parseValue()
+	p.parseEOL()
+	NodSetChild(fDef, NTR_FUNCDEF_CODE, fval)
+	return fDef
+}
+
+func (p *ParserPocket) parseFuncHeaderInto(fDef Nod) {
 	funcName := p.ParseToken(TK_ALPHANUM).Data
 	funcWord := p.ParseToken(TK_ALPHANUM).Data
-	rv := NodNew(NT_FUNCDEF)
 	if funcWord != "func" {
 		p.RaiseParseError("missing func keyword")
 	}
+	funcNameNode := NodNewData(NT_IDENTIFIER_RESOLVED, funcName)
+	NodSetChild(fDef, NTR_FUNCDEF_NAME, funcNameNode)
 
 	// parse function type declarations if extant
 	// for now, if they are extant, require an explicit in type and explicit out type
 	funcInputType := p.ParseAtMostOne(func() Nod { return p.parseFuncDefTypeValue() })
 
 	if funcInputType != nil {
-		NodSetChild(rv, NTR_FUNCDEF_INTYPE, funcInputType)
+		NodSetChild(fDef, NTR_FUNCDEF_INTYPE, funcInputType)
 		funcOutputType := p.ParseAtMostOne(func() Nod { return p.parseFuncDefTypeValue() })
 		if funcOutputType != nil {
-			NodSetChild(rv, NTR_FUNCDEF_OUTTYPE, funcOutputType)
+			NodSetChild(fDef, NTR_FUNCDEF_OUTTYPE, funcOutputType)
 		}
 	}
+}
+
+func (p *ParserPocket) parseFuncDefClassic() Nod {
+	rv := NodNew(NT_FUNCDEF)
+	p.parseFuncHeaderInto(rv)
 
 	p.parseEOL()
 	p.ParseToken(TK_INCINDENT)
 	imp := p.parseImperative()
 	p.ParseToken(TK_DECINDENT)
 
-	funcNameNode := NodNewData(NT_IDENTIFIER, funcName)
-	NodSetChild(rv, NTR_FUNCDEF_NAME, funcNameNode)
 	NodSetChild(rv, NTR_FUNCDEF_CODE, imp)
 	return rv
 }
@@ -145,27 +187,6 @@ func (p *ParserPocket) parseLoop() Nod {
 	return rv
 }
 
-func (p *ParserPocket) parseTopLevel() Nod {
-	units := p.ParseManyGreedy(func() Nod {
-		return p.parseTopLevelUnit()
-	})
-
-	fmt.Println("top level units:", PrettyPrintNodes(units))
-
-	if !p.IsEOF() {
-		p.RaiseParseError("failed to consume all input")
-	}
-
-	return NodNewChildList(NT_TOPLEVEL, units)
-}
-
-func (p *ParserPocket) parseTopLevelUnit() Nod {
-	return p.ParseDisjunction([]ParseFunc{
-		func() Nod { return p.parseFuncDef() },
-		func() Nod { return p.parseClassDef() },
-	})
-}
-
 func (p *ParserPocket) parseClassDef() Nod {
 	name := p.parseIdentifier()
 	p.ParseToken(TK_CLASS)
@@ -216,8 +237,31 @@ func (p *ParserPocket) parseStatementBody() Nod {
 		func() Nod { return p.parseReturnStatement() },
 		func() Nod { return p.parsePass() },
 		func() Nod { return p.parseVarAssign() },
+		func() Nod { return p.parseVarIncrementor() },
 		func() Nod { return p.parseCommand() },
 	})
+}
+
+func (p *ParserPocket) parseVarIncrementor() Nod {
+	lval := p.parseLValue()
+	incop := p.parseIncrementorOp()
+	rv := NodNew(NT_INCREMENTOR)
+	NodSetChild(rv, NTR_INCREMENTOR_LVALUE, lval)
+	NodSetChild(rv, NTR_INCREMENTOR_OP, incop)
+	return rv
+}
+
+func (p *ParserPocket) parseIncrementorOp() Nod {
+	ptok := p.ParseTokenOnCondition(func(t *types.Token) bool {
+		return t.Type == TK_PLUSPLUS || t.Type == TK_MINUSMINUS
+	})
+	rv := NodNew(NT_INCREMENTOR_OP)
+	if ptok.Type == TK_PLUSPLUS {
+		rv.Data = true
+	} else {
+		rv.Data = false
+	}
+	return rv
 }
 
 func (p *ParserPocket) parsePass() Nod {
@@ -237,22 +281,31 @@ func (p *ParserPocket) parseReturnStatement() Nod {
 
 func (p *ParserPocket) parseVarAssign() Nod {
 	return p.ParseDisjunction([]ParseFunc{
-		func() Nod { return p.parseVarAssignLocal() },
-		func() Nod { return p.parseVarAssignComplex() },
+		func() Nod { return p.parseVarAssignLocalTypeDecl() },
+		func() Nod { return p.parseVarAssignGeneric() },
 	})
 }
 
-func (p *ParserPocket) parseVarAssignComplex() Nod {
+func (p *ParserPocket) parseVarAssignGeneric() Nod {
 	lval := p.parseLValue()
-	p.parseColon()
+	assgnTok := p.ParseTokenOnCondition(func(t *types.Token) bool {
+		return t.Type == TK_COLON || t.Type == TK_ADDASSIGN
+	})
 	rval := p.parseValue()
+
 	rv := NodNew(NT_VARASSIGN)
 	NodSetChild(rv, NTR_VAR_NAME, lval)
 	NodSetChild(rv, NTR_VARASSIGN_VALUE, rval)
+
+	if assgnTok.Type == TK_ADDASSIGN {
+		rv.NodeType = NT_VARASSIGN_ARITH
+		NodSetChild(rv, NTR_VARASSIGN_ARITHOP, NodNew(NT_ADDOP))
+	}
+
 	return rv
 }
 
-func (p *ParserPocket) parseVarAssignLocal() Nod {
+func (p *ParserPocket) parseVarAssignLocalTypeDecl() Nod {
 	name := p.parseVarName()
 	varType := p.ParseAtMostOne(func() Nod { return p.parseType() })
 	p.parseColon()
@@ -274,9 +327,7 @@ func (p *ParserPocket) parseValue() Nod {
 	return p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseValueInlineOpStream() },
 		func() Nod { return p.parseValueParenthetical() },
-		func() Nod { return p.parseLiteral() },
-		func() Nod { return p.parseReceiverCall() },
-		func() Nod { return p.parseValueIdentifier() },
+		func() Nod { return p.parseValueMolecular() },
 	})
 }
 
@@ -289,7 +340,7 @@ func (p *ParserPocket) parseValueParenthetical() Nod {
 
 func (p *ParserPocket) parseValueInlineOpStream() Nod {
 	elements := p.ParseUnrolledSequenceGreedy([]ParseFunc{
-		func() Nod { return p.parseValueAtomic() },
+		func() Nod { return p.parseValueMolecular() },
 		func() Nod { return p.parseInlineOp() },
 	})
 
@@ -301,6 +352,40 @@ func (p *ParserPocket) parseValueInlineOpStream() Nod {
 	}
 
 	return NodNewChildList(NT_INLINEOPSTREAM, elements)
+}
+
+func (p *ParserPocket) parseValueMolecular() Nod {
+	prefixOps := p.ParseManyGreedy(func() Nod {
+		return p.parsePrefixOp()
+	})
+	atom := p.parseValueAtomic()
+	suffixOps := p.ParseManyGreedy(func() Nod {
+		return p.parseSuffixOp()
+	})
+
+	// quick optimization: if no prefix or suffix found (common), just return the atom
+	if len(prefixOps) == 0 && len(suffixOps) == 0 {
+		return atom
+	}
+	elems := []Nod{}
+	elems = append(elems, prefixOps...)
+	elems = append(elems, atom)
+	elems = append(elems, suffixOps...)
+	rv := NodNewChildList(NT_VALUE_MOLECULE, elems)
+	fmt.Println("returning molecule:", PrettyPrint(rv))
+	return rv
+}
+
+func (p *ParserPocket) parsePrefixOp() Nod {
+	optok := p.ParseTokenOnCondition(func(t *types.Token) bool {
+		return t.Type == TK_REF
+	})
+	return NodNew(p.prefixOpTokenToNT(optok.Type))
+}
+
+func (p *ParserPocket) parseSuffixOp() Nod {
+	p.RaiseParseError("no suffix ops")
+	return nil
 }
 
 func (p *ParserPocket) parseLValue() Nod {
@@ -571,6 +656,13 @@ func (p *ParserPocket) parseInlineOp() Nod {
 	p.RaiseParseError("invalid inline op")
 	return nil
 
+}
+
+func (p *ParserPocket) prefixOpTokenToNT(ty int) int {
+	if ty == TK_REF {
+		return NT_REFERENCEOP
+	}
+	panic("unknown prefix op type")
 }
 
 func (p *ParserPocket) inlineOpTokenToNT(tokenType int) int {

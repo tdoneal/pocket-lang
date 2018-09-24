@@ -285,7 +285,6 @@ func (ma *MypeArged) WouldChangeFromUnionWithUU(other *MypeArged) bool {
 	other.CheckNoNestedUnions()
 
 	// assume no nested unions
-	fmt.Println("otherNods", PrettyPrintNodes(otherNods))
 	for _, otherNod := range otherNods {
 		contained := false
 		for _, myNod := range myNods {
@@ -346,7 +345,6 @@ func (ma *MypeArged) WouldChangeFromXSectWithUU(other *MypeArged) bool {
 
 	myNods := NodGetChildList(ma.Node)
 	otherNods := NodGetChildList(other.Node)
-	fmt.Println("otherNods", PrettyPrintNodes(otherNods))
 	// for each other element, if it's missing from us, return true
 	for _, otherNod := range otherNods {
 		if !MANodListContains(myNods, otherNod) {

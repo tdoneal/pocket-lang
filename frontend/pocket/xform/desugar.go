@@ -9,6 +9,89 @@ import (
 func (x *XformerPocket) desugar() {
 	x.rewriteDotPipesAsFunctionCalls()
 	x.rewriteForInLoops()
+	x.rewriteIncrementors()
+	x.rewriteImplicitReturns()
+	x.rewriteArithAssigns()
+}
+
+func (x *XformerPocket) rewriteArithAssigns() {
+	// rewrites all NT_VARASSIGN_ARITH into regular var assigns
+	// e.g., statements of the form x +: 2 -> x : x + 2
+	arithAssigns := x.SearchRoot(func(n Nod) bool {
+		if n.NodeType == NT_VARASSIGN_ARITH {
+			return true
+		}
+		return false
+	})
+
+	for _, arithAssign := range arithAssigns {
+		lValue := NodGetChild(arithAssign, NTR_VAR_NAME)
+		rValue := NodGetChild(arithAssign, NTR_VARASSIGN_VALUE)
+		varGetter := NodNew(NT_VAR_GETTER)
+		NodSetChild(varGetter, NTR_VAR_NAME, NodDeepCopyDownwards(lValue))
+		op := NodGetChild(arithAssign, NTR_VARASSIGN_ARITHOP)
+		NodSetChild(op, NTR_BINOP_LEFT, varGetter)
+		NodSetChild(op, NTR_BINOP_RIGHT, rValue)
+		regAssign := NodNew(NT_VARASSIGN)
+		NodSetChild(regAssign, NTR_VAR_NAME, lValue)
+		NodSetChild(regAssign, NTR_VARASSIGN_VALUE, op)
+		x.Replace(arithAssign, regAssign)
+	}
+}
+
+func (x *XformerPocket) rewriteImplicitReturns() {
+	// for all functions with a "body" edge that points to a value (rather than an imperative),
+	// transform that into an explicit return statement that returns that value
+	fsImpRv := x.SearchRoot(func(n Nod) bool {
+		if n.NodeType == NT_FUNCDEF {
+			body := NodGetChild(n, NTR_FUNCDEF_CODE)
+			if isImperativeType(body.NodeType) {
+				return false
+			} else {
+				return true
+			}
+		}
+		return false
+	})
+
+	for _, fDef := range fsImpRv {
+		returner := NodNew(NT_RETURN)
+		imp := NodNew(NT_IMPERATIVE)
+		val := NodGetChild(fDef, NTR_FUNCDEF_CODE)
+		NodRemoveChild(fDef, NTR_FUNCDEF_CODE)
+		NodSetChild(fDef, NTR_FUNCDEF_CODE, imp)
+		NodSetChild(returner, NTR_RETURN_VALUE, val)
+		NodSetOutList(imp, []Nod{returner})
+	}
+}
+
+func (x *XformerPocket) rewriteIncrementors() {
+	x.SearchReplaceAll(
+		func(n Nod) bool {
+			return n.NodeType == NT_INCREMENTOR
+		},
+		func(n Nod) Nod {
+			lvalue := NodGetChild(n, NTR_INCREMENTOR_LVALUE)
+			incop := NodGetChild(n, NTR_INCREMENTOR_OP)
+			isPlus := incop.Data.(bool)
+			var opType int
+			if isPlus {
+				opType = NT_ADDOP
+			} else {
+				opType = NT_SUBOP
+			}
+			arithOp := NodNew(opType)
+			one := NodNewData(NT_LIT_INT, 1)
+			varGetter := NodNew(NT_VAR_GETTER)
+			NodSetChild(varGetter, NTR_VAR_NAME, lvalue)
+			NodSetChild(arithOp, NTR_BINOP_LEFT, varGetter)
+			NodSetChild(arithOp, NTR_BINOP_RIGHT, one)
+			vassgn := NodNew(NT_VARASSIGN)
+			NodSetChild(vassgn, NTR_VAR_NAME, NodDeepCopyDownwards(lvalue))
+			NodSetChild(vassgn, NTR_VARASSIGN_VALUE, arithOp)
+			return vassgn
+		},
+	)
 }
 
 func (x *XformerPocket) getTempVarName() string {

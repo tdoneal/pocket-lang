@@ -32,7 +32,7 @@ func (d *Debug) initialize() {
 	ntl[NT_IDENTIFIER] = "IDENTIFIER"
 	ntl[NT_IDENTIFIER_RVAL] = "IDENTRVAL"
 	ntl[NT_IDENTIFIER_LVAL] = "IDENTLVAL"
-	ntl[NT_IDENTIFIER_RVAL_NOSCOPE] = "IDENTNOSC"
+	ntl[NT_IDENTIFIER_NOSCOPE] = "IDENTNOSC"
 	ntl[NT_IDENTIFIER_RESOLVED] = "IDENTRESOLVED"
 	ntl[NT_IDENTIFIER_FUNC_NOSCOPE] = "IDENTFUNCNOSC"
 	ntl[NT_IDENTIFIER_TYPE_NOSCOPE] = "IDENTTYPE"
@@ -48,6 +48,8 @@ func (d *Debug) initialize() {
 	ntl[NT_LIT_INT] = "INT"
 	ntl[NT_LIT_STRING] = "STRING"
 	ntl[NT_INLINEOPSTREAM] = "OPSTREAM"
+	ntl[NT_VALUE_MOLECULE] = "OPMOLECULE"
+
 	ntl[NTR_RECEIVERCALL_BASE] = "BASE"
 	ntl[NTR_RECEIVERCALL_ARG] = "ARG"
 	ntl[NT_EMPTYARGLIST] = "ARGEMPTY"
@@ -63,6 +65,12 @@ func (d *Debug) initialize() {
 	ntl[NT_DOTOP] = "DOT"
 	ntl[NTR_BINOP_LEFT] = "LEFT"
 	ntl[NTR_BINOP_RIGHT] = "RIGHT"
+
+	ntl[NT_REFERENCEOP] = "REF"
+
+	ntl[NT_INCREMENTOR] = "INCREMENTOR"
+	ntl[NT_INCREMENTOR_OP] = "INCREMENTOROP"
+	ntl[NTR_INCREMENTOR_LVALUE] = "LVALUE"
 
 	ntl[NT_VARINIT] = "VARINIT"
 	ntl[NT_VARTABLE] = "VARTABLE"
@@ -90,6 +98,8 @@ func (d *Debug) initialize() {
 	ntl[NTR_MYPE_NEG] = "MYPE_NEG"
 	ntl[NTR_MYPE_VALID] = "MYPE_VALID"
 	ntl[NT_VARASSIGN] = "VARASSIGN"
+	ntl[NT_VARASSIGN_ARITH] = "VARASSIGNARITH"
+	ntl[NTR_VARASSIGN_ARITHOP] = "ARITHOP"
 	ntl[NTR_VAR_NAME] = "VARNAME"
 	ntl[NTR_VARASSIGN_VALUE] = "ASSIGNVAL"
 	ntl[NTR_KVPAIR_KEY] = "KEY"
@@ -151,6 +161,7 @@ func (d *Debug) initialize() {
 	tl[TY_MAP] = "map"
 	tl[TY_SET] = "set"
 	tl[TY_VOID] = "void"
+	tl[TY_FUNC] = "func"
 
 	d.initialized = true
 }
@@ -207,6 +218,8 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 			d.PrintNodeType(edge.EdgeType)
 			d.buf.WriteString("->")
 			if edge.EdgeType == NTR_FUNCDEF || edge.EdgeType == NTR_VARDEF {
+				d.buf.WriteString("(hidden)")
+				d.printEOL()
 				continue // don't traverse these edges by default; they tend to make the results unreadable
 			}
 			d.internalPrettyPrint(edge.Out)

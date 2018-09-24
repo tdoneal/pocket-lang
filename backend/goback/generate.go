@@ -231,6 +231,7 @@ func (g *Generator) getGenTypeBase(n Nod) string {
 		TY_LIST:   "[]interface{}",
 		TY_SET:    "map[interface{}]bool",
 		TY_MAP:    "map[interface{}]interface{}",
+		TY_FUNC:   "func(interface{})interface{}",
 	}
 	if val, ok := lut[n.Data.(int)]; ok {
 		return val
@@ -452,11 +453,19 @@ func (g *Generator) genReceiverCall(n Nod) {
 		}
 	}
 
-	g.genLValue(base, nil)
+	g.genReceiverCallBase(base)
 
 	arg := NodGetChildOrNil(n, NTR_RECEIVERCALL_ARG)
 
 	g.genArg(arg)
+}
+
+func (g *Generator) genReceiverCallBase(n Nod) {
+	if n.NodeType == NT_VAR_GETTER {
+		g.genValue(n)
+	} else {
+		g.genLValue(n, nil)
+	}
 }
 
 func (g *Generator) genReceiverCallMethod(n Nod) {
@@ -530,9 +539,15 @@ func (g *Generator) genValue(n Nod) {
 		g.genDuckFieldRead(n)
 	} else if n.NodeType == PNT_DUCK_METHOD_CALL {
 		g.genDuckMethodCall(n)
+	} else if n.NodeType == NT_REFERENCEOP {
+		g.genReferenceOp(n)
 	} else {
 		g.WS("value")
 	}
+}
+
+func (g *Generator) genReferenceOp(n Nod) {
+	g.genLValue(NodGetChild(n, NTR_RECEIVERCALL_ARG), nil)
 }
 
 func (g *Generator) genObjFieldAccessor(n Nod) {

@@ -22,6 +22,7 @@ const (
 	TK_LITERALFLOAT  = 11
 	TK_LITERALSTRING = 15
 	TK_ALPHANUM      = 20
+	TK_REF           = 25
 	TK_COLON         = 30
 	TK_DOT           = 32
 	TK_DOTPIPE       = 33
@@ -38,34 +39,39 @@ const (
 	TK_EQ            = 49
 	TK_OR            = 50
 	TK_AND           = 51
-	TK_COMMENT       = 55
-	TK_PARENL        = 60
-	TK_PARENR        = 61
-	TK_BRACKL        = 62
-	TK_BRACKR        = 63
-	TK_CURLYL        = 64
-	TK_CURLYR        = 65
-	TK_COMMA         = 66
-	TK_IF            = 75
-	TK_ELSE          = 76
-	TK_LOOP          = 80
-	TK_FOR           = 81
-	TK_IN            = 82
-	TK_WHILE         = 83
-	TK_BREAK         = 85
-	TK_PASS          = 90
-	TK_RETURN        = 100
-	TK_VOID          = 110
-	TK_BOOL          = 120
-	TK_INT           = 121
-	TK_FLOAT         = 122
-	TK_STRING        = 123
-	TK_LIST          = 124
-	TK_SET           = 125
-	TK_MAP           = 126
-	TK_FALSE         = 130
-	TK_TRUE          = 131
-	TK_CLASS         = 150
+	TK_PLUSPLUS      = 53
+	TK_MINUSMINUS    = 54
+
+	TK_ADDASSIGN = 55
+
+	TK_PARENL  = 60
+	TK_PARENR  = 61
+	TK_BRACKL  = 62
+	TK_BRACKR  = 63
+	TK_CURLYL  = 64
+	TK_CURLYR  = 65
+	TK_COMMA   = 66
+	TK_IF      = 75
+	TK_ELSE    = 76
+	TK_LOOP    = 80
+	TK_FOR     = 81
+	TK_IN      = 82
+	TK_WHILE   = 83
+	TK_BREAK   = 85
+	TK_PASS    = 90
+	TK_RETURN  = 100
+	TK_VOID    = 110
+	TK_BOOL    = 120
+	TK_INT     = 121
+	TK_FLOAT   = 122
+	TK_STRING  = 123
+	TK_LIST    = 124
+	TK_SET     = 125
+	TK_MAP     = 126
+	TK_FALSE   = 130
+	TK_TRUE    = 131
+	TK_CLASS   = 150
+	TK_COMMENT = 220
 )
 
 func Tokenize(input string) []types.Token {
@@ -204,9 +210,9 @@ func (tkzr *TokenizerPocket) processInit() {
 	} else if isEOL(input) {
 		tkzr.processEOL()
 	} else if input == '+' {
-		tkzr.EmitTokenRuneAndIncr(TK_ADDOP)
+		tkzr.processPlus()
 	} else if input == '-' {
-		tkzr.EmitTokenRuneAndIncr(TK_SUBOP)
+		tkzr.processMinus()
 	} else if input == '*' {
 		tkzr.EmitTokenRuneAndIncr(TK_MULTOP)
 	} else if input == '/' {
@@ -235,6 +241,8 @@ func (tkzr *TokenizerPocket) processInit() {
 		tkzr.EmitTokenRuneAndIncr(TK_AND)
 	} else if input == '%' {
 		tkzr.EmitTokenRuneAndIncr(TK_MOD)
+	} else if input == '@' {
+		tkzr.EmitTokenRuneAndIncr(TK_REF)
 	} else if input == '.' {
 		tkzr.processDot()
 	} else if input == '#' {
@@ -242,6 +250,37 @@ func (tkzr *TokenizerPocket) processInit() {
 	} else {
 		tkzr.Incr()
 	}
+}
+
+func (tkzr *TokenizerPocket) processPlus() {
+	// tkzr.process1Or2CharOp('+', '+', TK_ADDOP, TK_PLUSPLUS)
+	tkzr.process1Or2CharOpNChoices('+', []rune{'+', ':'}, TK_ADDOP, []int{
+		TK_PLUSPLUS, TK_ADDASSIGN,
+	})
+}
+
+func (tkzr *TokenizerPocket) process1Or2CharOpNChoices(firstRune rune,
+	secondRunes []rune, tok1 int, tok2s []int) {
+	// start with a first rune, but there may be multiple candidates for 2-char runes
+
+	// skip first rune
+	tkzr.Incr()
+	if tkzr.IsEOF() {
+		panic("unexpected EOF")
+	}
+	nxtRune := tkzr.CurrRune()
+	for i, secondRuneCand := range secondRunes {
+		if nxtRune == secondRuneCand {
+			tkzr.EmitToken(tok2s[i], string(firstRune)+string(nxtRune))
+			tkzr.Incr()
+			return
+		}
+	}
+	tkzr.EmitToken(tok1, string(firstRune))
+}
+
+func (tkzr *TokenizerPocket) processMinus() {
+	tkzr.process1Or2CharOp('-', '-', TK_SUBOP, TK_MINUSMINUS)
 }
 
 func (tkzr *TokenizerPocket) processDot() {

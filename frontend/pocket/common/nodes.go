@@ -19,7 +19,7 @@ const (
 	NTR_RECEIVERCALL_BASE        = 27
 	NTR_RECEIVERCALL_ARG         = 28
 	NT_IDENTIFIER                = 29
-	NT_IDENTIFIER_RVAL_NOSCOPE   = 30
+	NT_IDENTIFIER_NOSCOPE        = 30
 	NT_IDENTIFIER_RVAL           = 33
 	NT_IDENTIFIER_LVAL           = 34
 	NT_IDENTIFIER_FUNC_NOSCOPE   = 35
@@ -87,10 +87,16 @@ const (
 	NT_MODOP                     = 112
 	NT_DOTOP                     = 113
 	NT_DOTPIPEOP                 = 114
-	NTR_BINOP_LEFT               = 118
-	NTR_BINOP_RIGHT              = 119
+	NT_REFERENCEOP               = 116
+	NTR_BINOP_LEFT               = 122
+	NTR_BINOP_RIGHT              = 123
 	NT_INLINEOPSTREAM            = 125
-	NT_COLLECTION_INDEXOR        = 126
+	NT_VALUE_MOLECULE            = 126
+	NT_COLLECTION_INDEXOR        = 127
+	NT_INCREMENTOR               = 130
+	NTR_INCREMENTOR_LVALUE       = 131
+	NTR_INCREMENTOR_OP           = 132
+	NT_INCREMENTOR_OP            = 134
 	NT_CLASSDEF                  = 150
 	NTR_CLASSDEF_NAME            = 151
 	NTR_METHOD_SELFDEF           = 153
@@ -120,6 +126,8 @@ const (
 	NT_KWARG                     = 249
 	NT_VAR_GETTER                = 250
 	NT_DOTOP_QUALIFIER           = 253
+	NT_VARASSIGN_ARITH           = 255
+	NTR_VARASSIGN_ARITHOP        = 256
 )
 
 const (
@@ -131,6 +139,7 @@ const (
 	TY_SET    = 6
 	TY_MAP    = 7
 	TY_LIST   = 8
+	TY_FUNC   = 15
 	TY_OBJECT = 20
 	TY_NUMBER = 22
 	TY_DUCK   = 30

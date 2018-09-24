@@ -71,5 +71,14 @@ sub func(x, y)
     print (x + y)
 >>>20>>>
 
+foo func(x): x
 
+main func
+    print foo(3)
+>>>3>>>
+foo func(x): x + 1
+
+main func
+    print foo(3)
+>>>4
 

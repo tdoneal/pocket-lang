@@ -18,3 +18,21 @@ main func
 5
 201
 0
+>>>
+main func
+    i : 0
+    i ++
+    print i
+>>>1>>>
+main func
+    i : 0
+    i --
+    print i
+>>>-1>>>
+
+main func
+    x : 1
+    x +: 2
+    print x
+
+>>>3

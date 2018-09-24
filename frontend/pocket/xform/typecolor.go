@@ -37,6 +37,8 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 	rv := []*RewriteRule{
 		marPosPrimitiveLiterals(),
 		marPosCollectionLiterals(),
+		x.marPosFunctionRefs(),
+		x.marPosRefOps(),
 		marPosVarAssign(),
 		marPosPublicParameter(),
 		marPosPublicClassField(),
@@ -69,8 +71,14 @@ func (x *XformerPocket) initializePosNegMypes(n Nod) {
 }
 
 func isMypedValueType(nt int) bool {
-	return isLiteralNodeType(nt) || isBinaryOpType(nt) ||
+	return isLiteralNodeType(nt) || isBinaryOpType(nt) || isUnaryOpType(nt) ||
 		isRValVarReferenceNT(nt) || isCallType(nt)
+}
+
+func isImperativeType(nt int) bool {
+	return nt == NT_IMPERATIVE || nt == NT_RECEIVERCALL_CMD ||
+		nt == NT_RETURN || nt == NT_FOR || nt == NT_WHILE || nt == NT_LOOP ||
+		nt == NT_IF
 }
 
 func (x *XformerPocket) colorTypes() {
@@ -99,6 +107,53 @@ func (x *XformerPocket) marRemoveMypesFromDotopQualifiers() *RewriteRule {
 		action: func(n Nod) {
 			NodRemoveChild(n, NTR_MYPE_POS)
 			NodRemoveChild(n, NTR_MYPE_NEG)
+		},
+	}
+}
+
+func (x *XformerPocket) marPosRefOps() *RewriteRule {
+	// type of a ref op depends on what it refers to
+	// currently, we only support function refs
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_REFERENCEOP {
+				lval := NodGetChild(n, NTR_RECEIVERCALL_ARG)
+				lvalMype := NodGetChild(lval, NTR_MYPE_POS).Data.(Mype)
+				funcMype := XMypeNewSingleBase(TY_FUNC)
+				extMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+				if !lvalMype.WouldChangeFromUnionWith(funcMype) {
+					return extMype.WouldChangeFromUnionWith(funcMype)
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			candMype := XMypeNewSingleBase(TY_FUNC)
+			extMypeNod := NodGetChild(n, NTR_MYPE_POS)
+			extMypeNod.Data = candMype.Union(extMypeNod.Data.(Mype))
+		},
+	}
+}
+
+func (x *XformerPocket) marPosFunctionRefs() *RewriteRule {
+	// type of a function ref is a func
+	return &RewriteRule{
+		condition: func(n Nod) bool {
+			if n.NodeType == NT_IDENTIFIER_RESOLVED {
+				if NodHasChild(n, NTR_MYPE_POS) {
+					if NodHasChild(n, NTR_FUNCDEF) {
+						candMype := XMypeNewSingleBase(TY_FUNC)
+						extMype := NodGetChild(n, NTR_MYPE_POS).Data.(Mype)
+						return extMype.WouldChangeFromUnionWith(candMype)
+					}
+				}
+			}
+			return false
+		},
+		action: func(n Nod) {
+			candMype := XMypeNewSingleBase(TY_FUNC)
+			extMypeNod := NodGetChild(n, NTR_MYPE_POS)
+			extMypeNod.Data = candMype.Union(extMypeNod.Data.(Mype))
 		},
 	}
 }
@@ -769,8 +824,8 @@ func createPosRewriteRuleFromOpEvaluateRule(oer *MypeOpEvaluateRule) *RewriteRul
 				matchHighLow := (argMypes[1].ContainsSingleType(oer.operandLow) &&
 					argMypes[0].ContainsSingleType(oer.operandHigh))
 
-				fmt.Println("oer.operator", oer.operator, "opHigh", oer.operandHigh,
-					"opLow", oer.operandLow, "matchLowHigh", matchLowHigh, "matchHighLow", matchHighLow)
+				// fmt.Println("oer.operator", oer.operator, "opHigh", oer.operandHigh,
+				// 	"opLow", oer.operandLow, "matchLowHigh", matchLowHigh, "matchHighLow", matchHighLow)
 
 				// todo: ensure we have precise semantics for arged types
 				if matchLowHigh || matchHighLow {

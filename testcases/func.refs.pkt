@@ -1,0 +1,7 @@
+
+foo func(x): x
+
+main func
+    f : @foo
+    print f(3)
+>>>3
