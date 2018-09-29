@@ -150,6 +150,12 @@ func (d *Debug) initialize() {
 	ntl[MATYPER_ARG] = "ARG"
 	ntl[MATYPER_BASE] = "BASE"
 
+	// dype
+	ntl[DYPE_ALL] = "DYPE_ALL"
+	ntl[DYPE_EMPTY] = "DYPE_EMPTY"
+	ntl[DYPE_UNION] = "UNION"
+	ntl[DYPE_XSECT] = "XSECT"
+
 	d.typeLookup = map[int]string{}
 	tl := d.typeLookup
 	tl[TY_BOOL] = "bool"
