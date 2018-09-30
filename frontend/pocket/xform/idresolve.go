@@ -41,7 +41,7 @@ func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 func (x *XformerPocket) IRRKeywordArgsObjInit() *RewriteRule {
 	// make progress on keyword arguments that refer to object initializer fields
 	return &RewriteRule{
-		condition: func(n Nod) bool {
+		condaction: func(n Nod) bool {
 			if n.NodeType == NT_IDENTIFIER_KWARG {
 				varName := n.Data.(string)
 				parentKwArg := NodGetParent(n, NTR_VAR_NAME)
@@ -53,23 +53,13 @@ func (x *XformerPocket) IRRKeywordArgsObjInit() *RewriteRule {
 					cvTable := NodGetChild(cDef, NTR_VARTABLE)
 					vDef := x.varTableLookup(cvTable, varName)
 					if vDef != nil {
+						NodSetChild(parentKwArg, NTR_VARDEF, vDef)
+						n.NodeType = NT_IDENTIFIER_RESOLVED
 						return true
 					}
 				}
 			}
 			return false
-		},
-		action: func(n Nod) {
-			varName := n.Data.(string)
-			parentKwArg := NodGetParent(n, NTR_VAR_NAME)
-			parentKwargs := NodGetParentByOrNil(parentKwArg,
-				func(n Nod) bool { return n.NodeType == NT_KWARGS })
-			parentCall := NodGetParent(parentKwargs, NTR_RECEIVERCALL_ARG)
-			cDef := NodGetChild(parentCall, NTR_RECEIVERCALL_BASE)
-			cvTable := NodGetChild(cDef, NTR_VARTABLE)
-			vDef := x.varTableLookup(cvTable, varName)
-			NodSetChild(parentKwArg, NTR_VARDEF, vDef)
-			n.NodeType = NT_IDENTIFIER_RESOLVED
 		},
 	}
 }

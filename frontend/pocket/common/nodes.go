@@ -128,6 +128,7 @@ const (
 	NT_DOTOP_QUALIFIER           = 253
 	NT_VARASSIGN_ARITH           = 255
 	NTR_VARASSIGN_ARITHOP        = 256
+	NT_TYPECALL                  = 260
 )
 
 const (

@@ -1,7 +1,7 @@
 
-blah func(x int)
-    print x
+foo func(x int) int: x + 1
 
 main func
-    b : @blah
+    result : @foo
+    
 

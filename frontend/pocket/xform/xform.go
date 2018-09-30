@@ -31,6 +31,9 @@ func (x *XformerPocket) Xform() {
 
 	x.solve()
 	fmt.Println("after solving", PrettyPrint(x.Root))
+
+	panic("ah")
+
 	x.colorTypes()
 	x.checkAllVarsResolved()
 	x.checkAllCallsResolved()
@@ -225,6 +228,11 @@ func isSystemFuncName(name string) bool {
 }
 
 type RewriteRule struct {
+	// returns whether progress made
+	condaction func(n Nod) bool
+
+	// old-school condition-action paradigm (deprecated)
+	// TODO: replace all instances of this, and remove
 	condition func(n Nod) bool
 	action    func(n Nod)
 }
@@ -356,10 +364,19 @@ func (x *XformerPocket) applyRewriteOnGraph(rule *RewriteRule) int {
 func (x *XformerPocket) applyRewriteRuleOnJust(nods []Nod, rule *RewriteRule) int {
 	nApplied := 0
 	for _, ele := range nods {
-		if rule.condition(ele) {
-			rule.action(ele)
-			nApplied++
+		if rule.condaction != nil {
+			applied := rule.condaction(ele)
+			if applied {
+				nApplied++
+			}
+		} else {
+			// TODO: remove this old-school condition-action approach
+			if rule.condition(ele) {
+				rule.action(ele)
+				nApplied++
+			}
 		}
+
 	}
 	return nApplied
 }
