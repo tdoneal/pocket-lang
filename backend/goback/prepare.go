@@ -15,6 +15,9 @@ const (
 	PNTR_DUCK_FIELD_WRITE_NAME
 	PNTR_DUCK_FIELD_WRITE_VAL
 	PNT_DUCK_METHOD_CALL
+
+	// duck annotation flags
+	PNTR_TYPE_INDEXABLE
 )
 
 type Preparer struct {
@@ -85,12 +88,30 @@ func (p *Preparer) isIndexableType(n Nod) bool {
 		bt := n.Data.(int)
 		return bt == TY_LIST || bt == TY_MAP
 	} else if n.NodeType == NT_TYPEARGED {
+		// TODO: remove this path
 		return p.isIndexableType(NodGetChild(n, NTR_TYPEARGED_BASE))
-	} else if n.NodeType == NT_CLASSDEF {
+	} else if n.NodeType == NT_CLASSDEF || n.NodeType == NT_FUNCDEF {
+		return false
+	} else if n.NodeType == NT_TYPECALL {
+		return p.isIndexableType(NodGetChild(n, NTR_RECEIVERCALL_BASE))
+	} else if n.NodeType == DYPE_UNION {
+		return p.isIndexableTypeUnion(n)
+	} else if n.NodeType == DYPE_ALL || n.NodeType == DYPE_EMPTY {
 		return false
 	} else {
-		panic("unhandled type")
+		panic("unhandled type:" + PrettyPrint(n))
 	}
+}
+
+func (p *Preparer) isIndexableTypeUnion(n Nod) bool {
+	// assumption: simplified, non-nested union
+	args := NodGetChildList(n)
+	for _, arg := range args {
+		if !p.isIndexableType(arg) {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *Preparer) createExplicitIndexors() {
@@ -110,6 +131,7 @@ func (p *Preparer) createExplicitIndexors() {
 		listCall.NodeType = NT_COLLECTION_INDEXOR
 
 		// convert [i] syntax into (i) syntax if applicable
+		// i.e., replace a list with its only element
 		arg := NodGetChild(listCall, NTR_RECEIVERCALL_ARG)
 		if arg.NodeType == NT_LIT_LIST {
 			listEles := NodGetChildList(arg)
@@ -117,6 +139,10 @@ func (p *Preparer) createExplicitIndexors() {
 				p.Replace(arg, listEles[0])
 			}
 		}
+
+		// annotate the type as explicitly indexable
+		base := NodGetChild(listCall, NTR_RECEIVERCALL_BASE)
+		NodSetChild(NodGetChild(base, NTR_TYPE), PNTR_TYPE_INDEXABLE, NodNew(NT_EMPTYARGLIST))
 	}
 
 }
@@ -140,12 +166,19 @@ func (p *Preparer) rewriteDuckedOps() {
 	p.rewriteDuckedOpsBinary()
 }
 
+func (p *Preparer) isDuckType(n Nod) bool {
+	if n == nil {
+		return true
+	}
+	return n.NodeType == DYPE_ALL || n.NodeType == DYPE_UNION
+}
+
 func (p *Preparer) rewriteDuckedOpsObjMethodCall() {
 	// rewrite obj.x(arg) -> P__duck_method_call(obj, "x", arg)
 	duckCalls := p.SearchRoot(func(n Nod) bool {
 		if n.NodeType == NT_RECEIVERCALL_METHOD {
 			baseType := NodGetChild(NodGetChild(n, NTR_RECEIVERCALL_BASE), NTR_TYPE)
-			if baseType.NodeType == NT_TYPEBASE && baseType.Data.(int) == TY_DUCK {
+			if p.isDuckType(baseType) {
 				return true
 			}
 		}
@@ -157,19 +190,12 @@ func (p *Preparer) rewriteDuckedOpsObjMethodCall() {
 	}
 }
 
-func (p *Preparer) isDucklike(typeNod Nod) bool {
-	if typeNod == nil || (typeNod.NodeType == NT_TYPEBASE && typeNod.Data.(int) == TY_DUCK) {
-		return true
-	}
-	return false
-}
-
 func (p *Preparer) rewriteDuckedOpsObjFieldRead() {
 	// rewrite obj.x -> P__duck_field_read(obj, "x")
 	p.SearchReplaceAll(func(n Nod) bool {
 		if n.NodeType == NT_OBJFIELD_ACCESSOR {
 			leftType := NodGetChildOrNil(NodGetChild(n, NTR_RECEIVERCALL_BASE), NTR_TYPE)
-			if p.isDucklike(leftType) {
+			if p.isDuckType(leftType) {
 				return true
 			}
 		}
@@ -190,7 +216,7 @@ func (p *Preparer) rewriteDuckedOpsObjFieldWrite() {
 			if lhs.NodeType == NT_OBJFIELD_ACCESSOR {
 				obj := NodGetChild(lhs, NTR_RECEIVERCALL_BASE)
 				objType := NodGetChildOrNil(obj, NTR_TYPE)
-				if p.isDucklike(objType) {
+				if p.isDuckType(objType) {
 					return true
 				}
 			}
@@ -215,8 +241,8 @@ func (p *Preparer) rewriteDuckedOpsBinary() {
 	// search for: any binary ops with ducked args
 	p.SearchReplaceAll(func(n Nod) bool {
 		if isBinaryInlineOpType(n.NodeType) {
-			if NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_TYPE).Data.(int) == TY_DUCK ||
-				NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_TYPE).Data.(int) == TY_DUCK {
+			if NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_TYPE).NodeType == DYPE_ALL ||
+				NodGetChild(NodGetChild(n, NTR_BINOP_RIGHT), NTR_TYPE).NodeType == DYPE_ALL {
 				return true
 			}
 		}

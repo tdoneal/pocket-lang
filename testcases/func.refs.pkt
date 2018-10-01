@@ -4,4 +4,12 @@ foo func(x): x
 main func
     f : @foo
     print f(3)
->>>3
+>>>3>>>
+
+foo func(x int) int: x + 1
+
+main func
+    result : @foo
+    y : result(1)
+    print y
+>>>2

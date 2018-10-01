@@ -75,26 +75,64 @@ func MakeUnion(nods ...Nod) Nod {
 	return NodNewChildList(DYPE_UNION, nods)
 }
 
-func testSimp(input Nod, expected Nod) {
-	got := DypeSimplify(input)
+func MakeXSect(nods ...Nod) Nod {
+	return NodNewChildList(DYPE_XSECT, nods)
+}
+
+func testSimpShal(input Nod, expected Nod) {
+	got := DypeSimplifyShallow(input)
+	if !DypeDeepForwardsEqual(got, expected) {
+		panic("failed")
+	}
+}
+
+func testSimpDeep(input Nod, expected Nod) {
+	got := DypeSimplifyDeep(input)
 	if !DypeDeepForwardsEqual(got, expected) {
 		panic("failed")
 	}
 }
 
 func testSimplifyCases() {
-	testSimp(NodNewChildList(DYPE_UNION, []Nod{MakeInt()}), MakeInt())
-	testSimp(NodNewChildList(DYPE_XSECT, []Nod{MakeInt()}), MakeInt())
-	testSimp(NodNewChildList(DYPE_UNION, []Nod{}), MakeEmpty())
+	testSimpShal(NodNewChildList(DYPE_UNION, []Nod{MakeInt()}), MakeInt())
+	testSimpShal(NodNewChildList(DYPE_XSECT, []Nod{MakeInt()}), MakeInt())
+	testSimpShal(NodNewChildList(DYPE_UNION, []Nod{}), MakeEmpty())
 
 	// Simp(Union(Union(int, float),int)) -> Union(int, float)
 	u := DypeUnion(NodNewData(NT_TYPEBASE, TY_INT), NodNewData(NT_TYPEBASE, TY_FLOAT))
 	fmt.Println("u", PrettyPrint(u))
 	u2 := DypeUnion(u, NodNewData(NT_TYPEBASE, TY_INT))
 	fmt.Println("u2", PrettyPrint(u2))
-	testSimp(u2, NodNewChildList(DYPE_UNION,
+	testSimpShal(u2, NodNewChildList(DYPE_UNION,
 		[]Nod{NodNewData(NT_TYPEBASE, TY_INT), NodNewData(NT_TYPEBASE, TY_FLOAT)}))
 
+	testSimplifyCasesDeep()
+
+}
+
+func testSimplifyCasesDeep() {
+	cmplx := MakeUnion(MakeUnion())
+	testSimpDeep(cmplx, MakeEmpty())
+
+	xsect := MakeXSect(MakeInt(), MakeFloat())
+	testSimpDeep(xsect, MakeEmpty())
+
+	testSimpDeep(MakeXSect(MakeInt(), MakeInt()), MakeInt())
+
+	cmplxXSect := MakeXSect(MakeUnion(MakeInt(), MakeFloat()), MakeFloat())
+	testSimpDeep(cmplxXSect, MakeFloat())
+
+	cmplxXSect = MakeXSect(MakeFloat(), MakeUnion(MakeInt(), MakeFloat()))
+	testSimpDeep(cmplxXSect, MakeFloat())
+
+	cmplxXSect = MakeXSect(MakeUnion(MakeInt(), MakeFloat()), MakeUnion(MakeInt(), MakeFloat()))
+	testSimpDeep(cmplxXSect, MakeUnion(MakeInt(), MakeFloat()))
+
+	cmplxXSect = MakeXSect(MakeUnion(MakeInt(), MakeFloat()), MakeUnion(MakeFloat(), MakeInt()))
+	testSimpDeep(cmplxXSect, MakeUnion(MakeInt(), MakeFloat()))
+
+	cmplxXSect = MakeXSect(MakeUnion(MakeFloat(), MakeBool()), MakeUnion(MakeBool(), MakeInt()))
+	testSimpDeep(cmplxXSect, MakeBool())
 }
 
 func exploreUnion() {
@@ -103,7 +141,7 @@ func exploreUnion() {
 	fmt.Println("u", PrettyPrint(u))
 	u2 := DypeUnion(u, NodNewData(NT_TYPEBASE, TY_INT))
 	fmt.Println("u2", PrettyPrint(u2))
-	u3 := DypeSimplify(u2)
+	u3 := DypeSimplifyShallow(u2)
 	fmt.Println("u3", PrettyPrint(u3))
 }
 
@@ -154,8 +192,8 @@ func exploreIsSubset() {
 
 func TestDype(t *testing.T) {
 	testSubsetCases()
-	// testSimplifyCases()
-	// testXSectAll()
-	// testUnionAll()
+	testSimplifyCases()
+	testXSectAll()
+	testUnionAll()
 
 }

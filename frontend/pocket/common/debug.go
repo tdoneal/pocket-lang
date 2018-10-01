@@ -140,6 +140,7 @@ func (d *Debug) initialize() {
 	ntl[NT_OBJINIT] = "OBJINIT"
 	ntl[NT_NAMESPACE] = "NAMESPACE"
 	ntl[NTR_NAMESPACE] = "NAMESPACE"
+	ntl[NT_TYPECALL] = "TYPECALL"
 
 	// mypearged
 	ntl[MATYPE_ALL] = "MA_ALL"

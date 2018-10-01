@@ -5,7 +5,11 @@ import (
 	. "pocket-lang/frontend/pocket/common"
 	. "pocket-lang/parse"
 	. "pocket-lang/xform"
+	"reflect"
+	"runtime"
 	"strconv"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 type XformerPocket struct {
@@ -24,17 +28,23 @@ func Xform(root Nod) Nod {
 }
 
 func (x *XformerPocket) Xform() {
+
+	x.NodCheckParentChildIntegrity()
+
 	x.prepare()
+
+	x.NodCheckParentChildIntegrity()
 	x.desugar()
+
+	x.NodCheckParentChildIntegrity()
 
 	fmt.Println("after desugaring:", PrettyPrint(x.Root))
 
 	x.solve()
 	fmt.Println("after solving", PrettyPrint(x.Root))
 
-	panic("ah")
-
 	x.colorTypes()
+
 	x.checkAllVarsResolved()
 	x.checkAllCallsResolved()
 
@@ -150,7 +160,14 @@ func (x *XformerPocket) isSolvableNode(n Nod) bool {
 func (x *XformerPocket) getAllSolveRules() []*RewriteRule {
 	typeRules := x.getAllSolveTypeRules()
 	idRules := x.getIdentifierRewriteRules()
-	return append(typeRules, idRules...)
+
+	rv := append(typeRules, idRules...)
+
+	for ndx, rule := range rv {
+		fmt.Println("rule", ndx, rule, GetRewriteRuleDebugInfo(rule))
+	}
+
+	return rv
 }
 
 func (x *XformerPocket) getContainingNodOrNil(start Nod, condition func(Nod) bool) Nod {
@@ -237,6 +254,21 @@ type RewriteRule struct {
 	action    func(n Nod)
 }
 
+// generic go function
+func GetRewriteRuleDebugInfo(rule *RewriteRule) string {
+	if rule.condaction != nil {
+		return GetFPointerDebugInfo(rule.condaction)
+	}
+	return GetFPointerDebugInfo(rule.condition)
+}
+
+func GetFPointerDebugInfo(f interface{}) string {
+	fPointer := reflect.ValueOf(f).Pointer()
+	funcObject := runtime.FuncForPC(fPointer)
+	file, line := funcObject.FileLine(fPointer)
+	return file + ": " + strconv.Itoa(line)
+}
+
 func isLiteralNodeType(nt int) bool {
 	return isPrimitiveLiteralNodeType(nt) ||
 		isCollectionLiteralNodeType(nt)
@@ -308,31 +340,8 @@ func (x *XformerPocket) applyGraphRewritesUntilStable(rules []*RewriteRule) {
 		maxApplied := 0
 		allNods := x.SearchRoot(func(n Nod) bool { return true })
 		for _, rule := range rules {
+			// fmt.Println("applying rule", GetRewriteRuleDebugInfo(rule))
 			nApplied := x.applyRewriteRuleOnJust(allNods, rule)
-			if nPasses > 20 && nApplied > 0 { // we should never need more than 20 passes
-				fmt.Println("Warning: 20 passes exceed, likely cycle detected")
-				rule.action(nil) // try to break it to get a good debug trace
-				panic("too many passes, could not solve")
-			}
-			if nApplied > maxApplied {
-				maxApplied = nApplied
-			}
-		}
-		if maxApplied == 0 {
-			break
-		}
-		nPasses++
-		fmt.Println("nPasses", nPasses)
-	}
-	fmt.Println("exiting applyrwus")
-}
-
-func (x *XformerPocket) applyRewritesUntilStableR(nods []Nod, rules []*RewriteRule) {
-	nPasses := 0
-	for {
-		maxApplied := 0
-		for _, rule := range rules {
-			nApplied := x.applyRewriteRuleOnJust(nods, rule)
 			if nPasses > 20 && nApplied > 0 { // we should never need more than 20 passes
 				fmt.Println("Warning: 20 passes exceed, likely cycle detected")
 				rule.action(nil) // try to break it to get a good debug trace
@@ -363,11 +372,19 @@ func (x *XformerPocket) applyRewriteOnGraph(rule *RewriteRule) int {
 
 func (x *XformerPocket) applyRewriteRuleOnJust(nods []Nod, rule *RewriteRule) int {
 	nApplied := 0
+	// fmt.Println("START RULE APPLY to nods", rule, GetRewriteRuleDebugInfo(rule))
 	for _, ele := range nods {
 		if rule.condaction != nil {
 			applied := rule.condaction(ele)
 			if applied {
 				nApplied++
+				integrity := x.NodComputeParentChildIntegrity()
+				if !integrity {
+					fmt.Println("integrity check after rule", spew.Sdump(rule.condaction))
+					// for finding a stack trace of the rule, try to break it
+					rule.condaction(nil)
+					panic("integrity check failed")
+				}
 			}
 		} else {
 			// TODO: remove this old-school condition-action approach

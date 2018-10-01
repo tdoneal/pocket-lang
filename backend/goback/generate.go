@@ -90,15 +90,17 @@ func (g *Generator) genFuncInType(n Nod) {
 	}
 }
 
-func (g *Generator) genFuncOutType(n Nod) {
+func (g *Generator) genRvPlaceholderFuncOutType(n Nod) {
 	rvType := NodGetChild(n, NTR_TYPE)
-	if typeInt, ok := rvType.Data.(int); ok {
-		if typeInt == TY_VOID {
-			// in go there is no void keyword, so we don't output anything here
-			return
-		}
+	g.genFuncOutType(rvType)
+}
+
+func (g *Generator) genFuncOutType(n Nod) {
+	if n.NodeType == DYPE_EMPTY {
+		// in go there is no void keyword, so we don't output anything here
+		return
 	}
-	g.genType(rvType)
+	g.genType(n)
 }
 
 func (g *Generator) genParameterList(n Nod) {
@@ -134,7 +136,7 @@ func (g *Generator) genFuncDefInner(n Nod, rcvrDef Nod) {
 
 	g.WS(")")
 
-	g.genFuncOutType(NodGetChild(n, NTR_RETURNVAL_PLACEHOLDER))
+	g.genRvPlaceholderFuncOutType(NodGetChild(n, NTR_RETURNVAL_PLACEHOLDER))
 
 	g.WS(" {\n")
 
@@ -154,17 +156,17 @@ func (g *Generator) genFuncDef(n Nod) {
 func (g *Generator) genArgUnpacking(inTypeDef Nod) {
 	params := NodGetChildList(inTypeDef)
 	for ndx, param := range params {
-		typeStr := g.getGenType(NodGetChild(param, NTR_TYPE))
+		typeNod := NodGetChild(param, NTR_TYPE)
 
 		g.WS("var ")
 		g.WS(NodGetChild(param, NTR_VARDEF_NAME).Data.(string))
 		g.WS(" ")
-		g.WS(typeStr)
+		g.genType(typeNod)
 		g.WS(" = ")
 		g.WS("args[")
 		g.WS(strconv.Itoa(ndx))
 		g.WS("].(")
-		g.WS(typeStr)
+		g.genType(typeNod)
 		g.WS(")")
 		g.WS("\n")
 	}
@@ -216,11 +218,10 @@ func (g *Generator) genVarDef(n Nod) {
 	g.WS("\n")
 }
 
-func (g *Generator) genType(n Nod) {
-	g.WS(g.getGenType(n))
-}
-
 func (g *Generator) getGenTypeBase(n Nod) string {
+	if n.NodeType == DYPE_ALL {
+		return "interface{}"
+	}
 	lut := map[int]string{
 		TY_BOOL:   "bool",
 		TY_INT:    "int64",
@@ -231,7 +232,6 @@ func (g *Generator) getGenTypeBase(n Nod) string {
 		TY_LIST:   "[]interface{}",
 		TY_SET:    "map[interface{}]bool",
 		TY_MAP:    "map[interface{}]interface{}",
-		TY_FUNC:   "func(interface{})interface{}",
 	}
 	if val, ok := lut[n.Data.(int)]; ok {
 		return val
@@ -240,26 +240,54 @@ func (g *Generator) getGenTypeBase(n Nod) string {
 	}
 }
 
-func (g *Generator) getGenType(n Nod) string {
-	if n.NodeType == NT_TYPEBASE {
-		return g.getGenTypeBase(n)
-	} else if n.NodeType == NT_TYPEARGED {
-		return g.getGenTypeArged(n)
-	} else if n.NodeType == NT_CLASSDEF {
-		return "*" + NodGetChild(n, NTR_CLASSDEF_NAME).Data.(string)
-	} else {
-		return "<type>"
+func (g *Generator) getGenResult(printRoutine func(subGenerator *Generator)) string {
+	subg := &Generator{
+		buf: &bytes.Buffer{},
 	}
+	printRoutine(subg)
+	return subg.buf.String()
 }
 
-func (g *Generator) getGenTypeArged(n Nod) string {
-	bt := NodGetChild(n, NTR_TYPEARGED_BASE).Data.(int)
-	if bt == TY_LIST {
-		argStr := g.getGenType(NodGetChild(n, NTR_TYPEARGED_ARG))
-		return "[]" + argStr
+func (g *Generator) genType(n Nod) {
+	if n.NodeType == DYPE_UNION {
+		if NodHasChild(n, PNTR_TYPE_INDEXABLE) {
+			g.WS("[]interface{}")
+		} else {
+			g.WS("interface{}")
+		}
+	} else if n.NodeType == NT_TYPEBASE || n.NodeType == DYPE_ALL {
+		g.WS(g.getGenTypeBase(n))
+	} else if n.NodeType == NT_TYPEARGED {
+		panic("typearged is obsolete; use TYPECALL instead")
+	} else if n.NodeType == NT_CLASSDEF {
+		g.WS("*")
+		g.WS(NodGetChild(n, NTR_CLASSDEF_NAME).Data.(string))
+	} else if n.NodeType == NT_FUNCDEF {
+		g.genTypeFuncDef(n)
 	} else {
-		return "<typearged>"
+		g.WS("<type>")
 	}
+
+}
+
+func (g *Generator) genTypeFuncDef(n Nod) {
+	g.WS("func(")
+	param := NodGetChild(n, NTR_FUNCDEF_INTYPE)
+	if param.NodeType == NT_PARAMETER {
+		g.genType(NodGetChild(param, NTR_TYPE))
+	} else if param.NodeType == NT_LIT_LIST {
+		panic("multi arg not supported")
+	} else {
+		panic("unknown parameter structure")
+	}
+	g.WS(")")
+	// TODO: probably remove the path that relies on NTR_FUNCDEF_OUTTYPE
+	if explicitOutType := NodGetChildOrNil(n, NTR_FUNCDEF_OUTTYPE); explicitOutType != nil {
+		g.genFuncOutType(explicitOutType)
+	} else {
+		g.genFuncOutType(NodGetChild(NodGetChild(n, NTR_RETURNVAL_PLACEHOLDER), NTR_TYPE))
+	}
+
 }
 
 func isReceiverCallType(nt int) bool {
@@ -773,8 +801,16 @@ func (g *Generator) genMapKVPair(n Nod) {
 	g.genValue(NodGetChild(n, NTR_KVPAIR_VAL))
 }
 
+func (g *Generator) isDuckType(n Nod) bool {
+	return n.NodeType == DYPE_ALL || n.NodeType == DYPE_UNION
+}
+
 func (g *Generator) genLiteralList(n Nod) {
-	g.genType(NodGetChild(n, NTR_TYPE))
+	if g.isDuckType(NodGetChild(n, NTR_TYPE)) {
+		g.WS("[]interface{}")
+	} else {
+		g.genType(NodGetChild(n, NTR_TYPE))
+	}
 	g.WS("{")
 	elements := NodGetChildList(n)
 	for _, ele := range elements {

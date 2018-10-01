@@ -134,9 +134,16 @@ func NodRemoveChild(n Nod, edgeType int) {
 	// removes a child from parent, and also removes the child's old reference to the parent
 	edge := n.Out[edgeType]
 	child := edge.Out
-	childInEdgeNdx := sliceIndex(len(child.In), func(i int) bool { return child.In[i] == edge })
+	childInEdgeNdx := NodGetInEdgeNdx(child, edge)
+	if childInEdgeNdx == -1 {
+		panic("parent edge of child not found")
+	}
 	delete(n.Out, edgeType)
 	slicePEdgeRemove(child.In, childInEdgeNdx)
+}
+
+func NodGetInEdgeNdx(n Nod, inEdge *Edge) int {
+	return sliceIndex(len(n.In), func(i int) bool { return n.In[i] == inEdge })
 }
 
 func NodDeepCopyDownwards(n Nod) Nod {

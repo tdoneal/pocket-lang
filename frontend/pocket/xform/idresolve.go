@@ -613,7 +613,6 @@ func (x *XformerPocket) IRRSimpleVarWrites() *RewriteRule {
 			if localVarDef != nil {
 				varName.NodeType = NT_IDENTIFIER_RESOLVED
 				NodSetChild(n, NTR_VARDEF, localVarDef)
-				print("Resolved as extant local variable:", PrettyPrint(n))
 				return
 			}
 

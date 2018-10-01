@@ -1,6 +1,7 @@
 package common
 
 import (
+	"fmt"
 	. "pocket-lang/parse"
 )
 
@@ -67,16 +68,21 @@ func DypeIsSubset(a Nod, b Nod) bool {
 		return b.NodeType == DYPE_EMPTY
 	}
 
+	if !DypeIsMeta(a.NodeType) && !DypeIsMeta(b.NodeType) {
+		return DypeDeepForwardsEqual(a, b)
+	}
+
 	if DypeDeepForwardsEqual(a, b) {
 		return true
 	}
 
-	asimp := DypeSimplify(a)
-	bsimp := DypeSimplify(b)
+	asimp := DypeSimplifyShallow(a)
+	bsimp := DypeSimplifyShallow(b)
 
 	if asimp.NodeType == DYPE_UNION && !DypeIsMeta(bsimp.NodeType) {
 		DypeCheckNoNestedOps(asimp)
-		return DypeListContains(NodGetChildList(asimp), bsimp)
+		rv := DypeListContains(NodGetChildList(asimp), bsimp)
+		return rv
 	}
 	if bsimp.NodeType == DYPE_UNION && !DypeIsMeta(asimp.NodeType) {
 		return false
@@ -85,7 +91,9 @@ func DypeIsSubset(a Nod, b Nod) bool {
 		return DypeIsSubsetUnionUnion(asimp, bsimp)
 	}
 
-	panic("Couldn't determine")
+	fmt.Println("Couldn't determine subsetness: container (simplified):",
+		PrettyPrint(asimp), "\nsub:", PrettyPrint(bsimp))
+	panic("Couldn't determine subsetness")
 }
 
 func DypeListContains(nods []Nod, e Nod) bool {
@@ -135,12 +143,123 @@ func DypeWouldChangeXSect(a Nod, b Nod) bool {
 	return !DypeIsSubset(b, a)
 }
 
-func DypeSimplify(n Nod) Nod {
-	// performs quick simplifications, returns original Nod if no simplifications made
+func DypeSimplifyShallow(n Nod) Nod {
+	// performs quick simplifications (non-recursive),
+	// returns original Nod if no simplifications made (Nod-Idem)
 	n = DypeRemoveMonoArgs(n)
 	n = DypeDeassociate(n)
 	n = DypeDeduplicate(n)
 	return n
+}
+
+func DypeSimplifyDeep(n Nod) Nod {
+	// performs recursive simplifications. (Nod-Idem)
+	if !DypeIsMeta(n.NodeType) {
+		return n
+	}
+	if DypeIsOperator(n.NodeType) {
+		newN := DypeSimplifyChildren(n)
+		return DypeSimplifyShallowComplex(newN)
+	}
+	return n
+}
+
+func DypeSimplifyShallowComplex(n Nod) Nod {
+	if n.NodeType == DYPE_XSECT {
+		return DypeSimplifyShallowComplex(DypeEvaluateXSect(n))
+	}
+	return DypeSimplifyShallow(n)
+}
+
+func DypeEvaluateXSect(n Nod) Nod {
+	// tries performing shallow progress on xsects (aiming to be union, prim only)
+	args := NodGetChildList(n)
+
+	// TODO:!
+	filter := NodNew(DYPE_ALL)
+	// gather the list of "all elements"
+	// an "element" can be either a standalone non-meta child of xsect, or an element of
+	// a direct union child
+	for _, arg := range args {
+		filter = DypeEvaluateXSectBinary(filter, arg)
+	}
+
+	return filter
+}
+
+func DypeEvaluateXSectBinary(a Nod, b Nod) Nod {
+	// evaluates the intersection of two non-xsect types
+	// return value is not an XSECT node, rather actual progress is made
+	if a.NodeType == DYPE_ALL {
+		return b
+	}
+	if b.NodeType == DYPE_ALL {
+		return a
+	}
+	if !DypeIsMeta(a.NodeType) && !DypeIsMeta(b.NodeType) {
+		if DypeDeepForwardsEqual(a, b) {
+			return a
+		}
+		return NodNew(DYPE_EMPTY)
+	}
+	if a.NodeType == DYPE_UNION && !DypeIsMeta(b.NodeType) {
+		return DypeEvaluateXSectBinaryUnionNonUnion(a, b)
+	}
+	if b.NodeType == DYPE_UNION && !DypeIsMeta(a.NodeType) {
+		return DypeEvaluateXSectBinaryUnionNonUnion(b, a)
+	}
+	if a.NodeType == DYPE_UNION && b.NodeType == DYPE_UNION {
+		return DypeEvaluateXSectBinaryUnionUnion(a, b)
+	}
+	panic("invalid preconditions")
+}
+
+func DypeEvaluateXSectBinaryUnionUnion(a Nod, b Nod) Nod {
+	// find the things each union has in common
+	aArgs := NodGetChildList(a)
+	bArgs := NodGetChildList(b)
+
+	commonArgs := []Nod{}
+	for _, aArg := range aArgs {
+		if DypeListContains(bArgs, aArg) {
+			commonArgs = append(commonArgs, aArg)
+		}
+	}
+
+	if len(commonArgs) == len(aArgs) {
+		// nothing changed, avoid new object creation
+		return a
+	}
+	if len(commonArgs) == 1 {
+		return commonArgs[0]
+	}
+	return NodNewChildList(DYPE_UNION, commonArgs)
+}
+
+func DypeEvaluateXSectBinaryUnionNonUnion(union Nod, nonunion Nod) Nod {
+	unionArgs := NodGetChildList(union)
+	if DypeListContains(unionArgs, nonunion) {
+		return nonunion
+	}
+	return NodNew(DYPE_EMPTY)
+}
+
+func DypeSimplifyChildren(n Nod) Nod {
+	args := NodGetChildList(n)
+	simpArgs := []Nod{}
+	allSame := true
+	for _, arg := range args {
+		argSimped := DypeSimplifyDeep(arg)
+		if argSimped != arg {
+			allSame = false
+		}
+		simpArgs = append(simpArgs, argSimped)
+	}
+	if allSame {
+		return n
+	}
+	newN := NodNewChildList(n.NodeType, simpArgs)
+	return newN
 }
 
 func DypeRemoveMonoArgs(n Nod) Nod {

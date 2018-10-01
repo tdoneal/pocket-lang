@@ -26,10 +26,33 @@ func (x *Xformer) SearchReplaceAll(cond func(Nod) bool, with func(Nod) Nod) {
 }
 
 func (x *Xformer) Replace(what Nod, with Nod) {
+	// note: do NOT use what later, or graph integrity will be lost
+	// what should never be used again
 	for _, ele := range what.In {
-		ele.Out = with
+		if ele.In != with { // properly handle the case where we replace with an ancestor of original node
+			ele.Out = with
+		}
 	}
-	with.In = what.In
+	// with.In = what.In
+	// with.In = Union(with.In, what.In)
+	toAddToWithIn := []*Edge{}
+	for _, edge := range what.In {
+		if edge.In == with {
+			continue
+		}
+		// add what.In.edge if not already in with.In.edges
+		alreadyIn := false
+		for _, withEdge := range with.In {
+			if edge == withEdge {
+				alreadyIn = true
+				break
+			}
+		}
+		if !alreadyIn {
+			toAddToWithIn = append(toAddToWithIn, edge)
+		}
+	}
+	with.In = append(with.In, toAddToWithIn...)
 }
 
 type Searcher struct {
