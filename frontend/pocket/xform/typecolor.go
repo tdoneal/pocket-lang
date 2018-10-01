@@ -82,7 +82,10 @@ func (x *XformerPocket) colorTypes() {
 	// then output a single "type color" for each myped node
 	nodes := x.SearchRoot(func(n Nod) bool { return NodHasChild(n, NTR_MYPE_POS) })
 	x.generateValidMypes(nodes)
-	fmt.Println("Final type assignments:", PrettyPrintMypes(nodes))
+	fmt.Println("Final type assignments:")
+	for _, node := range nodes {
+		fmt.Println("ta: ", PrettyPrintMype(node))
+	}
 }
 
 func (x *XformerPocket) marRemoveMypesFromDotopQualifiers() *RewriteRule {

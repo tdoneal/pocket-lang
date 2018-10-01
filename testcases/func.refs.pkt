@@ -12,4 +12,11 @@ main func
     result : @foo
     y : result(1)
     print y
+>>>2>>>
+# implicit return type
+foo func(x int): x + 1
+
+main func
+    result : @foo
+    print result(1)
 >>>2

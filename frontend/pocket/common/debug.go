@@ -142,15 +142,6 @@ func (d *Debug) initialize() {
 	ntl[NTR_NAMESPACE] = "NAMESPACE"
 	ntl[NT_TYPECALL] = "TYPECALL"
 
-	// mypearged
-	ntl[MATYPE_ALL] = "MA_ALL"
-	ntl[MATYPE_EMPTY] = "MA_EMPTY"
-	ntl[MATYPE_SINGLE_BASE] = "MA_SINGLE_BASE"
-	ntl[MATYPE_UNION] = "UNION"
-	ntl[MATYPE_SINGLE_ARGED] = "MA_SINGLE_ARGED"
-	ntl[MATYPER_ARG] = "ARG"
-	ntl[MATYPER_BASE] = "BASE"
-
 	// dype
 	ntl[DYPE_ALL] = "DYPE_ALL"
 	ntl[DYPE_EMPTY] = "DYPE_EMPTY"
@@ -259,7 +250,7 @@ func (d *DebugPrinter) PrintVarScopeType(ty int) {
 func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 	if val, ok := node.Data.(int); ok {
 		d.buf.WriteString(": ")
-		if node.NodeType == NT_TYPE || node.NodeType == NT_TYPEBASE || node.NodeType == MATYPE_SINGLE_BASE {
+		if node.NodeType == NT_TYPE || node.NodeType == NT_TYPEBASE {
 			d.PrintType(val)
 		} else if node.NodeType == NT_VARDEF_SCOPE {
 			d.PrintVarScopeType(val)
@@ -270,18 +261,6 @@ func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 		d.buf.WriteString(": \"")
 		d.buf.WriteString(val)
 		d.buf.WriteString("\"")
-	} else if val, ok := node.Data.(*MypeExplicit); ok {
-		d.llPrintMypeObject(val)
-	} else if val, ok := node.Data.(*MypeArged); ok {
-		d.buf.WriteString(";; ")
-		if val.Node.NodeType == NT_CLASSDEF { // special handling to avoid infinite recursion
-			clsName := NodGetChild(val.Node, NTR_CLASSDEF_NAME).Data.(string)
-			d.buf.WriteString(clsName)
-		} else {
-			subPrinter := DebugPrinterNew()
-			subPrinter.PrettyPrint(val.Node)
-			d.buf.WriteString(subPrinter.buf.String())
-		}
 	}
 }
 
@@ -309,30 +288,11 @@ func (d *DebugPrinter) PrintNodeType(nodeType int) {
 	}
 }
 
-func (d *DebugPrinter) PrettyPrintMypes(nods []Nod) {
-	for _, ele := range nods {
-		d.PrettyPrintMype(ele)
-	}
-}
-
 func (d *DebugPrinter) PrintType(t int) {
 	if val, ok := DEBUG.typeLookup[t]; ok {
 		d.buf.WriteString(val)
 	} else {
 		d.buf.WriteString(strconv.Itoa(t))
-	}
-}
-
-func (d *DebugPrinter) llPrintMypeObject(m Mype) {
-	if me, ok := m.(*MypeExplicit); ok {
-		d.buf.WriteString("{")
-		for key := range me.Types {
-			d.PrintType(key)
-			d.buf.WriteString(", ")
-		}
-		d.buf.WriteString("}")
-	} else {
-		panic("invalid mype object")
 	}
 }
 
@@ -385,8 +345,4 @@ func PrettyPrintOp(printOp func(*DebugPrinter)) string {
 
 func PrettyPrintMype(nod Nod) string {
 	return PrettyPrintOp(func(d *DebugPrinter) { d.PrettyPrintMype(nod) })
-}
-
-func PrettyPrintMypes(nods []Nod) string {
-	return PrettyPrintOp(func(d *DebugPrinter) { d.PrettyPrintMypes(nods) })
 }

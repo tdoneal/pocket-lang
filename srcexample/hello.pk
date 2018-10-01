@@ -1,11 +1,6 @@
 
+foo func(x int): x + 1
 
 main func
-    thing(Point())
-
-thing func(x)
-    x.Thang()
-
-Point class
-    Thang func
-        print 'thang'
+    result : @foo
+    print result(1)
