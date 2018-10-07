@@ -302,10 +302,37 @@ func (p *ParserPocket) parseVarAssign() Nod {
 	})
 }
 
+func isSpecialAssignToken(ty int) bool {
+	return ty == TK_ADDASSIGN || ty == TK_SUBASSIGN ||
+		ty == TK_MULTASSIGN || ty == TK_DIVASSIGN || ty == TK_MODASSIGN ||
+		ty == TK_ORASSIGN || ty == TK_ANDASSIGN
+}
+
+func (p *ParserPocket) specialVarAssignOp(tktype int) int {
+	// maps a special assignment token type (e.g. +:, -:, to the corresponding
+	// node type , e.g. +, -)
+	if tktype == TK_ADDASSIGN {
+		return NT_ADDOP
+	} else if tktype == TK_SUBASSIGN {
+		return NT_SUBOP
+	} else if tktype == TK_MULTASSIGN {
+		return NT_MULOP
+	} else if tktype == TK_DIVASSIGN {
+		return NT_DIVOP
+	} else if tktype == TK_MODASSIGN {
+		return NT_MODOP
+	} else if tktype == TK_ORASSIGN {
+		return NT_OROP
+	} else if tktype == TK_ANDASSIGN {
+		return NT_ANDOP
+	}
+	panic("unknown special var assign type")
+}
+
 func (p *ParserPocket) parseVarAssignGeneric() Nod {
 	lval := p.parseLValue()
 	assgnTok := p.ParseTokenOnCondition(func(t *types.Token) bool {
-		return t.Type == TK_COLON || t.Type == TK_ADDASSIGN
+		return t.Type == TK_COLON || isSpecialAssignToken(t.Type)
 	})
 	rval := p.parseValue()
 
@@ -313,9 +340,9 @@ func (p *ParserPocket) parseVarAssignGeneric() Nod {
 	NodSetChild(rv, NTR_VAR_NAME, lval)
 	NodSetChild(rv, NTR_VARASSIGN_VALUE, rval)
 
-	if assgnTok.Type == TK_ADDASSIGN {
+	if isSpecialAssignToken(assgnTok.Type) {
 		rv.NodeType = NT_VARASSIGN_ARITH
-		NodSetChild(rv, NTR_VARASSIGN_ARITHOP, NodNew(NT_ADDOP))
+		NodSetChild(rv, NTR_VARASSIGN_ARITHOP, NodNew(p.specialVarAssignOp(assgnTok.Type)))
 	}
 
 	return rv

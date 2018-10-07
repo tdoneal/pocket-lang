@@ -1,5 +1,29 @@
 
-foo func(x): x
-
 main func
-    print foo(3)
+    a : 2
+    a +: 3
+    print a
+
+    b : 2
+    b -: 3
+    print b
+
+    c : 2   
+    c *: 3
+    print c
+
+    d : 6
+    d /: 3
+    print d
+
+    e : 10
+    e %: 3
+    print e
+
+    f : false
+    f |: true
+    print f
+
+    g : true
+    g &: false
+    print g

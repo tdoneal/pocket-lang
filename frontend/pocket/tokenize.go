@@ -42,35 +42,42 @@ const (
 	TK_PLUSPLUS      = 53
 	TK_MINUSMINUS    = 54
 
-	TK_ADDASSIGN = 55
+	TK_PARENL = 60
+	TK_PARENR = 61
+	TK_BRACKL = 62
+	TK_BRACKR = 63
+	TK_CURLYL = 64
+	TK_CURLYR = 65
+	TK_COMMA  = 66
+	TK_IF     = 75
+	TK_ELSE   = 76
+	TK_LOOP   = 80
+	TK_FOR    = 81
+	TK_IN     = 82
+	TK_WHILE  = 83
+	TK_BREAK  = 85
+	TK_PASS   = 90
+	TK_RETURN = 100
+	TK_VOID   = 110
+	TK_BOOL   = 120
+	TK_INT    = 121
+	TK_FLOAT  = 122
+	TK_STRING = 123
+	TK_LIST   = 124
+	TK_SET    = 125
+	TK_MAP    = 126
+	TK_FALSE  = 130
+	TK_TRUE   = 131
+	TK_CLASS  = 150
 
-	TK_PARENL  = 60
-	TK_PARENR  = 61
-	TK_BRACKL  = 62
-	TK_BRACKR  = 63
-	TK_CURLYL  = 64
-	TK_CURLYR  = 65
-	TK_COMMA   = 66
-	TK_IF      = 75
-	TK_ELSE    = 76
-	TK_LOOP    = 80
-	TK_FOR     = 81
-	TK_IN      = 82
-	TK_WHILE   = 83
-	TK_BREAK   = 85
-	TK_PASS    = 90
-	TK_RETURN  = 100
-	TK_VOID    = 110
-	TK_BOOL    = 120
-	TK_INT     = 121
-	TK_FLOAT   = 122
-	TK_STRING  = 123
-	TK_LIST    = 124
-	TK_SET     = 125
-	TK_MAP     = 126
-	TK_FALSE   = 130
-	TK_TRUE    = 131
-	TK_CLASS   = 150
+	TK_ADDASSIGN  = 155
+	TK_SUBASSIGN  = 156
+	TK_MULTASSIGN = 157
+	TK_DIVASSIGN  = 158
+	TK_MODASSIGN  = 159
+	TK_ORASSIGN   = 160
+	TK_ANDASSIGN  = 161
+
 	TK_COMMENT = 220
 )
 
@@ -214,9 +221,9 @@ func (tkzr *TokenizerPocket) processInit() {
 	} else if input == '-' {
 		tkzr.processMinus()
 	} else if input == '*' {
-		tkzr.EmitTokenRuneAndIncr(TK_MULTOP)
+		tkzr.processMult()
 	} else if input == '/' {
-		tkzr.EmitTokenRuneAndIncr(TK_DIVOP)
+		tkzr.processDiv()
 	} else if input == '(' {
 		tkzr.EmitTokenRuneAndIncr(TK_PARENL)
 	} else if input == ')' {
@@ -236,11 +243,11 @@ func (tkzr *TokenizerPocket) processInit() {
 	} else if input == ',' {
 		tkzr.EmitTokenRuneAndIncr(TK_COMMA)
 	} else if input == '|' {
-		tkzr.EmitTokenRuneAndIncr(TK_OR)
+		tkzr.processOr()
 	} else if input == '&' {
-		tkzr.EmitTokenRuneAndIncr(TK_AND)
+		tkzr.processAnd()
 	} else if input == '%' {
-		tkzr.EmitTokenRuneAndIncr(TK_MOD)
+		tkzr.processMod()
 	} else if input == '@' {
 		tkzr.EmitTokenRuneAndIncr(TK_REF)
 	} else if input == '.' {
@@ -253,9 +260,43 @@ func (tkzr *TokenizerPocket) processInit() {
 }
 
 func (tkzr *TokenizerPocket) processPlus() {
-	// tkzr.process1Or2CharOp('+', '+', TK_ADDOP, TK_PLUSPLUS)
 	tkzr.process1Or2CharOpNChoices('+', []rune{'+', ':'}, TK_ADDOP, []int{
 		TK_PLUSPLUS, TK_ADDASSIGN,
+	})
+}
+
+func (tkzr *TokenizerPocket) processMinus() {
+	tkzr.process1Or2CharOpNChoices('-', []rune{'-', ':'}, TK_SUBOP, []int{
+		TK_MINUSMINUS, TK_SUBASSIGN,
+	})
+}
+
+func (tkzr *TokenizerPocket) processMult() {
+	tkzr.process1Or2CharOpNChoices('*', []rune{':'}, TK_MULTOP, []int{
+		TK_MULTASSIGN,
+	})
+}
+
+func (tkzr *TokenizerPocket) processDiv() {
+	tkzr.process1Or2CharOpNChoices('/', []rune{':'}, TK_DIVOP, []int{
+		TK_DIVASSIGN,
+	})
+}
+
+func (tkzr *TokenizerPocket) processMod() {
+	tkzr.process1Or2CharOpNChoices('%', []rune{':'}, TK_MOD, []int{
+		TK_MODASSIGN,
+	})
+}
+func (tkzr *TokenizerPocket) processOr() {
+	tkzr.process1Or2CharOpNChoices('|', []rune{':'}, TK_OR, []int{
+		TK_ORASSIGN,
+	})
+}
+
+func (tkzr *TokenizerPocket) processAnd() {
+	tkzr.process1Or2CharOpNChoices('&', []rune{':'}, TK_AND, []int{
+		TK_ANDASSIGN,
 	})
 }
 
@@ -277,10 +318,6 @@ func (tkzr *TokenizerPocket) process1Or2CharOpNChoices(firstRune rune,
 		}
 	}
 	tkzr.EmitToken(tok1, string(firstRune))
-}
-
-func (tkzr *TokenizerPocket) processMinus() {
-	tkzr.process1Or2CharOp('-', '-', TK_SUBOP, TK_MINUSMINUS)
 }
 
 func (tkzr *TokenizerPocket) processDot() {
