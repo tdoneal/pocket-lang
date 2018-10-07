@@ -38,7 +38,7 @@ const (
 	NTR_VARTABLE                 = 51
 	NT_TYPECOND_DEFS             = 53
 	NTR_TYPECOND_DEFS            = 54
-	NT_MYPE                      = 56
+	NT_DYPE                      = 56
 	NTR_MYPE_POS                 = 57
 	NTR_MYPE_NEG                 = 58
 	NTR_MYPE_VALID               = 59

@@ -1,6 +1,5 @@
 
-foo func(x int): x + 1
+foo func(x): x
 
 main func
-    result : @foo
-    print result(1)
+    print foo(3)

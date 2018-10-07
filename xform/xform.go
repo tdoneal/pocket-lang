@@ -28,11 +28,15 @@ func (x *Xformer) SearchReplaceAll(cond func(Nod) bool, with func(Nod) Nod) {
 func (x *Xformer) Replace(what Nod, with Nod) {
 	// note: do NOT use what later, or graph integrity will be lost
 	// what should never be used again
+
+	// redirect all incoming nodes of old to new
 	for _, ele := range what.In {
 		if ele.In != with { // properly handle the case where we replace with an ancestor of original node
 			ele.Out = with
 		}
 	}
+
+	// rebuild In table of new nod
 	// with.In = what.In
 	// with.In = Union(with.In, what.In)
 	toAddToWithIn := []*Edge{}

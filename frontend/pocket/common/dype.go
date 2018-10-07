@@ -386,5 +386,11 @@ func NodDatasEqual(n0 Nod, n1 Nod) bool {
 		}
 		return false
 	}
+	if n0nod, ok0 := n0.Data.(Nod); ok0 {
+		if n1nod, ok1 := n1.Data.(Nod); ok1 {
+			return DypeDeepForwardsEqual(n0nod, n1nod)
+		}
+		return false
+	}
 	panic("undetermined")
 }

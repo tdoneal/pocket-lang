@@ -42,9 +42,20 @@ func (p *ParserPocket) parseTopLevel() Nod {
 
 func (p *ParserPocket) parseTopLevelUnit() Nod {
 	return p.ParseDisjunction([]ParseFunc{
-		func() Nod { return p.parseFuncDef() },
+		func() Nod { return p.parseFuncDefTL() },
 		func() Nod { return p.parseClassDef() },
 	})
+}
+
+func (p *ParserPocket) parseFuncDefTL() Nod {
+	funcName := p.ParseToken(TK_ALPHANUM).Data
+	// TODO: modifiers parsed here
+	fDef := p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseFuncDefOnelineWithEOL() },
+		func() Nod { return p.parseFuncDefClassic() },
+	})
+	NodSetChild(fDef, NTR_FUNCDEF_NAME, NodNewData(NT_IDENTIFIER_RESOLVED, funcName))
+	return fDef
 }
 
 func (p *ParserPocket) parseFuncDef() Nod {
@@ -54,25 +65,30 @@ func (p *ParserPocket) parseFuncDef() Nod {
 	})
 }
 
+func (p *ParserPocket) parseFuncDefOnelineWithEOL() Nod {
+	rv := p.parseFuncDefOneline()
+	p.ParseAtMostOne(func() Nod { p.parseEOL(); return nil })
+	return rv
+}
+
+func (p *ParserPocket) parseLiteralFunc() Nod {
+	return p.parseFuncDef()
+}
+
 func (p *ParserPocket) parseFuncDefOneline() Nod {
 	fDef := NodNew(NT_FUNCDEF)
 	p.parseFuncHeaderInto(fDef)
 	p.ParseToken(TK_COLON)
 	fval := p.parseValue()
-	p.parseEOL()
 	NodSetChild(fDef, NTR_FUNCDEF_CODE, fval)
 	return fDef
 }
 
 func (p *ParserPocket) parseFuncHeaderInto(fDef Nod) {
-	funcName := p.ParseToken(TK_ALPHANUM).Data
 	funcWord := p.ParseToken(TK_ALPHANUM).Data
 	if funcWord != "func" {
 		p.RaiseParseError("missing func keyword")
 	}
-	funcNameNode := NodNewData(NT_IDENTIFIER_RESOLVED, funcName)
-	NodSetChild(fDef, NTR_FUNCDEF_NAME, funcNameNode)
-
 	// parse function type declarations if extant
 	// for now, if they are extant, require an explicit in type and explicit out type
 	funcInputType := p.ParseAtMostOne(func() Nod { return p.parseFuncDefTypeValue() })
@@ -207,7 +223,7 @@ func (p *ParserPocket) parseClassDefBlock() Nod {
 
 func (p *ParserPocket) parseClassDefUnit() Nod {
 	rv := p.ParseDisjunction([]ParseFunc{
-		func() Nod { return p.parseFuncDef() },
+		func() Nod { return p.parseFuncDefTL() },
 		func() Nod { return p.parseClassDefField() },
 	})
 	return rv
@@ -433,6 +449,7 @@ func (p *ParserPocket) parseLiteral() Nod {
 		func() Nod { return p.parseLiteralMap() },
 		func() Nod { return p.parseLiteralInt() },
 		func() Nod { return p.parseLiteralFloat() },
+		func() Nod { return p.parseLiteralFunc() },
 	})
 }
 

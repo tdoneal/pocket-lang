@@ -144,6 +144,9 @@ func (x *XformerPocket) ISNFuncDef(n Nod) {
 		x.addVarToVartable(varTable, selfDef)
 	}
 
+	// funcdefs can be values too, so init their type stuff
+	x.initializePosNegMypes(n)
+
 	x.ISNInitNamespace(n, true, false, false)
 }
 
@@ -163,9 +166,9 @@ func (x *XformerPocket) getAllSolveRules() []*RewriteRule {
 
 	rv := append(typeRules, idRules...)
 
-	for ndx, rule := range rv {
-		fmt.Println("rule", ndx, rule, GetRewriteRuleDebugInfo(rule))
-	}
+	// for ndx, rule := range rv {
+	// 	// fmt.Println("rule", ndx, rule, GetRewriteRuleDebugInfo(rule))
+	// }
 
 	return rv
 }

@@ -49,6 +49,7 @@ func (g *Generator) genSourceFile(input Nod) {
 		} else {
 			panic("unknown source unit type")
 		}
+		g.WS("\n")
 	}
 }
 
@@ -114,7 +115,7 @@ func (g *Generator) genParameter(n Nod) {
 }
 
 func (g *Generator) genFuncDefInner(n Nod, rcvrDef Nod) {
-	funcName := NodGetChild(n, NTR_FUNCDEF_NAME).Data.(string)
+	funcNameNod := NodGetChildOrNil(n, NTR_FUNCDEF_NAME)
 	g.WS("func ")
 
 	if rcvrDef != nil {
@@ -123,7 +124,9 @@ func (g *Generator) genFuncDefInner(n Nod, rcvrDef Nod) {
 		g.WS(") ")
 	}
 
-	g.WS(funcName)
+	if funcNameNod != nil {
+		g.WS(funcNameNod.Data.(string))
+	}
 	g.WS("(")
 
 	needsArgUnpacking := false
@@ -146,7 +149,7 @@ func (g *Generator) genFuncDefInner(n Nod, rcvrDef Nod) {
 
 	g.genImperative(NodGetChild(n, NTR_FUNCDEF_CODE))
 
-	g.WS("}\n")
+	g.WS("}")
 }
 
 func (g *Generator) genFuncDef(n Nod) {
@@ -569,9 +572,15 @@ func (g *Generator) genValue(n Nod) {
 		g.genDuckMethodCall(n)
 	} else if n.NodeType == NT_REFERENCEOP {
 		g.genReferenceOp(n)
+	} else if n.NodeType == NT_FUNCDEF {
+		g.genValueFuncDef(n)
 	} else {
 		g.WS("value")
 	}
+}
+
+func (g *Generator) genValueFuncDef(n Nod) {
+	g.genFuncDef(n)
 }
 
 func (g *Generator) genReferenceOp(n Nod) {

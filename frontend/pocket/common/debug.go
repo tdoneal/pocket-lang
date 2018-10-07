@@ -93,7 +93,7 @@ func (d *Debug) initialize() {
 	ntl[NTR_TYPE_DECL] = "TYPEDECL"
 	ntl[NT_TYPE] = "TYPE"
 	ntl[NT_TYPEBASE] = "TYPEBASE"
-	ntl[NT_MYPE] = "MYPE"
+	ntl[NT_DYPE] = "DYPE"
 	ntl[NTR_MYPE_POS] = "MYPE_POS"
 	ntl[NTR_MYPE_NEG] = "MYPE_NEG"
 	ntl[NTR_MYPE_VALID] = "MYPE_VALID"
@@ -261,6 +261,9 @@ func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 		d.buf.WriteString(": \"")
 		d.buf.WriteString(val)
 		d.buf.WriteString("\"")
+	} else if val, ok := node.Data.(Nod); ok && node.NodeType == NT_DYPE {
+		d.buf.WriteString(": ")
+		d.internalPrettyPrint(val)
 	}
 }
 
@@ -296,53 +299,8 @@ func (d *DebugPrinter) PrintType(t int) {
 	}
 }
 
-func (d *DebugPrinter) PrettyPrintMype(nod Nod) {
-	d.PrintNodeType(nod.NodeType)
-	d.PrintLocalDataIfExtant(nod)
-	if nod.NodeType == NT_VAR_GETTER {
-		d.buf.WriteString(" ")
-		d.buf.WriteString(NodGetChild(nod, NTR_VAR_NAME).Data.(string))
-	} else if nod.NodeType == NT_VARDEF {
-		d.buf.WriteString(" ")
-		d.buf.WriteString(NodGetChild(nod, NTR_VARDEF_NAME).Data.(string))
-	}
-
-	if NodHasChild(nod, NTR_MYPE_POS) {
-		d.buf.WriteString(" +<")
-		mypeNod := NodGetChild(nod, NTR_MYPE_POS)
-		d.PrintNodeType(mypeNod.NodeType)
-		d.PrintLocalDataIfExtant(mypeNod)
-		d.buf.WriteString(">")
-	}
-	if NodHasChild(nod, NTR_MYPE_NEG) {
-		d.buf.WriteString(" -~<")
-		mypeNod := NodGetChild(nod, NTR_MYPE_NEG)
-		d.PrintNodeType(mypeNod.NodeType)
-		d.PrintLocalDataIfExtant(mypeNod)
-		d.buf.WriteString(">")
-	}
-	if NodHasChild(nod, NTR_MYPE_VALID) {
-		d.buf.WriteString(" =<")
-		mypeNod := NodGetChild(nod, NTR_MYPE_VALID)
-		d.PrintNodeType(mypeNod.NodeType)
-		d.PrintLocalDataIfExtant(mypeNod)
-		d.buf.WriteString(">")
-	}
-	if NodHasChild(nod, NTR_TYPE) {
-		d.buf.WriteString(" :: ")
-		typeNod := NodGetChild(nod, NTR_TYPE)
-		d.PrintNodeType(typeNod.NodeType)
-		d.PrintLocalDataIfExtant(typeNod)
-	}
-	d.buf.WriteString("\n")
-}
-
 func PrettyPrintOp(printOp func(*DebugPrinter)) string {
 	d := DebugPrinterNew()
 	printOp(d)
 	return d.String()
-}
-
-func PrettyPrintMype(nod Nod) string {
-	return PrettyPrintOp(func(d *DebugPrinter) { d.PrettyPrintMype(nod) })
 }
