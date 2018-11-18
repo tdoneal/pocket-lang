@@ -1,6 +1,7 @@
 package xform
 
 import (
+	"fmt"
 	. "pocket-lang/frontend/pocket/common"
 	. "pocket-lang/parse"
 	"strconv"
@@ -12,6 +13,152 @@ func (x *XformerPocket) desugar() {
 	x.rewriteIncrementors()
 	x.rewriteImplicitReturns()
 	x.rewriteArithAssigns()
+
+	x.rewritePragmas()
+	x.createStaticClassZones()
+}
+
+func (x *XformerPocket) createStaticClassZones() {
+	// for all class field/methods marked static, move them into
+	// a separate static zone classdef
+
+	classDefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_CLASSDEF })
+
+	for _, classDef := range classDefs {
+		members := NodGetChildList(classDef)
+		staticMembers := []Nod{}
+		nonstaticMembers := []Nod{}
+		for _, member := range members {
+			if paint := NodGetChildOrNil(member, NTR_PRAGMAPAINT); paint != nil {
+				if NodHasChild(paint, NT_MODF_STATIC) {
+					staticMembers = append(staticMembers, member)
+				} else {
+					nonstaticMembers = append(nonstaticMembers, member)
+				}
+			} else {
+				// if no paint, default is nonstatic
+				nonstaticMembers = append(nonstaticMembers, member)
+			}
+		}
+
+		fmt.Println("static members:", PrettyPrintNodes(staticMembers))
+
+		fmt.Println("non-static members:", PrettyPrintNodes(nonstaticMembers))
+
+		staticDef := NodNew(NT_CLASSDEFPARTIAL)
+		NodSetChild(staticDef, NTR_PRAGMAPAINT,
+			NodNewChild(NT_PRAGMAPAINT, NT_MODF_STATIC, NodNew(NT_MODF_STATIC)))
+
+		NodRemoveOutList(classDef)
+
+		NodReplaceOutList(classDef, nonstaticMembers)
+		NodReplaceOutList(staticDef, staticMembers)
+
+		NodSetChild(classDef, NTR_CLASSDEF_STATICZONE, staticDef)
+	}
+
+}
+
+func (x *XformerPocket) rewritePragmas() {
+	x.paintPragmas()
+	x.removePragmas()
+}
+
+func (x *XformerPocket) removePragmas() {
+	// assumes all the pragma painting is done.  at this point we properly
+	// remove all instances of PRAGMACLAUSE
+
+	// approach: for each classdef, recursively gather "actual" class members
+	classDefs := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_CLASSDEF })
+
+	for _, classDef := range classDefs {
+		actualMembers := []Nod{}
+		actualMembers = x.gatherActualClassMembers(classDef, actualMembers)
+		NodReplaceOutList(classDef, actualMembers)
+		// BUG: the actual members still have some weird dangling parent references here
+		// need to clean these up.  in future might want a way to detect dangling parent references
+		// for now, explicitly clean up the parent references of actual members
+		// remove dangling parent references
+		for _, member := range actualMembers {
+			var validInEdge *Edge = nil
+			for _, inedge := range member.In {
+				if inedge.In == classDef {
+					validInEdge = inedge
+					break
+				}
+			}
+			if validInEdge == nil {
+				panic("invalid parent edge")
+			}
+			member.In = []*Edge{validInEdge}
+		}
+	}
+}
+
+func (x *XformerPocket) gatherActualClassMembers(cDef Nod, into []Nod) []Nod {
+	children := NodGetChildList(cDef)
+	for _, child := range children {
+		if child.NodeType == NT_PRAGMACLAUSE {
+			into = x.gatherActualClassMembers(NodGetChild(child, NTR_PRAGMA_BODY), into)
+		} else {
+			into = append(into, child)
+		}
+	}
+	return into
+}
+
+func (x *XformerPocket) paintPragmas() {
+	pragmas := x.SearchRoot(func(n Nod) bool {
+		return n.NodeType == NT_PRAGMACLAUSE
+	})
+	for _, pragma := range pragmas {
+		x.paintPragma(pragma, []Nod{})
+	}
+
+}
+
+func (x *XformerPocket) paintPragma(n Nod, modifiers []Nod) {
+
+	if n.NodeType == NT_PRAGMACLAUSE {
+		modifiers = NodGetChildList(n)
+	} else if n.NodeType == NT_FUNCDEF || n.NodeType == NT_CLASSFIELD {
+		if x.nodsContains(modifiers, func(n Nod) bool { return n.NodeType == NT_MODF_STATIC }) {
+			x.paintPragmaSingle(n, NT_MODF_STATIC)
+		}
+	}
+
+	for _, childEdge := range n.Out {
+		child := childEdge.Out
+		if child.NodeType == NT_PRAGMACLAUSE {
+			x.mergePragmaMods(child, modifiers)
+		} else {
+			x.paintPragma(child, modifiers)
+		}
+	}
+}
+
+func (x *XformerPocket) nodsContains(nods []Nod, cond func(Nod) bool) bool {
+	for _, nod := range nods {
+		if cond(nod) {
+			return true
+		}
+	}
+	return false
+}
+
+func (x *XformerPocket) paintPragmaSingle(n Nod, modifier int) {
+	paint := NodGetChildOrNil(n, NTR_PRAGMAPAINT)
+	if paint == nil {
+		paint = NodNew(NT_PRAGMAPAINT)
+		NodSetChild(n, NTR_PRAGMAPAINT, paint)
+	}
+	NodSetChild(paint, modifier, NodNew(modifier))
+}
+
+func (x *XformerPocket) mergePragmaMods(pragma Nod, addlMods []Nod) {
+	oldlist := NodGetChildList(pragma)
+	newlist := append(oldlist, addlMods...)
+	NodSetOutList(pragma, newlist)
 }
 
 func (x *XformerPocket) rewriteArithAssigns() {

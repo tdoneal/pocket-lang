@@ -99,12 +99,14 @@ const (
 	NT_INCREMENTOR_OP            = 134
 	NT_CLASSDEF                  = 150
 	NTR_CLASSDEF_NAME            = 151
+	NT_CLASSDEFPARTIAL           = 152
 	NTR_METHOD_SELFDEF           = 153
 	NT_CLASSFIELD                = 155
 	NT_OBJFIELD_ACCESSOR         = 157
 	NTR_OBJFIELD_ACCESSOR_NAME   = 158
 	NT_CLASSTABLE                = 160
 	NTR_CLASSTABLE               = 161
+	NTR_CLASSDEF_STATICZONE      = 162
 	NTR_TABLE_PARENT             = 164
 	NT_OBJINIT                   = 168
 	NTR_LIT_VALUE                = 201
@@ -129,6 +131,14 @@ const (
 	NT_VARASSIGN_ARITH           = 255
 	NTR_VARASSIGN_ARITHOP        = 256
 	NT_TYPECALL                  = 260
+	NT_MODF_STATIC               = 265
+	NT_MODF_CONFIG               = 266
+	NT_MODF_PRIVATE              = 267
+
+	NT_PRAGMACLAUSE = 270
+	NTR_PRAGMA_BODY = 271
+	NTR_PRAGMAPAINT = 273
+	NT_PRAGMAPAINT  = 274
 )
 
 const (

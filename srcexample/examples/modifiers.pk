@@ -1,0 +1,48 @@
+
+
+App class
+    x : 3
+    y : 6
+
+# different types of class modifiers:
+#   inheritance
+#   static context
+#   type args
+#   access modifiers
+Shape class
+    pass
+
+Thing class
+    pass
+
+Square private class <Shape, Thing> <<App>> (sl: int)
+
+Square private class(extends: [Shape, Thing], home: App, sidelen int)
+
+Square private class(<Shape, Thing>, <<App>>, sidelen int)
+
+Square class isa Thing
+
+Square class(isa Thing, sidelen int)
+
+Square class inherit Thing
+
+Square class(inherit: Thing, home: App, sidelen int: 100)
+
+Square class (isa Thing, home App, sidelen int: 100)
+    pragma static private
+        thing func(x): x + 1
+    
+    myfun func(): 1700
+
+Listy class isa Thing home App (sidelen int)
+    pass
+
+Square class isa Shape home App
+    printSelf over func
+        print('Self')
+
+GreenSquare class isa Square # inherits "home App" from super class
+    color string : 'bob is your uncle'
+    printme func
+        print color

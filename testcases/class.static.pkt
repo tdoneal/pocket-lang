@@ -1,0 +1,31 @@
+# basic read/write of static variable
+
+Point class
+    pragma static
+        x
+
+main func
+    (@Point).x : 1
+    print((@Point).x)
+>>>1>>>
+# static methods refer to static variables
+
+Point class
+    pragma static
+        x int
+        thing func
+            return x
+
+main func
+    (@Point).x : 2
+    print((@Point).thing())
+>>>2 >>>
+# default values
+Point class
+    pragma static
+        x : 4
+
+main func
+    print ((@Point).x)
+
+>>> 4

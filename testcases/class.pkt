@@ -109,7 +109,42 @@ Rectangle class
 main func
     r : Rectangle()
     print r.twicearea()
->>> 3
+>>> 3 >>>
+
+# modifiers
+
+Rectangle class
+    pragma config
+        x int
+        foo func()
+            return 6
+
+    pragma private
+        y int
+
+main func
+    print 2
+>>> 2 >>>
+# default values
+
+Point class
+    x : 4
+
+main func
+    print ((Point()).x)
+>>> 4 >>>
+# more default values
+
+Point class
+    x: 4
+    foo func() int
+        return x + 1
+
+main func
+    p: Point()
+    print(p.foo())
+>>> 5
+
 
 
 

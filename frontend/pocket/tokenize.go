@@ -69,14 +69,15 @@ const (
 	TK_FALSE  = 130
 	TK_TRUE   = 131
 	TK_CLASS  = 150
+	TK_PRAGMA = 160
 
-	TK_ADDASSIGN  = 155
-	TK_SUBASSIGN  = 156
-	TK_MULTASSIGN = 157
-	TK_DIVASSIGN  = 158
-	TK_MODASSIGN  = 159
-	TK_ORASSIGN   = 160
-	TK_ANDASSIGN  = 161
+	TK_ADDASSIGN  = 165
+	TK_SUBASSIGN  = 166
+	TK_MULTASSIGN = 167
+	TK_DIVASSIGN  = 168
+	TK_MODASSIGN  = 169
+	TK_ORASSIGN   = 170
+	TK_ANDASSIGN  = 171
 
 	TK_COMMENT = 220
 )
@@ -501,6 +502,8 @@ func (tkzr *TokenizerPocket) checkKeyword(word string) int {
 		return TK_PASS
 	} else if word == "class" {
 		return TK_CLASS
+	} else if word == "pragma" {
+		return TK_PRAGMA
 	}
 	return -1
 }

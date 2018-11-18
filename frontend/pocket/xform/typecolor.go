@@ -39,6 +39,7 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		x.marPosCollectionLiterals(),
 		x.marPosFunctionRefs(),
 		x.marPosFunctionDefs(),
+		x.marPosClassDefs(),
 		x.marPosRefOp(),
 		x.marPosVarAssign(),
 		x.marPosPublicParameter(),
@@ -135,11 +136,26 @@ func (x *XformerPocket) marPosFunctionRefs() *RewriteRule {
 	}
 }
 
+// TODO: can merge with the corresponding one for class defs
 func (x *XformerPocket) marPosFunctionDefs() *RewriteRule {
 	// type of a function def can be itself
 	return &RewriteRule{
 		condaction: func(n Nod) bool {
 			if n.NodeType == NT_FUNCDEF {
+				extMype := NodGetChild(n, NTR_MYPE_POS)
+				candMype := n
+				return x.RICUnion2(extMype, candMype)
+			}
+			return false
+		},
+	}
+}
+
+func (x *XformerPocket) marPosClassDefs() *RewriteRule {
+	// type of a classdef can be itself
+	return &RewriteRule{
+		condaction: func(n Nod) bool {
+			if n.NodeType == NT_CLASSDEF {
 				extMype := NodGetChild(n, NTR_MYPE_POS)
 				candMype := n
 				return x.RICUnion2(extMype, candMype)

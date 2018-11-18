@@ -1,6 +1,7 @@
 package xform
 
 import (
+	"fmt"
 	. "pocket-lang/frontend/pocket/common"
 	. "pocket-lang/parse"
 )
@@ -13,18 +14,17 @@ func (x *XformerPocket) getIdentifierRewriteRules() []*RewriteRule {
 		x.IRRTypeDeclIdentifiers(),
 		x.IRRParametersToLocals(),
 
-		// TODO: replace the below with
-		// generic functions that use namespace lookups
-		x.IRRNoscopesClass(),
+		// these operate on identifiers that have a bit of known information
+		// about them
 		x.IRRNoscopesLocals(),
 		x.IRRNoscopesFuncGlobal(),
 		x.IRRNoscopesFuncOwnClass(),
 		x.IRRNoscopesFuncObjInit(),
 		x.IRRNoscopesType(),
 		x.IRRNoscopesFuncLocalVar(),
-		// end TODO
 
-		x.IRRNoscopeFuncRef(),
+		// these operate on generic identifiers, about which little is known
+		x.IRRNoscopesGeneric(),
 
 		x.IRRKeywordArgsFuncDef(),
 		x.IRRKeywordArgsObjInit(),
@@ -190,25 +190,28 @@ func (x *XformerPocket) IRRNoscopesType() *RewriteRule {
 }
 
 func (x *XformerPocket) IRRPlainObjInit() *RewriteRule {
-	// look up single-word references to classes, treat as object initializers
-	// eg Point
+	// look up single-word references to classes, treat as either object initializers
+	// or direct class references, depending on the context
 	return &RewriteRule{
-		condition: func(n Nod) bool {
+		condaction: func(n Nod) bool {
 			if n.NodeType == NT_IDENTIFIER_NOSCOPE {
 				idtext := n.Data.(string)
 				cDef := x.globalClassDefLookup(idtext)
 				if cDef != nil {
+					// if in ref op, treat as that
+					if prnt := NodGetParentByOrNil(n,
+						func(n0 Nod) bool { return n0.NodeType == NT_REFERENCEOP }); prnt != nil {
+						x.Replace(prnt, cDef) // replace the whole ref op with the classdef
+						n.NodeType = NT_IDENTIFIER_RESOLVED
+					} else { // otherwise treat as object initializer
+						n.NodeType = NT_OBJINIT
+						NodSetChild(n, NTR_RECEIVERCALL_BASE, cDef)
+						NodSetChild(n, NTR_RECEIVERCALL_ARG, NodNew(NT_EMPTYARGLIST))
+					}
 					return true
 				}
 			}
 			return false
-		},
-		action: func(n Nod) {
-			cDef := x.globalClassDefLookup(n.Data.(string))
-			// rewrite the node in-place
-			n.NodeType = NT_OBJINIT
-			NodSetChild(n, NTR_RECEIVERCALL_BASE, cDef)
-			NodSetChild(n, NTR_RECEIVERCALL_ARG, NodNew(NT_EMPTYARGLIST))
 		},
 	}
 }
@@ -256,25 +259,6 @@ func (x *XformerPocket) IRRBaseIdentifiers() *RewriteRule {
 				}
 			}
 			n.NodeType = NT_IDENTIFIER_NOSCOPE
-		},
-	}
-}
-
-func (x *XformerPocket) IRRBaseIdentifiersVarGet() *RewriteRule {
-	// simple identifiers inside a var get can be rewritten as IDENTIFIER_RVAL_NOSCOPE
-	return &RewriteRule{
-		condition: func(n Nod) bool {
-			if n.NodeType == NT_VAR_GETTER {
-				lvalue := NodGetChild(n, NTR_VAR_NAME)
-				if lvalue.NodeType == NT_IDENTIFIER {
-					return true
-				}
-			}
-			return false
-		},
-		action: func(n Nod) {
-			lvalue := NodGetChild(n, NTR_VAR_NAME)
-			lvalue.NodeType = NT_IDENTIFIER_NOSCOPE
 		},
 	}
 }
@@ -328,30 +312,21 @@ func (x *XformerPocket) IRRBaseCallIdentifiers() *RewriteRule {
 	}
 }
 
-func (x *XformerPocket) IRRNoscopesClass() *RewriteRule {
-	// make progress towards resolving NT_IDENTIFIER_RVAL_NOSCOPEs
+func (x *XformerPocket) IRRBaseIdentifiersVarGet() *RewriteRule {
+	// simple identifiers inside a var get can be rewritten as IDENTIFIER_RVAL_NOSCOPE
 	return &RewriteRule{
 		condition: func(n Nod) bool {
-			if n.NodeType == NT_IDENTIFIER_NOSCOPE {
-				idtext := n.Data.(string)
-				cDef := x.getContainingClassDef(n)
-				if cDef != nil {
-					cTable := NodGetChild(cDef, NTR_VARTABLE)
-					cVarDef := x.varTableLookup(cTable, idtext)
-					if cVarDef != nil {
-						return true
-					}
+			if n.NodeType == NT_VAR_GETTER {
+				lvalue := NodGetChild(n, NTR_VAR_NAME)
+				if lvalue.NodeType == NT_IDENTIFIER {
+					return true
 				}
 			}
 			return false
 		},
 		action: func(n Nod) {
-			idtext := n.Data.(string)
-			cDef := x.getContainingClassDef(n)
-			cTable := NodGetChild(cDef, NTR_VARTABLE)
-			cVarDef := x.varTableLookup(cTable, idtext)
-
-			x.resolveIdentifierRValNoscopeAsVar(n, cVarDef)
+			lvalue := NodGetChild(n, NTR_VAR_NAME)
+			lvalue.NodeType = NT_IDENTIFIER_NOSCOPE
 		},
 	}
 }
@@ -371,6 +346,36 @@ func (x *XformerPocket) resolveIdentifierRValNoscopeAsVar(ident Nod, varDef Nod)
 		ident.Data = nil
 	}
 
+}
+
+func (x *XformerPocket) IRRNoscopesGeneric() *RewriteRule {
+	// make progress on generic rvalue references: look up as either class, func, or var
+	return &RewriteRule{
+		condaction: func(n Nod) bool {
+			if n.NodeType == NT_IDENTIFIER_NOSCOPE {
+				idtext := n.Data.(string)
+				fmt.Println("looking up unresolved generic identifier:", idtext)
+				iDef := x.containingNamespaceLookup(n, idtext)
+				if iDef != nil {
+					if iDef.NodeType == NT_FUNCDEF {
+						n.NodeType = NT_IDENTIFIER_RESOLVED
+						NodSetChild(n, NTR_FUNCDEF, iDef)
+					} else if iDef.NodeType == NT_VARDEF {
+						n.NodeType = NT_VAR_GETTER
+						NodSetChild(n, NTR_VARDEF, iDef)
+						n.Data = nil
+						NodSetChild(n, NTR_VAR_NAME, NodNewData(NT_IDENTIFIER_RESOLVED, idtext))
+					} else if iDef.NodeType == NT_CLASSDEF {
+						x.Replace(n, iDef)
+					} else {
+						panic("unsupported resolved identifier type")
+					}
+					return true
+				}
+			}
+			return false
+		},
+	}
 }
 
 func (x *XformerPocket) IRRNoscopesFuncOwnClass() *RewriteRule {
@@ -413,32 +418,6 @@ func (x *XformerPocket) IRRNoscopesFuncOwnClass() *RewriteRule {
 		},
 	}
 }
-
-func (x *XformerPocket) IRRNoscopeFuncRef() *RewriteRule {
-	// make progress on no-scope references: determine if function reference
-	return &RewriteRule{
-		condition: func(n Nod) bool {
-			if n.NodeType == NT_IDENTIFIER_NOSCOPE {
-				idtext := n.Data.(string)
-				fDef := x.containingNamespaceLookup(n, idtext)
-				if fDef != nil {
-					return true
-				}
-			}
-			return false
-		},
-		action: func(n Nod) {
-			idtext := n.Data.(string)
-			fDef := x.containingNamespaceLookup(n, idtext)
-			if fDef.NodeType != NT_FUNCDEF {
-				panic("only funcs supported now")
-			}
-			n.NodeType = NT_IDENTIFIER_RESOLVED
-			NodSetChild(n, NTR_FUNCDEF, fDef)
-		},
-	}
-}
-
 func (x *XformerPocket) containingNamespaceLookup(start Nod, idtext string) Nod {
 	contns := x.getContainingNodOrNil(start, func(n Nod) bool { return NodHasChild(n, NTR_NAMESPACE) })
 	if contns == nil {
@@ -461,10 +440,23 @@ func (x *XformerPocket) namespaceLookupRecursive(ns Nod, idtext string) Nod {
 
 func (x *XformerPocket) namespaceLookupImmediate(ns Nod, idtext string) Nod {
 	// todo: support class/var defs
+	fmt.Println("ns lookup immediate: '", idtext, "' in", PrettyPrint(ns))
 	if fTable := NodGetChildOrNil(ns, NTR_FUNCTABLE); fTable != nil {
 		fResult := x.funcTableLookup(fTable, idtext)
 		if fResult != nil {
 			return fResult
+		}
+	}
+	if varTable := NodGetChildOrNil(ns, NTR_VARTABLE); varTable != nil {
+		vResult := x.varTableLookup(varTable, idtext)
+		if vResult != nil {
+			return vResult
+		}
+	}
+	if clsTable := NodGetChildOrNil(ns, NTR_CLASSTABLE); clsTable != nil {
+		clsResult := x.classTableLookup(clsTable, idtext)
+		if clsResult != nil {
+			return clsResult
 		}
 	}
 	return nil

@@ -209,37 +209,85 @@ func (p *ParserPocket) parseClassDef() Nod {
 	p.parseEOL()
 	rv := p.parseClassDefBlock()
 	NodSetChild(rv, NTR_CLASSDEF_NAME, name)
+	rv.NodeType = NT_CLASSDEF
 	return rv
 }
 
 func (p *ParserPocket) parseClassDefBlock() Nod {
 	p.ParseToken(TK_INCINDENT)
+	units := p.parseClassDefBlockInternals()
+	p.ParseToken(TK_DECINDENT)
+	return units
+}
+
+func (p *ParserPocket) parseClassDefBlockInternals() Nod {
 	units := p.ParseAtLeastOneGreedy(func() Nod {
 		return p.parseClassDefUnit()
 	})
-	p.ParseToken(TK_DECINDENT)
-	return NodNewChildList(NT_CLASSDEF, units)
+	return NodNewChildList(NT_CLASSDEFPARTIAL, units)
 }
 
 func (p *ParserPocket) parseClassDefUnit() Nod {
 	rv := p.ParseDisjunction([]ParseFunc{
 		func() Nod { return p.parseFuncDefTL() },
 		func() Nod { return p.parseClassDefField() },
+		func() Nod { return p.parsePragma(func() Nod { return p.parseClassDefBlockInternals() }) },
 	})
 	return rv
+}
+
+func (p *ParserPocket) parsePragma(innerUnitParser func() Nod) Nod {
+	p.ParseToken(TK_PRAGMA)
+	modifiers := p.ParseManyGreedy(func() Nod {
+		return p.parseModifier()
+	})
+	rv := NodNewChildList(NT_PRAGMACLAUSE, modifiers)
+	p.parseEOL()
+	p.ParseToken(TK_INCINDENT)
+	innerUnit := innerUnitParser()
+	p.ParseToken(TK_DECINDENT)
+
+	NodSetChild(rv, NTR_PRAGMA_BODY, innerUnit)
+
+	return rv
+}
+
+func (p *ParserPocket) parseModifier() Nod {
+	atok := p.parseTokenAlphanumeric()
+	adata := atok.Data
+	if adata == "static" {
+		return NodNew(NT_MODF_STATIC)
+	} else if adata == "config" {
+		return NodNew(NT_MODF_CONFIG)
+	} else if adata == "private" {
+		return NodNew(NT_MODF_PRIVATE)
+	} else {
+		p.RaiseParseError("invalid modifier")
+		return nil
+	}
 }
 
 func (p *ParserPocket) parseClassDefField() Nod {
 	name := p.parseIdentifier()
 	optType := p.ParseAtMostOne(func() Nod { return p.parseType() })
+	optDefaultValue := p.ParseAtMostOne(func() Nod { return p.parseClassDefFieldDefaultValue() })
 	p.parseEOL()
 	rv := NodNew(NT_CLASSFIELD)
 	NodSetChild(rv, NTR_VARDEF_NAME, name)
 	if optType != nil {
 		NodSetChild(rv, NTR_TYPE_DECL, optType)
 	}
+	if optDefaultValue != nil {
+		NodSetChild(rv, NTR_VARASSIGN_VALUE, optDefaultValue)
+	}
 
 	return rv
+}
+
+func (p *ParserPocket) parseClassDefFieldDefaultValue() Nod {
+	p.parseColon()
+	val := p.parseValue()
+	return val
 }
 
 func (p *ParserPocket) parseStatement() Nod {

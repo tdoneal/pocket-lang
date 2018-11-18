@@ -59,6 +59,25 @@ func NodSetOutList(n Nod, children []Nod) {
 	}
 }
 
+func NodRemoveOutList(n Nod) {
+	li := NTR_LIST_0
+	for {
+		_, hasIt := n.Out[li]
+		if hasIt {
+			NodRemoveChild(n, li)
+			li++
+		} else {
+			break
+		}
+	}
+}
+
+func NodReplaceOutList(n Nod, children []Nod) {
+	// sets the out list, making sure to properly clear any existing list nodes first
+	NodRemoveOutList(n)
+	NodSetOutList(n, children)
+}
+
 func NodGetChild(n Nod, edgeType int) Nod {
 	return n.Out[edgeType].Out
 }
@@ -139,7 +158,12 @@ func NodRemoveChild(n Nod, edgeType int) {
 		panic("parent edge of child not found")
 	}
 	delete(n.Out, edgeType)
-	slicePEdgeRemove(child.In, childInEdgeNdx)
+	child.In = slicePEdgeRemove(child.In, childInEdgeNdx)
+}
+
+func slicePEdgeRemove(s []*Edge, i int) []*Edge {
+	s[len(s)-1], s[i] = s[i], s[len(s)-1]
+	return s[:len(s)-1]
 }
 
 func NodGetInEdgeNdx(n Nod, inEdge *Edge) int {
@@ -162,9 +186,4 @@ func sliceIndex(limit int, predicate func(int) bool) int {
 		}
 	}
 	return -1
-}
-
-func slicePEdgeRemove(s []*Edge, i int) []*Edge {
-	s[len(s)-1], s[i] = s[i], s[len(s)-1]
-	return s[:len(s)-1]
 }

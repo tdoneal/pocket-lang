@@ -2,6 +2,7 @@ package common
 
 import (
 	"bytes"
+	"fmt"
 	. "pocket-lang/parse"
 	"strconv"
 )
@@ -74,6 +75,7 @@ func (d *Debug) initialize() {
 
 	ntl[NT_VARINIT] = "VARINIT"
 	ntl[NT_VARTABLE] = "VARTABLE"
+	ntl[NTR_VARTABLE] = "VARTABLE"
 	ntl[NT_VARDEF] = "VARDEF"
 	ntl[NTR_VARDEF] = "VARDEF"
 	ntl[NTR_VARDEF_NAME] = "VARDEFNAME"
@@ -97,6 +99,8 @@ func (d *Debug) initialize() {
 	ntl[NTR_MYPE_POS] = "MYPE_POS"
 	ntl[NTR_MYPE_NEG] = "MYPE_NEG"
 	ntl[NTR_MYPE_VALID] = "MYPE_VALID"
+	ntl[NTR_TYPECOND_DEFS] = "TYCONDDEFS"
+	ntl[NT_TYPECOND_DEFS] = "TYCONDDEFS"
 	ntl[NT_VARASSIGN] = "VARASSIGN"
 	ntl[NT_VARASSIGN_ARITH] = "VARASSIGNARITH"
 	ntl[NTR_VARASSIGN_ARITHOP] = "ARITHOP"
@@ -131,6 +135,8 @@ func (d *Debug) initialize() {
 	ntl[NT_FUNCTABLE] = "FUNCTABLE"
 	ntl[NTR_FUNCTABLE] = "FUNCTABLE"
 	ntl[NT_CLASSDEF] = "CLASSDEF"
+	ntl[NT_CLASSDEFPARTIAL] = "CDEFPARTIAL"
+	ntl[NTR_CLASSDEF_STATICZONE] = "STATICZONE"
 	ntl[NTR_CLASSDEF_NAME] = "NAME"
 	ntl[NT_CLASSFIELD] = "CLASSFIELD"
 	ntl[NT_OBJFIELD_ACCESSOR] = "OBJFIELDACCESS"
@@ -140,7 +146,13 @@ func (d *Debug) initialize() {
 	ntl[NT_OBJINIT] = "OBJINIT"
 	ntl[NT_NAMESPACE] = "NAMESPACE"
 	ntl[NTR_NAMESPACE] = "NAMESPACE"
+	ntl[NTR_NAMESPACE_PARENT] = "NSPARENT"
 	ntl[NT_TYPECALL] = "TYPECALL"
+	ntl[NT_PRAGMACLAUSE] = "PRAGMACLAUSE"
+	ntl[NTR_PRAGMA_BODY] = "BODY"
+	ntl[NT_MODF_STATIC] = "MODFSTATIC"
+	ntl[NTR_PRAGMAPAINT] = "PRAGMAPAINT"
+	ntl[NT_PRAGMAPAINT] = "PRAGMAPAINT"
 
 	// dype
 	ntl[DYPE_ALL] = "DYPE_ALL"
@@ -164,17 +176,6 @@ func (d *Debug) initialize() {
 	d.initialized = true
 }
 
-func DebugPrinterNew() *DebugPrinter {
-	DEBUG.ensureInitialized()
-	return &DebugPrinter{}
-}
-
-func PrettyPrint(n Nod) string {
-	dp := DebugPrinterNew()
-	dp.PrettyPrint(n)
-	return dp.String()
-}
-
 func PrettyPrintNodes(nodes []Nod) string {
 	var buf bytes.Buffer = bytes.Buffer{}
 	buf.WriteString("[\n")
@@ -186,18 +187,33 @@ func PrettyPrintNodes(nodes []Nod) string {
 	return buf.String()
 }
 
-func (d *DebugPrinter) PrettyPrint(node *Node) {
+func DebugPrinterNew() *DebugPrinter {
+	DEBUG.ensureInitialized()
+	d := &DebugPrinter{}
 	d.buf = bytes.Buffer{}
 	d.alreadySeen = make(map[*Node]bool)
 	d.indent = 0
-	d.internalPrettyPrint(node)
+	return d
+}
+
+func PrettyPrint(n Nod) string {
+	d := DebugPrinterNew()
+	d.internalPrettyPrint(n, -1)
+	return d.String()
+}
+
+func PrettyPrintDepth(node *Node, depth int) string {
+	d := DebugPrinterNew()
+	d.internalPrettyPrint(node, depth)
+	return d.String()
 }
 
 func (d *DebugPrinter) String() string {
 	return d.buf.String()
 }
 
-func (d *DebugPrinter) internalPrettyPrint(node *Node) {
+func (d *DebugPrinter) internalPrettyPrint(node *Node, depth int) {
+	// -1 means unlimited depth
 	seen := false
 	if _, ok := d.alreadySeen[node]; ok {
 		seen = true
@@ -207,6 +223,15 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 
 	d.PrintLocalDataIfExtant(node)
 
+	if depth == 0 {
+		return
+	}
+
+	// update depth counter
+	if depth > 0 {
+		depth--
+	}
+
 	// print children
 	cnt := 0
 	if len(node.Out) > 0 && !seen {
@@ -215,12 +240,9 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 		for _, edge := range node.Out {
 			d.PrintNodeType(edge.EdgeType)
 			d.buf.WriteString("->")
-			if edge.EdgeType == NTR_FUNCDEF || edge.EdgeType == NTR_VARDEF {
-				d.buf.WriteString("(hidden)")
-				d.printEOL()
-				continue // don't traverse these edges by default; they tend to make the results unreadable
-			}
-			d.internalPrettyPrint(edge.Out)
+			childDepth := d.getAppropriateChildDepth(
+				node.NodeType, edge.EdgeType, edge.Out.NodeType, depth)
+			d.internalPrettyPrint(edge.Out, childDepth)
 			if cnt < (len(node.Out) - 1) {
 				d.printEOL()
 			}
@@ -233,6 +255,25 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node) {
 		d.buf.WriteString(" (SEEN)")
 	}
 
+}
+
+func (d *DebugPrinter) getAppropriateChildDepth(
+	parTy int, edgeTy int, childTy int, defaultDepth int) int {
+	// for "general purpose viewing" compute an appropriate depth for displaying
+	newDepth := defaultDepth
+
+	if parTy == NT_NAMESPACE {
+		newDepth = 0
+	}
+
+	if parTy == NT_VARTABLE || parTy == NT_FUNCTABLE || parTy == NT_CLASSTABLE {
+		newDepth = 2
+	}
+
+	if (defaultDepth >= 0) && (newDepth > defaultDepth) {
+		newDepth = defaultDepth
+	}
+	return newDepth
 }
 
 func (d *DebugPrinter) PrintVarScopeType(ty int) {
@@ -263,7 +304,10 @@ func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 		d.buf.WriteString("\"")
 	} else if val, ok := node.Data.(Nod); ok && node.NodeType == NT_DYPE {
 		d.buf.WriteString(": ")
-		d.internalPrettyPrint(val)
+		d.internalPrettyPrint(val, 3)
+	} else if node.NodeType == NT_NAMESPACE {
+		d.buf.WriteString(" @ ")
+		d.buf.WriteString(fmt.Sprintf("%p", node))
 	}
 }
 

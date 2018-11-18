@@ -54,8 +54,30 @@ func (g *Generator) genSourceFile(input Nod) {
 }
 
 func (g *Generator) genClassDef(n Nod) {
+	clsName := NodGetChild(n, NTR_CLASSDEF_NAME).Data.(string)
+	g.genClassDefNamed(n, clsName)
+
+	if staticZone := NodGetChildOrNil(n, NTR_CLASSDEF_STATICZONE); staticZone != nil {
+		g.genClassDefNamed(staticZone, g.getStaticZoneName(clsName))
+
+		// generate the static zone singleton
+		g.WS("var ")
+		g.WS(g.getStaticZoneSingletonName(clsName))
+		g.WS(" *")
+		g.WS(g.getStaticZoneName(clsName))
+		g.WS(" = ")
+		g.WS(g.getDefaultConstructorName(g.getStaticZoneName(clsName)))
+		g.WS("()\n")
+	}
+}
+
+func (g *Generator) getDefaultConstructorName(clsName string) string {
+	return "New" + clsName
+}
+
+func (g *Generator) genClassDefNamed(n Nod, clsName string) {
 	g.WS("type ")
-	g.WS(NodGetChild(n, NTR_CLASSDEF_NAME).Data.(string))
+	g.WS(clsName)
 	g.WS(" struct {\n")
 	clsUnits := NodGetChildList(n)
 
@@ -67,6 +89,9 @@ func (g *Generator) genClassDef(n Nod) {
 	}
 	g.WS("}\n")
 
+	// generate the default constructor
+	g.genClassDefaultConstructor(n, clsName)
+
 	// generate all the methods
 	for _, unit := range clsUnits {
 		if unit.NodeType == NT_FUNCDEF {
@@ -74,6 +99,32 @@ func (g *Generator) genClassDef(n Nod) {
 		}
 		g.WS("\n")
 	}
+}
+
+func (g *Generator) genClassDefaultConstructor(n Nod, clsName string) {
+	g.WS("func ")
+	g.WS(g.getDefaultConstructorName(clsName))
+	g.WS("() *")
+	g.WS(clsName)
+	g.WS(" {\n")
+	g.WS("rv := &")
+	g.WS(clsName)
+	g.WS("{}\n")
+	clsUnits := NodGetChildList(n)
+	for _, unit := range clsUnits {
+		// set default values if they exist
+		if unit.NodeType == NT_CLASSFIELD && NodHasChild(unit, NTR_VARASSIGN_VALUE) {
+			clsFieldName := g.convertToGoFieldName(
+				NodGetChild(unit, NTR_VARDEF_NAME).Data.(string))
+			g.WS("rv.")
+			g.WS(clsFieldName)
+			g.WS(" = ")
+			g.genValue(NodGetChild(unit, NTR_VARASSIGN_VALUE))
+			g.WS("\n")
+		}
+	}
+	g.WS("return rv\n")
+	g.WS("}\n")
 }
 
 func (g *Generator) genClassField(n Nod) {
@@ -114,13 +165,29 @@ func (g *Generator) genParameter(n Nod) {
 	g.genType(NodGetChild(n, NTR_TYPE))
 }
 
+func (g *Generator) genSelfClassName(clsDef Nod) {
+	if clsDef.NodeType == NT_CLASSDEF {
+		g.WS(NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string))
+	} else if clsDef.NodeType == NT_CLASSDEFPARTIAL {
+		// static pseudoclass
+		prnt := NodGetParentOrNil(clsDef, NTR_CLASSDEF_STATICZONE)
+		if prnt == nil {
+			panic("illegal positioning of classdefpartial, couldn't find parent named class")
+		}
+		g.WS(g.getStaticZoneName(NodGetChild(prnt, NTR_CLASSDEF_NAME).Data.(string)))
+	} else {
+		panic("invalid receiver def")
+	}
+}
+
 func (g *Generator) genFuncDefInner(n Nod, rcvrDef Nod) {
 	funcNameNod := NodGetChildOrNil(n, NTR_FUNCDEF_NAME)
 	g.WS("func ")
 
 	if rcvrDef != nil {
 		g.WS("(self *")
-		g.WS(NodGetChild(rcvrDef, NTR_CLASSDEF_NAME).Data.(string))
+		g.genSelfClassName(rcvrDef)
+
 		g.WS(") ")
 	}
 
@@ -574,9 +641,26 @@ func (g *Generator) genValue(n Nod) {
 		g.genReferenceOp(n)
 	} else if n.NodeType == NT_FUNCDEF {
 		g.genValueFuncDef(n)
+	} else if n.NodeType == NT_CLASSDEF {
+		g.genValueClassDef(n)
 	} else {
 		g.WS("value")
 	}
+}
+
+func (g *Generator) genValueClassDef(n Nod) {
+	// a "class def value" for now means a static reference to the static zone pseudoobject
+	// no anonymous classes are supported for now
+	clsName := NodGetChild(n, NTR_CLASSDEF_NAME).Data.(string)
+	g.WS(g.getStaticZoneSingletonName(clsName))
+}
+
+func (g *Generator) getStaticZoneName(clsName string) string {
+	return clsName + "__static"
+}
+
+func (g *Generator) getStaticZoneSingletonName(clsName string) string {
+	return g.getStaticZoneName(clsName) + "__ston"
 }
 
 func (g *Generator) genValueFuncDef(n Nod) {
@@ -624,38 +708,100 @@ func (g *Generator) genObjInit(n Nod) {
 
 	if baseNod.NodeType == NT_CLASSDEF {
 		// struct initializer
-		clsName := NodGetChild(baseNod, NTR_CLASSDEF_NAME).Data.(string)
-		g.WS("&")
-		g.WS(clsName)
-		g.genObjInitArg(NodGetChild(n, NTR_RECEIVERCALL_ARG))
+		g.genObjInitWithArg(baseNod, NodGetChild(n, NTR_RECEIVERCALL_ARG))
 	} else {
 		panic("couldn't handle obj init base:" + PrettyPrint(baseNod))
 	}
 }
 
-func (g *Generator) genObjInitArg(n Nod) {
-	g.WS("{")
-	if n.NodeType == NT_EMPTYARGLIST {
-		// pass
-	} else if n.NodeType == NT_LIT_LIST {
-		g.genArgListInternals(n)
-	} else if n.NodeType == NT_KWARGS {
-		g.genObjInitKwargs(n)
+func (g *Generator) genObjInitWithArg(clsDef Nod, arg Nod) {
+	if arg.NodeType == NT_EMPTYARGLIST {
+		g.WS(g.getDefaultObjInitCall(clsDef))
+	} else if arg.NodeType == NT_LIT_LIST {
+		g.genObjInitOrderedArgs(clsDef, arg)
+	} else if arg.NodeType == NT_KWARGS {
+		g.genObjInitKwargs(clsDef, arg)
 	} else {
-		g.genValue(n)
+		g.genObjInitSingleArg(clsDef, arg)
 	}
-	g.WS("}")
 }
 
-func (g *Generator) genObjInitKwargs(n Nod) {
+func (g *Generator) getDefaultObjInitCall(clsDef Nod) string {
+	clsName := NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string)
+	rv := g.getDefaultConstructorName(clsName) + "()"
+	return rv
+}
+
+func (g *Generator) genObjInitWithFields(clsDef Nod, fieldNames []string, fieldValues []Nod) {
+	// strategy: build an anonymous function and populate the needed fields inside of that
+	// anon function, then call it right afterwards
+	// start outputting the anon func
+	clsName := NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string)
+	g.WS("func (rv *")
+	g.WS(clsName)
+	g.WS(") *")
+	g.WS(clsName)
+	g.WS("{\n")
+	for ndx := range fieldNames {
+		clsFieldName := g.convertToGoFieldName(fieldNames[ndx])
+		val := fieldValues[ndx]
+		g.WS("rv.")
+		g.WS(clsFieldName)
+		g.WS(" = ")
+		g.genValue(val)
+		g.WS("\n")
+	}
+	g.WS("return rv\n")
+	g.WS("}(")
+	g.WS(g.getDefaultObjInitCall(clsDef))
+	g.WS(")")
+}
+
+func (g *Generator) genObjInitOrderedArgs(clsDef Nod, litList Nod) {
+	g.genObjInitOrderedArgsWithValues(clsDef, NodGetChildList(litList))
+}
+
+func (g *Generator) genObjInitOrderedArgsWithValues(clsDef Nod, values []Nod) {
+	// build the ordered list of class fields
+	clsFieldsOrdered := []Nod{}
+	clsUnits := NodGetChildList(clsDef)
+	for _, unit := range clsUnits {
+		if unit.NodeType == NT_CLASSFIELD {
+			clsFieldsOrdered = append(clsFieldsOrdered, unit)
+		}
+	}
+
+	fieldNames := []string{}
+	for ndx := range values {
+		// get the corresponding class field
+		if ndx >= len(clsUnits) {
+			panic("too many arguments to ordered object initializer")
+		}
+		clsField := clsFieldsOrdered[ndx]
+		fieldName := NodGetChild(clsField, NTR_VARDEF_NAME).Data.(string)
+		fieldNames = append(fieldNames, fieldName)
+	}
+
+	g.genObjInitWithFields(clsDef, fieldNames, values)
+}
+
+func (g *Generator) genObjInitSingleArg(clsDef Nod, arg Nod) {
+	g.genObjInitOrderedArgsWithValues(clsDef, []Nod{arg})
+}
+
+func (g *Generator) genObjInitKwargs(clsDef Nod, n Nod) {
+
 	kwargs := NodGetChildList(n)
+	fieldNames := []string{}
+	fieldVals := []Nod{}
 	for _, kwarg := range kwargs {
 		fieldName := NodGetChild(kwarg, NTR_VAR_NAME).Data.(string)
-		g.WS(g.convertToGoFieldName(fieldName))
-		g.WS(": ")
-		g.genValue(NodGetChild(kwarg, NTR_VARASSIGN_VALUE))
-		g.WS(", ")
+		fieldVal := NodGetChild(kwarg, NTR_VARASSIGN_VALUE)
+		fieldNames = append(fieldNames, fieldName)
+		fieldVals = append(fieldVals, fieldVal)
 	}
+
+	g.genObjInitWithFields(clsDef, fieldNames, fieldVals)
 }
 
 func (g *Generator) genArgListInternals(n Nod) {

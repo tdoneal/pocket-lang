@@ -12,6 +12,7 @@ func (x *XformerPocket) prepare() {
 	x.prepareDotOps()
 	x.addImplicitSelvesToMethods()
 	x.annotateKeywordArgs()
+
 }
 
 func (x *XformerPocket) parseMolecules() {

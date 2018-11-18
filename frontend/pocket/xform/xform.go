@@ -70,16 +70,22 @@ func (x *XformerPocket) initializeSolvableNodes(ns []Nod) {
 
 func (x *XformerPocket) buildNamespaceHierarchy() {
 	// connects the name spaces to their "searchable" parents
+
+	x.NodCheckParentChildIntegrity()
+
 	allns := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_NAMESPACE })
 	for _, ns := range allns {
 		synContainer := NodGetParent(ns, NTR_NAMESPACE)
+
 		parentContainer := x.getContainingNodOrNil(synContainer,
 			func(ni Nod) bool { return NodHasChild(ni, NTR_NAMESPACE) && ni != synContainer })
+
 		if parentContainer != nil {
 			parentNs := NodGetChild(parentContainer, NTR_NAMESPACE)
 			NodSetChild(ns, NTR_NAMESPACE_PARENT, parentNs)
 		}
 	}
+
 }
 
 func (x *XformerPocket) initializeSolvableNode(n Nod) {
@@ -89,7 +95,7 @@ func (x *XformerPocket) initializeSolvableNode(n Nod) {
 		x.ISNMyped(n)
 	} else if nt == NT_FUNCDEF {
 		x.ISNFuncDef(n)
-	} else if nt == NT_CLASSDEF {
+	} else if nt == NT_CLASSDEF || nt == NT_CLASSDEFPARTIAL {
 		x.ISNClassDef(n)
 	} else if nt == NT_TOPLEVEL {
 		x.ISNRoot(n)
@@ -130,6 +136,12 @@ func (x *XformerPocket) ISNClassDef(n Nod) {
 		x.initializePosNegMypes(cVarDef)
 	}
 	x.ISNInitNamespace(n, true, true, false)
+
+	// classdefs can be values too, so init their type stuff
+	// but only named classes can be referred to
+	if n.NodeType == NT_CLASSDEF {
+		x.initializePosNegMypes(n)
+	}
 }
 
 func (x *XformerPocket) ISNFuncDef(n Nod) {
