@@ -137,15 +137,38 @@ func (p *ParserPocket) parseImperativeUnit() Nod {
 
 func (p *ParserPocket) parseFor() Nod {
 	p.ParseToken(TK_FOR)
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseForIn() },
+		func() Nod { return p.parseForClassic() },
+	})
+}
+
+func (p *ParserPocket) parseForClassic() Nod {
+	initializer := p.parseStatementBody()
+	p.parseComma()
+	condition := p.parseValue()
+	p.parseComma()
+	progressor := p.parseStatementBody()
+	p.parseEOL()
+	body := p.parseImperativeBlock()
+	rv := NodNew(NT_FOR_CLASSIC)
+	NodSetChild(rv, NTR_FOR_BODY, body)
+	NodSetChild(rv, NTR_FOR_INITIALIZER, initializer)
+	NodSetChild(rv, NTR_WHILE_COND, condition)
+	NodSetChild(rv, NTR_FOR_PROGRESSOR, progressor)
+	return rv
+}
+
+func (p *ParserPocket) parseForIn() Nod {
 	iterVar := p.parseIdentifier()
 	p.ParseToken(TK_IN)
 	iterOverValue := p.parseValue()
 	p.parseEOL()
 	body := p.parseImperativeBlock()
-	rv := NodNew(NT_FOR)
+	rv := NodNew(NT_FOR_IN)
 	NodSetChild(rv, NTR_FOR_BODY, body)
-	NodSetChild(rv, NTR_FOR_ITERVAR, iterVar)
-	NodSetChild(rv, NTR_FOR_ITEROVER, iterOverValue)
+	NodSetChild(rv, NTR_FOR_IN_ITERVAR, iterVar)
+	NodSetChild(rv, NTR_FOR_IN_ITEROVER, iterOverValue)
 	return rv
 }
 

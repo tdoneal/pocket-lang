@@ -10,6 +10,7 @@ import (
 func (x *XformerPocket) desugar() {
 	x.rewriteDotPipesAsFunctionCalls()
 	x.rewriteForInLoops()
+	x.rewriteForClassicLoops()
 	x.rewriteIncrementors()
 	x.rewriteImplicitReturns()
 	x.rewriteArithAssigns()
@@ -274,7 +275,7 @@ func (x *XformerPocket) rewriteDotPipesAsFunctionCalls() {
 }
 
 func (x *XformerPocket) rewriteForInLoops() {
-	forLoops := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_FOR })
+	forLoops := x.SearchRoot(func(n Nod) bool { return n.NodeType == NT_FOR_IN })
 	for _, forLoop := range forLoops {
 		x.Replace(forLoop, x.rewriteForInLoop(forLoop))
 	}
@@ -284,8 +285,8 @@ func (x *XformerPocket) rewriteForInLoop(forLoop Nod) Nod {
 	// rewrites the for <var> in <list> : body syntax
 	// to a lower level form involving a while loop and an index variable
 	rvSeq := []Nod{}
-	loopOver := NodGetChild(forLoop, NTR_FOR_ITEROVER)
-	declaredElementVarName := NodGetChild(forLoop, NTR_FOR_ITERVAR).Data.(string)
+	loopOver := NodGetChild(forLoop, NTR_FOR_IN_ITEROVER)
+	declaredElementVarName := NodGetChild(forLoop, NTR_FOR_IN_ITERVAR).Data.(string)
 	ndxVarName := x.getTempVarName()
 	iterOverVarName := x.getTempVarName()
 	// generate the effective code: __ndx_var__ : 0
@@ -352,4 +353,29 @@ func (x *XformerPocket) rewriteForInLoop(forLoop Nod) Nod {
 	rv := NodNewChildList(NT_IMPERATIVE, rvSeq)
 	return rv
 
+}
+
+func (x *XformerPocket) rewriteForClassicLoops() {
+	classicForLoops := x.SearchRoot(func(n Nod) bool {
+		return n.NodeType == NT_FOR_CLASSIC
+	})
+
+	for _, forLoop := range classicForLoops {
+		x.Replace2(forLoop, func(n Nod) Nod { return x.rewriteForClassicLoop(n) })
+	}
+}
+
+func (x *XformerPocket) rewriteForClassicLoop(loop Nod) Nod {
+	outerStmts := []Nod{}
+	initializer := NodGetChild(loop, NTR_FOR_INITIALIZER)
+	outerStmts = append(outerStmts, initializer)
+	whileLoop := NodNew(NT_WHILE)
+	newBodyStmts := []Nod{}
+	newBodyStmts = append(newBodyStmts, NodGetChild(loop, NTR_FOR_BODY))
+	newBodyStmts = append(newBodyStmts, NodGetChild(loop, NTR_FOR_PROGRESSOR))
+	NodSetChild(whileLoop, NTR_WHILE_BODY, NodNewChildList(NT_IMPERATIVE, newBodyStmts))
+	NodSetChild(whileLoop, NTR_WHILE_COND, NodGetChild(loop, NTR_WHILE_COND))
+	outerStmts = append(outerStmts, whileLoop)
+	rv := NodNewChildList(NT_IMPERATIVE, outerStmts)
+	return rv
 }

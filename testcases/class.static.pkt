@@ -8,6 +8,7 @@ main func
     (@Point).x : 1
     print((@Point).x)
 >>>1>>>
+
 # static methods refer to static variables
 
 Point class
@@ -28,4 +29,16 @@ Point class
 main func
     print ((@Point).x)
 
->>> 4
+>>> 4 >>>
+
+# assignment from static variable access
+
+Point class
+    pragma static
+        x int : 1
+
+main func
+    a : (@Point).x
+    print a
+
+>>> 1

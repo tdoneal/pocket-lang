@@ -330,8 +330,9 @@ func (g *Generator) genType(n Nod) {
 	} else if n.NodeType == NT_TYPEARGED {
 		panic("typearged is obsolete; use TYPECALL instead")
 	} else if n.NodeType == NT_CLASSDEF {
+		clsDef := n
 		g.WS("*")
-		g.WS(NodGetChild(n, NTR_CLASSDEF_NAME).Data.(string))
+		g.WS(NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string))
 	} else if n.NodeType == NT_FUNCDEF {
 		g.genTypeFuncDef(n)
 	} else {

@@ -46,6 +46,17 @@ main func
     p.x : 7
     print p.x
 >>>7>>>
+# test assignment from class fields
+Point class
+    x int : 3
+
+main func
+    p : Point()
+    a : p.x
+    print a
+    
+>>>3>>>
+
 # classes refer to other classes
 
 Rectangle class

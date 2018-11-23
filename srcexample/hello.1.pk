@@ -1,8 +1,8 @@
 
+Point class
+    pragma static
+        x
+
 main func
-    sub [3,6,5]
-
-sub func(numbers list) void
-    print numbers
-
-    
+    (@Point).x : 1
+    print((@Point).x)

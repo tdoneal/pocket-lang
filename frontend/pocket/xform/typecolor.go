@@ -44,6 +44,7 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		x.marPosVarAssign(),
 		x.marPosPublicParameter(),
 		x.marPosPublicClassField(),
+		x.marPosObjFieldAccessor(),
 		x.marPosSelf(),
 		x.marPosSysFunc(),
 		x.marPosVarFunc(),
@@ -75,7 +76,7 @@ func isMypedValueType(nt int) bool {
 
 func isImperativeType(nt int) bool {
 	return nt == NT_IMPERATIVE || nt == NT_RECEIVERCALL_CMD ||
-		nt == NT_RETURN || nt == NT_FOR || nt == NT_WHILE || nt == NT_LOOP ||
+		nt == NT_RETURN || nt == NT_FOR_IN || nt == NT_FOR_CLASSIC || nt == NT_WHILE || nt == NT_LOOP ||
 		nt == NT_IF
 }
 
@@ -152,17 +153,31 @@ func (x *XformerPocket) marPosFunctionDefs() *RewriteRule {
 }
 
 func (x *XformerPocket) marPosClassDefs() *RewriteRule {
-	// type of a classdef can be itself
+	// type of a classdef is a reflection to itself
 	return &RewriteRule{
 		condaction: func(n Nod) bool {
 			if n.NodeType == NT_CLASSDEF {
 				extMype := NodGetChild(n, NTR_MYPE_POS)
-				candMype := n
-				return x.RICUnion2(extMype, candMype)
+				if extMype.Data.(Nod).NodeType == DYPE_EMPTY {
+					candMype := NodNewChild(NT_REFLECTTYPE, NTR_REFLECTTYPE_CLASSDEF, n)
+					return x.RICUnion2(extMype, candMype)
+				}
 			}
 			return false
 		},
 	}
+}
+
+func (x *XformerPocket) copyMypesOf(src Nod, dst Nod) {
+	// makes it so that dst effectively has the same dypes as src
+	if NodHasChild(dst, NTR_MYPE_POS) {
+		NodRemoveChild(dst, NTR_MYPE_POS)
+	}
+	if NodHasChild(dst, NTR_MYPE_NEG) {
+		NodRemoveChild(dst, NTR_MYPE_NEG)
+	}
+	NodSetChild(dst, NTR_MYPE_POS, NodGetChild(src, NTR_MYPE_POS))
+	NodSetChild(dst, NTR_MYPE_NEG, NodGetChild(src, NTR_MYPE_NEG))
 }
 
 func (x *XformerPocket) marGenLinkVarRefsToVarDef() *RewriteRule {
@@ -175,16 +190,14 @@ func (x *XformerPocket) marGenLinkVarRefsToVarDef() *RewriteRule {
 				if varDef := NodGetChildOrNil(n, NTR_VARDEF); varDef != nil {
 					if !NodHasChild(varDef, NTR_MYPE_POS) {
 						// handle the case if the vardef isn't initialized mype-wise
-						NodSetChild(varDef, NTR_MYPE_POS, NodGetChild(n, NTR_MYPE_POS))
-						NodSetChild(varDef, NTR_MYPE_NEG, NodGetChild(n, NTR_MYPE_NEG))
+						x.copyMypesOf(n, varDef)
 						return true
 					}
 					varDefMypePos := NodGetChild(varDef, NTR_MYPE_POS)
 					myMypePos := NodGetChild(n, NTR_MYPE_POS)
 					if varDefMypePos != myMypePos {
 						// if here, inherit the mypes from the extant vardef
-						NodSetChild(n, NTR_MYPE_POS, NodGetChild(varDef, NTR_MYPE_POS))
-						NodSetChild(n, NTR_MYPE_NEG, NodGetChild(varDef, NTR_MYPE_NEG))
+						x.copyMypesOf(varDef, n)
 						return true
 					}
 				}
@@ -224,19 +237,29 @@ func (x *XformerPocket) NodCheckParentChildIntegrity() {
 	}
 }
 
+func (x *XformerPocket) shouldDuckIfEmpty(nt int) bool {
+	// if certain node types remain empty after the solver,
+	// indicate they should be auto-ducked
+	return nt == NT_OBJFIELD_ACCESSOR
+}
+
 func (x *XformerPocket) generateValidMypes(nodes []Nod) {
 
 	x.NodCheckParentChildIntegrity()
 
 	for _, node := range nodes {
 		posMype := NodGetChild(node, NTR_MYPE_POS).Data.(Nod)
+		if posMype.NodeType == DYPE_EMPTY && x.shouldDuckIfEmpty(node.NodeType) {
+			posMype = NodNew(DYPE_ALL)
+		}
+
 		negMype := NodGetChild(node, NTR_MYPE_NEG).Data.(Nod)
 		validMype := DypeSimplifyDeep(DypeXSect(posMype, negMype))
 
 		if validMype.NodeType == DYPE_EMPTY {
 			if node.NodeType == NT_RECEIVERCALL_CMD || node.NodeType == NT_FUNCDEF_RV_PLACEHOLDER ||
 				node.NodeType == NT_RECEIVERCALL_METHOD {
-				// this is acceptable for these node types
+				// this is acceptable for these node types (can safely ignore)
 			} else {
 				panic("couldn't find a valid type for node: " + PrettyPrint(node))
 			}
@@ -449,6 +472,49 @@ func (x *XformerPocket) marPosPublicClassField() *RewriteRule {
 
 				if candMype != nil {
 					return x.RICUnion2(NodGetChild(varDef, NTR_MYPE_POS), candMype)
+				}
+			}
+			return false
+		},
+	}
+}
+
+func (x *XformerPocket) marPosObjFieldAccessor() *RewriteRule {
+	// lookup types of both object instance accesses and static class accesses
+
+	// TODO: somehow merge with the above marPosPublicClassField(), they seem to be doing similar things
+	return &RewriteRule{
+		condaction: func(n Nod) bool {
+			if n.NodeType == NT_OBJFIELD_ACCESSOR {
+				posDype := NodGetChild(n, NTR_MYPE_POS).Data.(Nod)
+				if posDype.NodeType == DYPE_EMPTY {
+					object := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+					objPosDype := NodGetChild(object, NTR_MYPE_POS).Data.(Nod)
+					// TODO: support more types of dypes, not just single classdef
+					// for example, might want to scan through user classdefs consistent with the dype
+					var clsDef Nod = nil
+					var isStatic bool = false
+					if objPosDype.NodeType == NT_REFLECTTYPE {
+						clsDef = NodGetChild(objPosDype, NTR_REFLECTTYPE_CLASSDEF)
+						isStatic = true
+					} else if objPosDype.NodeType == NT_CLASSDEF {
+						clsDef = objPosDype
+						isStatic = false
+					}
+					if clsDef != nil {
+						var classVarTable Nod = nil
+						if isStatic {
+							classVarTable = NodGetChild(NodGetChild(clsDef, NTR_CLASSDEF_STATICZONE), NTR_VARTABLE)
+						} else {
+							classVarTable = NodGetChild(clsDef, NTR_VARTABLE)
+						}
+						varName := NodGetChild(n, NTR_OBJFIELD_ACCESSOR_NAME).Data.(string)
+						luResult := x.varTableLookup(classVarTable, varName)
+						if luResult != nil {
+							x.RICUnion2(NodGetChild(n, NTR_MYPE_POS), NodGetChild(luResult, NTR_MYPE_POS).Data.(Nod))
+							return true
+						}
+					}
 				}
 			}
 			return false

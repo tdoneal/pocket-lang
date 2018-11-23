@@ -339,7 +339,7 @@ func isSuffixOpType(nt int) bool {
 
 func isRValVarReferenceNT(nt int) bool {
 	return nt == NT_VAR_GETTER || nt == NT_VARASSIGN || nt == NT_PARAMETER ||
-		nt == NT_IDENTIFIER_RVAL || nt == NT_IDENTIFIER_NOSCOPE
+		nt == NT_IDENTIFIER_RVAL || nt == NT_IDENTIFIER_NOSCOPE || nt == NT_OBJFIELD_ACCESSOR
 }
 
 func isCallType(nt int) bool {

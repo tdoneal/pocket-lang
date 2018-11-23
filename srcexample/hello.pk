@@ -1,11 +1,11 @@
 
 Foo class
-    x : 0
-    pragma config
-        y
-        z
+    w
 
 main func
-    p : Foo ~[1, 2]~ ()
-    print(p.z)
+    f : Foo()
+    f.w : 6
+    thang(f)
 
+thang func(x)
+    print x.w
