@@ -61,6 +61,7 @@ func (x *XformerPocket) createStaticClassZones() {
 
 func (x *XformerPocket) rewritePragmas() {
 	x.paintPragmas()
+
 	x.removePragmas()
 }
 
@@ -118,12 +119,19 @@ func (x *XformerPocket) paintPragmas() {
 }
 
 func (x *XformerPocket) paintPragma(n Nod, modifiers []Nod) {
+	// "paints" appropriate Nods with the modifiers in a
+	// downwards recursive fashion
 
 	if n.NodeType == NT_PRAGMACLAUSE {
 		modifiers = NodGetChildList(n)
 	} else if n.NodeType == NT_FUNCDEF || n.NodeType == NT_CLASSFIELD {
-		if x.nodsContains(modifiers, func(n Nod) bool { return n.NodeType == NT_MODF_STATIC }) {
-			x.paintPragmaSingle(n, NT_MODF_STATIC)
+		possModifiers := []int{NT_MODF_STATIC, NT_MODF_CONFIG, NT_MODF_PRIVATE}
+		for _, possModifier := range possModifiers {
+			if x.nodsContains(modifiers, func(n Nod) bool {
+				return n.NodeType == possModifier
+			}) {
+				x.paintPragmaSingle(n, possModifier)
+			}
 		}
 	}
 

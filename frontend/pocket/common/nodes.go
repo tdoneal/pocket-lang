@@ -1,23 +1,24 @@
 package common
 
 const (
-	NT_FLAG                      = 5
-	NT_IMPERATIVE                = 10
-	NT_VARINIT                   = 14
-	NT_VARASSIGN                 = 15
-	NTR_VAR_NAME                 = 16
-	NTR_VARASSIGN_VALUE          = 17
-	NT_VARDEF                    = 18
-	NTR_VARDEF_NAME              = 19
-	NT_VARDEF_SCOPE              = 20
-	NTR_VARDEF_SCOPE             = 21
-	NTR_VARDEF                   = 22
-	NT_RECEIVERCALL              = 23
-	NT_RECEIVERCALL_CMD          = 24
-	NT_RECEIVERCALL_METHOD       = 25
-	NTR_RECEIVERCALL_METHOD_NAME = 26
-	NTR_RECEIVERCALL_BASE        = 27
-	NTR_RECEIVERCALL_ARG         = 28
+	NT_FLAG                      = 2
+	NT_IMPERATIVE                = 5
+	NT_VARINIT                   = 10
+	NT_VARASSIGN                 = 11
+	NTR_VAR_NAME                 = 12
+	NTR_VARASSIGN_VALUE          = 13
+	NT_VARDEF                    = 14
+	NTR_VARDEF_NAME              = 15
+	NT_VARDEF_SCOPE              = 16
+	NTR_VARDEF_SCOPE             = 17
+	NTR_VARDEF                   = 18
+	NT_RECEIVERCALL              = 19
+	NT_RECEIVERCALL_CMD          = 20
+	NT_RECEIVERCALL_METHOD       = 21
+	NTR_RECEIVERCALL_METHOD_NAME = 22
+	NTR_RECEIVERCALL_BASE        = 23
+	NTR_RECEIVERCALL_ARG         = 24
+	NTR_RECEIVERCALL_CFG_ARG     = 25
 	NT_IDENTIFIER                = 29
 	NT_IDENTIFIER_NOSCOPE        = 30
 	NT_IDENTIFIER_RVAL           = 33
@@ -101,6 +102,7 @@ const (
 	NTR_CLASSDEF_NAME            = 151
 	NT_CLASSDEFPARTIAL           = 152
 	NTR_METHOD_SELFDEF           = 153
+	NTR_CLASSDEF                 = 154
 	NT_CLASSFIELD                = 155
 	NT_OBJFIELD_ACCESSOR         = 157
 	NTR_OBJFIELD_ACCESSOR_NAME   = 158

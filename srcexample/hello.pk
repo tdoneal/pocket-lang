@@ -1,8 +1,11 @@
-# default values
 
-Point class
-    x : 4
+Foo class
+    x : 0
+    pragma config
+        y
+        z
 
 main func
-    p : Point()
-    print(p.x)
+    p : Foo ~[1, 2]~ ()
+    print(p.z)
+

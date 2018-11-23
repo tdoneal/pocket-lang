@@ -624,7 +624,9 @@ func (g *Generator) genValue(n Nod) {
 	} else if nt == NT_COLLECTION_INDEXOR {
 		g.genCollectionIndexor(n)
 	} else if nt == NT_OBJINIT {
-		g.genObjInit(n)
+		g.genObjInitDefault(n)
+	} else if nt == PNT_WRAP_OBJ_INIT {
+		g.genObjInitClassWrapper(n)
 	} else if nt == NT_DOTOP {
 		g.genValueDotOp(n)
 	} else if nt == NT_OBJFIELD_ACCESSOR {
@@ -702,41 +704,57 @@ func (g *Generator) genCollectionIndexor(n Nod) {
 	g.WS("]")
 }
 
-func (g *Generator) genObjInit(n Nod) {
-	baseNod := NodGetChild(n, NTR_RECEIVERCALL_BASE)
-	// argNod := NodGetChild(n, NTR_RECEIVERCALL_ARG)
-
-	if baseNod.NodeType == NT_CLASSDEF {
-		// struct initializer
-		g.genObjInitWithArg(baseNod, NodGetChild(n, NTR_RECEIVERCALL_ARG))
-	} else {
-		panic("couldn't handle obj init base:" + PrettyPrint(baseNod))
-	}
-}
-
-func (g *Generator) genObjInitWithArg(clsDef Nod, arg Nod) {
-	if arg.NodeType == NT_EMPTYARGLIST {
-		g.WS(g.getDefaultObjInitCall(clsDef))
-	} else if arg.NodeType == NT_LIT_LIST {
-		g.genObjInitOrderedArgs(clsDef, arg)
-	} else if arg.NodeType == NT_KWARGS {
-		g.genObjInitKwargs(clsDef, arg)
-	} else {
-		g.genObjInitSingleArg(clsDef, arg)
-	}
-}
-
-func (g *Generator) getDefaultObjInitCall(clsDef Nod) string {
+func (g *Generator) genObjInitDefault(n Nod) {
+	clsDef := NodGetChild(n, NTR_RECEIVERCALL_BASE)
 	clsName := NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string)
 	rv := g.getDefaultConstructorName(clsName) + "()"
-	return rv
+	g.WS(rv)
 }
 
-func (g *Generator) genObjInitWithFields(clsDef Nod, fieldNames []string, fieldValues []Nod) {
+type ObjInitGenerator struct {
+	*Generator
+	wrappedValue Nod
+	clsDef       Nod
+	arg          Nod
+	isConfig     bool
+}
+
+func (g *Generator) genObjInitClassWrapper(objInitWrapper Nod) {
+
+	base := NodGetChild(objInitWrapper, NTR_RECEIVERCALL_BASE)
+	arg := NodGetChild(objInitWrapper, NTR_RECEIVERCALL_ARG)
+	clsDef := NodGetChild(objInitWrapper, NTR_CLASSDEF)
+	isConfig := NodGetChild(objInitWrapper, NTR_PRAGMAPAINT).Data.(bool)
+
+	oig := &ObjInitGenerator{
+		Generator:    g,
+		wrappedValue: base,
+		clsDef:       clsDef,
+		arg:          arg,
+		isConfig:     isConfig,
+	}
+
+	oig.gen()
+}
+
+func (g *ObjInitGenerator) gen() {
+	nt := g.arg.NodeType
+	if nt == NT_EMPTYARGLIST {
+		g.genValue(g.wrappedValue)
+	} else if nt == NT_LIT_LIST {
+		g.genOrderedArgs()
+	} else if nt == NT_KWARGS {
+		g.genKwargs()
+	} else {
+		g.genSingleArg()
+	}
+}
+
+func (g *ObjInitGenerator) genWithFields(fieldNames []string, fieldValues []Nod) {
 	// strategy: build an anonymous function and populate the needed fields inside of that
 	// anon function, then call it right afterwards
 	// start outputting the anon func
-	clsName := NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string)
+	clsName := NodGetChild(g.clsDef, NTR_CLASSDEF_NAME).Data.(string)
 	g.WS("func (rv *")
 	g.WS(clsName)
 	g.WS(") *")
@@ -753,28 +771,43 @@ func (g *Generator) genObjInitWithFields(clsDef Nod, fieldNames []string, fieldV
 	}
 	g.WS("return rv\n")
 	g.WS("}(")
-	g.WS(g.getDefaultObjInitCall(clsDef))
+	g.genValue(g.wrappedValue)
 	g.WS(")")
 }
 
-func (g *Generator) genObjInitOrderedArgs(clsDef Nod, litList Nod) {
-	g.genObjInitOrderedArgsWithValues(clsDef, NodGetChildList(litList))
+func (g *ObjInitGenerator) genOrderedArgs() {
+	g.genOrderedArgsWithValues(NodGetChildList(g.arg))
 }
 
-func (g *Generator) genObjInitOrderedArgsWithValues(clsDef Nod, values []Nod) {
-	// build the ordered list of class fields
-	clsFieldsOrdered := []Nod{}
-	clsUnits := NodGetChildList(clsDef)
-	for _, unit := range clsUnits {
-		if unit.NodeType == NT_CLASSFIELD {
-			clsFieldsOrdered = append(clsFieldsOrdered, unit)
+func (g *ObjInitGenerator) isConfigField(clsField Nod) bool {
+	if pragmaPaint := NodGetChildOrNil(clsField, NTR_PRAGMAPAINT); pragmaPaint != nil {
+		if NodHasChild(pragmaPaint, NT_MODF_CONFIG) {
+			return true
 		}
 	}
+	return false
+}
+
+func (g *ObjInitGenerator) genOrderedArgsWithValues(values []Nod) {
+	// build the ordered list of class fields
+	clsFieldsOrdered := []Nod{}
+	clsUnits := NodGetChildList(g.clsDef)
+	for _, unit := range clsUnits {
+		if unit.NodeType == NT_CLASSFIELD {
+			passesConfigFilter := (g.isConfig && g.isConfigField(unit)) ||
+				(!g.isConfig && !g.isConfigField(unit))
+			if passesConfigFilter {
+				clsFieldsOrdered = append(clsFieldsOrdered, unit)
+			}
+		}
+	}
+
+	fmt.Println("isConfig?", g.isConfig, "clsFieldsFound", PrettyPrintNodes(clsFieldsOrdered))
 
 	fieldNames := []string{}
 	for ndx := range values {
 		// get the corresponding class field
-		if ndx >= len(clsUnits) {
+		if ndx >= len(clsFieldsOrdered) {
 			panic("too many arguments to ordered object initializer")
 		}
 		clsField := clsFieldsOrdered[ndx]
@@ -782,16 +815,15 @@ func (g *Generator) genObjInitOrderedArgsWithValues(clsDef Nod, values []Nod) {
 		fieldNames = append(fieldNames, fieldName)
 	}
 
-	g.genObjInitWithFields(clsDef, fieldNames, values)
+	g.genWithFields(fieldNames, values)
 }
 
-func (g *Generator) genObjInitSingleArg(clsDef Nod, arg Nod) {
-	g.genObjInitOrderedArgsWithValues(clsDef, []Nod{arg})
+func (g *ObjInitGenerator) genSingleArg() {
+	g.genOrderedArgsWithValues([]Nod{g.arg})
 }
 
-func (g *Generator) genObjInitKwargs(clsDef Nod, n Nod) {
-
-	kwargs := NodGetChildList(n)
+func (g *ObjInitGenerator) genKwargs() {
+	kwargs := NodGetChildList(g.arg)
 	fieldNames := []string{}
 	fieldVals := []Nod{}
 	for _, kwarg := range kwargs {
@@ -801,7 +833,7 @@ func (g *Generator) genObjInitKwargs(clsDef Nod, n Nod) {
 		fieldVals = append(fieldVals, fieldVal)
 	}
 
-	g.genObjInitWithFields(clsDef, fieldNames, fieldVals)
+	g.genWithFields(fieldNames, fieldVals)
 }
 
 func (g *Generator) genArgListInternals(n Nod) {

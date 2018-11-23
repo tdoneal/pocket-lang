@@ -16,6 +16,8 @@ const (
 	PNTR_DUCK_FIELD_WRITE_VAL
 	PNT_DUCK_METHOD_CALL
 
+	PNT_WRAP_OBJ_INIT
+
 	// duck annotation flags
 	PNTR_TYPE_INDEXABLE
 )
@@ -30,6 +32,53 @@ func (p *Preparer) Prepare(code Nod) {
 	p.createExplicitIndexors()
 	p.rewriteDuckedOps()
 	p.serializeKeywordArgs()
+	p.createObjInitWrappers()
+}
+
+func (p *Preparer) createObjInitWrappers() {
+	// replace all object initializers with "wrapped" ones specific to the go backend
+	// this makes it much easier for the generator to generate the correct object
+	// initialization code
+
+	objInits := p.SearchRoot(func(n Nod) bool {
+		return n.NodeType == NT_OBJINIT
+	})
+
+	for _, objInit := range objInits {
+		base := NodGetChild(objInit, NTR_RECEIVERCALL_BASE)
+		if base.NodeType == NT_CLASSDEF {
+			p.Replace2(objInit, func(n Nod) Nod { return p.createObjInitWrapped(n) })
+		}
+	}
+}
+
+func (p *Preparer) createObjInitWrapped(objInit Nod) Nod {
+	rv := objInit
+	clsDef := NodGetChild(objInit, NTR_RECEIVERCALL_BASE)
+	cfgArg := NodGetChildOrNil(objInit, NTR_RECEIVERCALL_CFG_ARG)
+	if cfgArg != nil {
+		rv = p.wrapObjInit(rv, clsDef, cfgArg, true)
+		NodRemoveChild(objInit, NTR_RECEIVERCALL_CFG_ARG)
+	}
+	initArg := NodGetChildOrNil(objInit, NTR_RECEIVERCALL_ARG)
+	if initArg != nil {
+		// optimization: don't wrap if empty arg list
+		if initArg.NodeType != NT_EMPTYARGLIST {
+			rv = p.wrapObjInit(rv, clsDef, initArg, false)
+		}
+		NodRemoveChild(objInit, NTR_RECEIVERCALL_ARG)
+	}
+
+	return rv
+}
+
+func (p *Preparer) wrapObjInit(objInit Nod, clsDef Nod, arg Nod, isConfig bool) Nod {
+	nn := NodNew(PNT_WRAP_OBJ_INIT)
+	NodSetChild(nn, NTR_RECEIVERCALL_BASE, objInit)
+	NodSetChild(nn, NTR_RECEIVERCALL_ARG, arg)
+	NodSetChild(nn, NTR_CLASSDEF, clsDef)
+	NodSetChild(nn, NTR_PRAGMAPAINT, NodNewData(NT_PRAGMAPAINT, isConfig))
+	return nn
 }
 
 func (p *Preparer) serializeKeywordArgs() {

@@ -49,6 +49,7 @@ const (
 	TK_CURLYL = 64
 	TK_CURLYR = 65
 	TK_COMMA  = 66
+	TK_TILDE  = 67
 	TK_IF     = 75
 	TK_ELSE   = 76
 	TK_LOOP   = 80
@@ -237,6 +238,8 @@ func (tkzr *TokenizerPocket) processInit() {
 		tkzr.EmitTokenRuneAndIncr(TK_CURLYL)
 	} else if input == '}' {
 		tkzr.EmitTokenRuneAndIncr(TK_CURLYR)
+	} else if input == '~' {
+		tkzr.EmitTokenRuneAndIncr(TK_TILDE)
 	} else if input == '>' {
 		tkzr.processGT()
 	} else if input == '<' {

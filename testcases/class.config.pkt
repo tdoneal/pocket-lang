@@ -1,0 +1,24 @@
+
+Foo class
+    x : 0
+    pragma config
+        y : 3
+
+main func
+    p : Foo ~1~ (2)
+    print(p.y)
+
+>>> 1 >>>
+
+Foo class
+    x : 0
+    pragma config
+        y
+        z
+
+main func
+    p : Foo ~[1, 2]~ ()
+    print(p.z)
+
+>>> 2
+

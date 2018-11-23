@@ -861,6 +861,9 @@ func (p *ParserPocket) parseReceiverCallCommandStyle() Nod {
 
 func (p *ParserPocket) parseReceiverCallParentheticalStyle() Nod {
 	name := p.parseReceiverName()
+
+	cfgArg := p.ParseAtMostOne(func() Nod { return p.parseConfigArgs() })
+
 	p.parseOpenParenlikeToken()
 	p.Pos--
 	arg := p.parseReceiverCallParentheticalArg()
@@ -869,7 +872,17 @@ func (p *ParserPocket) parseReceiverCallParentheticalStyle() Nod {
 	if arg != nil {
 		NodSetChild(rv, NTR_RECEIVERCALL_ARG, arg)
 	}
+	if cfgArg != nil {
+		NodSetChild(rv, NTR_RECEIVERCALL_CFG_ARG, cfgArg)
+	}
 	return rv
+}
+
+func (p *ParserPocket) parseConfigArgs() Nod {
+	p.ParseToken(TK_TILDE)
+	val := p.parseValue()
+	p.ParseToken(TK_TILDE)
+	return val
 }
 
 func (p *ParserPocket) parseReceiverCallParentheticalArg() Nod {

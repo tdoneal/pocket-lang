@@ -26,8 +26,9 @@ func (x *Xformer) SearchReplaceAll(cond func(Nod) bool, with func(Nod) Nod) {
 }
 
 func (x *Xformer) Replace(what Nod, with Nod) {
-	// note: do NOT use what later, or graph integrity will be lost
-	// what should never be used again
+	// replace one node with another
+	// the new nod must not contain a reference (even indirectly to the old node)
+	// for this to work as expected (unless the new nod is a direct ancestor)
 
 	// redirect all incoming nodes of old to new
 	for _, ele := range what.In {
@@ -57,6 +58,31 @@ func (x *Xformer) Replace(what Nod, with Nod) {
 		}
 	}
 	with.In = append(with.In, toAddToWithIn...)
+}
+
+func (x *Xformer) Replace2(what Nod, with func(old Nod) Nod) {
+	// handles self-referential replacements much better
+
+	// inner workings:
+	// replaces the given nod with a dummy Nod, then applies the
+	// function to generate the new Nod, then finally
+	// replaces the dummy with the new
+	// key: any new pointers created by the generator function aren't overwritten
+	// during the initial dummy replacement
+
+	dummyNod := NodNew(NTR_LIST_0)
+	for _, incomingEdge := range what.In {
+		incomingEdge.Out = dummyNod
+	}
+	dummyNod.In = what.In
+	what.In = nil
+
+	newNod := with(what)
+
+	newNod.In = dummyNod.In
+	for _, incomingEdge := range newNod.In {
+		incomingEdge.Out = newNod
+	}
 }
 
 type Searcher struct {

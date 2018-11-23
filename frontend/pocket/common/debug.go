@@ -53,6 +53,7 @@ func (d *Debug) initialize() {
 
 	ntl[NTR_RECEIVERCALL_BASE] = "BASE"
 	ntl[NTR_RECEIVERCALL_ARG] = "ARG"
+	ntl[NTR_RECEIVERCALL_CFG_ARG] = "CFG_ARG"
 	ntl[NT_EMPTYARGLIST] = "ARGEMPTY"
 	ntl[NT_ADDOP] = "ADD"
 	ntl[NT_SUBOP] = "SUB"
@@ -268,6 +269,10 @@ func (d *DebugPrinter) getAppropriateChildDepth(
 
 	if parTy == NT_VARTABLE || parTy == NT_FUNCTABLE || parTy == NT_CLASSTABLE {
 		newDepth = 2
+	}
+
+	if parTy == NT_IMPERATIVE {
+		newDepth = -1
 	}
 
 	if (defaultDepth >= 0) && (newDepth > defaultDepth) {
