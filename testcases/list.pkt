@@ -10,4 +10,33 @@ main func
     l : [1,2,3]
     print( l 2)
 >>>3>>>
+# indexed write
+
+main func
+    ip list : [2, 1]
+    ip(0) : 1
+    print(ip)
+
+>>> [1 1] >>>
+# concatenation
+
+main func
+    l : [6] + [7]
+    print(l)
+>>> [6 7] >>>
+# arged types
+
+main func
+    l list ~int~ : [1]
+    a : l(0)
+    print(a)
+>>> 1
+
+    
+
+    
+
+
+
+
         

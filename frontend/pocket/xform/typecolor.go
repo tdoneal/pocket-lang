@@ -21,6 +21,7 @@ func (x *XformerPocket) getAllGeneralMARRules() []*RewriteRule {
 	return []*RewriteRule{
 		x.marGenLinkVarRefsToVarDef(),
 		x.marRemoveMypesFromDotopQualifiers(),
+		x.marGenPCCollectionIndex(),
 	}
 }
 
@@ -45,9 +46,9 @@ func (x *XformerPocket) getAllPositiveMARRules() []*RewriteRule {
 		x.marPosPublicParameter(),
 		x.marPosPublicClassField(),
 		x.marPosObjFieldAccessor(),
+		x.marPosObjFieldAccessorDuckProp(),
 		x.marPosSelf(),
 		x.marPosSysFunc(),
-		x.marPosVarFunc(),
 		x.marPosObjInitUser(),
 		x.marPosFuncCallUser(),
 		x.marPosReturnValue(),
@@ -237,22 +238,12 @@ func (x *XformerPocket) NodCheckParentChildIntegrity() {
 	}
 }
 
-func (x *XformerPocket) shouldDuckIfEmpty(nt int) bool {
-	// if certain node types remain empty after the solver,
-	// indicate they should be auto-ducked
-	return nt == NT_OBJFIELD_ACCESSOR
-}
-
 func (x *XformerPocket) generateValidMypes(nodes []Nod) {
 
 	x.NodCheckParentChildIntegrity()
 
 	for _, node := range nodes {
 		posMype := NodGetChild(node, NTR_MYPE_POS).Data.(Nod)
-		if posMype.NodeType == DYPE_EMPTY && x.shouldDuckIfEmpty(node.NodeType) {
-			posMype = NodNew(DYPE_ALL)
-		}
-
 		negMype := NodGetChild(node, NTR_MYPE_NEG).Data.(Nod)
 		validMype := DypeSimplifyDeep(DypeXSect(posMype, negMype))
 
@@ -313,7 +304,7 @@ func (x *XformerPocket) marPosObjInitUser() *RewriteRule {
 func marPosCollectionGetArgedCand(elements []Nod) Nod {
 	accum := NodNew(DYPE_EMPTY)
 	for _, element := range elements {
-		elementPosMype := NodGetChild(element, NTR_MYPE_POS)
+		elementPosMype := NodGetChild(element, NTR_MYPE_POS).Data.(Nod)
 		accum = DypeDeduplicate(DypeUnion(accum, elementPosMype))
 	}
 	accum = DypeSimplifyShallow(accum)
@@ -387,22 +378,6 @@ func (x *XformerPocket) marPosCollectionLiterals() *RewriteRule {
 				// evaluating this can be expensive, there might be a need
 				// to optimize this at some point
 				return x.RICUnion2(NodGetChild(n, NTR_MYPE_POS), marPosCollectionEvaluateMype(n))
-			}
-			return false
-		},
-	}
-}
-
-func (x *XformerPocket) marPosVarFunc() *RewriteRule {
-	// for now, all calls to a variable can return anything
-	return &RewriteRule{
-		condaction: func(n Nod) bool {
-			if isReceiverCallType(n.NodeType) {
-				// alternate syntax: vargetter is the base of the call
-				// TODO: possibly remove in favor of the FUNCDEF syntax
-				if NodGetChild(n, NTR_RECEIVERCALL_BASE).NodeType == NT_VAR_GETTER {
-					return x.RICUnion2(NodGetChild(n, NTR_MYPE_POS), NodNew(DYPE_ALL))
-				}
 			}
 			return false
 		},
@@ -522,6 +497,24 @@ func (x *XformerPocket) marPosObjFieldAccessor() *RewriteRule {
 	}
 }
 
+func (x *XformerPocket) marPosObjFieldAccessorDuckProp() *RewriteRule {
+	// if the type of base is ALL, destructively union upwards
+
+	return &RewriteRule{
+		condaction: func(n Nod) bool {
+			if n.NodeType == NT_OBJFIELD_ACCESSOR {
+				dype := NodGetChild(n, NTR_MYPE_POS)
+				base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+				baseDype := NodGetChild(base, NTR_MYPE_POS).Data.(Nod)
+				if baseDype.NodeType == DYPE_ALL {
+					return x.RICUnion2(dype, baseDype)
+				}
+			}
+			return false
+		},
+	}
+}
+
 func (x *XformerPocket) marPosSelf() *RewriteRule {
 	// type of 'self' is the current class
 	return &RewriteRule{
@@ -575,9 +568,9 @@ func (x *XformerPocket) marNegVarAssign() *RewriteRule {
 	return &RewriteRule{
 		condaction: func(n Nod) bool {
 			if n.NodeType == NT_VARASSIGN {
-				mypeLHS := NodGetChild(n, NTR_MYPE_NEG)
-				mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE_NEG).Data.(Nod)
-				return x.RICXSect2(mypeLHS, mypeRHS)
+				mypeLHSData := NodGetChild(n, NTR_MYPE_NEG).Data.(Nod)
+				mypeRHS := NodGetChild(NodGetChild(n, NTR_VARASSIGN_VALUE), NTR_MYPE_NEG)
+				return x.RICXSect2(mypeRHS, mypeLHSData)
 			}
 			return false
 		},
@@ -591,14 +584,9 @@ func (x *XformerPocket) marNegDeclaredType() *RewriteRule {
 			if n.NodeType == NT_PARAMETER || n.NodeType == NT_VARASSIGN ||
 				n.NodeType == NT_VARDEF {
 				if typeDeclNod := NodGetChildOrNil(n, NTR_TYPE_DECL); typeDeclNod != nil {
-					if typeDeclNod.NodeType == NT_TYPEBASE || typeDeclNod.NodeType == NT_CLASSDEF {
-						negMype := NodGetChild(n, NTR_MYPE_NEG)
-						declMype := typeDeclNod
-						return x.RICXSect2(negMype, declMype)
-					} else {
-						fmt.Println("interesting situation: got type decl but wasn't supported:",
-							PrettyPrint(typeDeclNod))
-					}
+					negMype := NodGetChild(n, NTR_MYPE_NEG)
+					declMype := typeDeclNod
+					return x.RICXSect2(negMype, declMype)
 				}
 			}
 			return false
@@ -622,6 +610,7 @@ func marGetCompactOpEvaluateRules() []*MypeOpEvaluateRule {
 		&MypeOpEvaluateRule{NT_ADDOP, TY_INT, TY_FLOAT, TY_FLOAT},
 		&MypeOpEvaluateRule{NT_ADDOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
 		&MypeOpEvaluateRule{NT_ADDOP, TY_STRING, TY_STRING, TY_STRING},
+		&MypeOpEvaluateRule{NT_ADDOP, TY_LIST, TY_LIST, TY_LIST},
 
 		&MypeOpEvaluateRule{NT_SUBOP, TY_INT, TY_INT, TY_INT},
 		&MypeOpEvaluateRule{NT_SUBOP, TY_FLOAT, TY_FLOAT, TY_FLOAT},
@@ -688,18 +677,20 @@ func getLengthableDype() Nod {
 }
 
 func (x *XformerPocket) marPosOpCollectionLenRule() *RewriteRule {
+	// <collection>.len -> int
+
 	return &RewriteRule{
 		condaction: func(n Nod) bool {
-			if n.NodeType == NT_DOTOP {
-				if qualName, ok := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string); ok {
+			if n.NodeType == NT_OBJFIELD_ACCESSOR {
+				if qualName, ok := NodGetChild(n, NTR_OBJFIELD_ACCESSOR_NAME).Data.(string); ok {
 					if qualName == "len" {
 						resulPosMype := NodGetChild(n, NTR_MYPE_POS)
-						leftArgPosMype := NodGetChild(NodGetChild(n, NTR_BINOP_LEFT), NTR_MYPE_POS)
-						intMype := NodNewData(NT_TYPEBASE, TY_INT)
+						leftArgPosMype := NodGetChild(NodGetChild(n, NTR_RECEIVERCALL_BASE), NTR_MYPE_POS)
 						isLengthable := DypeSimplifyShallow(DypeUnion(
 							leftArgPosMype, getLengthableDype())).NodeType != DYPE_EMPTY
 						if isLengthable {
 							fmt.Println("applied collection len rule")
+							intMype := NodNewData(NT_TYPEBASE, TY_INT)
 							return x.RICUnion2(resulPosMype, intMype)
 						}
 					}
@@ -794,4 +785,76 @@ func (x *XformerPocket) marPosPrimitiveLiterals() *RewriteRule {
 			return false
 		},
 	}
+}
+
+// specifies type evaluation rules for expressions such as
+// <list>(<index>) -> <list>.eletype
+
+func (x *XformerPocket) marGenPCCollectionIndex() *RewriteRule {
+	// <list>(<index>) -> <list>.eletype
+	// syntax of <list>(<index>) at this stage is a receivercall with an
+	// indexable base
+	return &RewriteRule{
+		condaction: func(n Nod) bool {
+			if n.NodeType == NT_RECEIVERCALL {
+				base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+				if NodHasChild(base, NTR_MYPE_POS) {
+					basePosDype := NodGetChild(base, NTR_MYPE_POS)
+					baseNegDype := NodGetChild(base, NTR_MYPE_NEG)
+					// heuristic: only apply the indexing rule if something was explicitly
+					// mentioned as indexable
+					posEleDype := x.getIndexableElementDype(basePosDype.Data.(Nod))
+					negEleDype := x.getIndexableElementDype(baseNegDype.Data.(Nod))
+
+					// fmt.Println("basePosDype", PrettyPrint(basePosDype))
+					// fmt.Println("baseNegDype", PrettyPrint(baseNegDype))
+					// fmt.Println("posEleDype", PrettyPrint(posEleDype))
+					// fmt.Println("negEleDype", PrettyPrint(negEleDype))
+
+					// heuristic: chop the pos dype by the neg dype
+					chopPosEleType := DypeSimplifyDeep(DypeXSect(posEleDype, negEleDype))
+
+					// fmt.Println("chopPosEleType", PrettyPrint(chopPosEleType))
+
+					changedPos := x.RICUnion2(NodGetChild(n, NTR_MYPE_POS), chopPosEleType)
+					changedNeg := x.RICXSect2(NodGetChild(n, NTR_MYPE_NEG), negEleDype)
+
+					return changedPos || changedNeg
+				}
+			}
+			return false
+		},
+	}
+}
+
+func (x *XformerPocket) getIndexableElementDype(dype Nod) Nod {
+	// returns the element dype of the input dype, if it's a collection
+	// given e.g. list ~int~ returns int
+	// given e.g. Union(list~int~, list) returns Union(int, all) = all
+	// given a non-collection dype returns EMPTY
+	if dype.NodeType == NT_TYPEBASE {
+		whichType := dype.Data.(int)
+		if whichType == TY_LIST {
+			return NodNew(DYPE_ALL)
+		}
+	} else if dype.NodeType == NT_TYPECALL {
+		baseType := NodGetChild(dype, NTR_RECEIVERCALL_BASE)
+		if baseType.NodeType == NT_TYPEBASE {
+			whichBaseType := baseType.Data.(int)
+			if whichBaseType == TY_LIST {
+				eleType := NodGetChild(dype, NTR_RECEIVERCALL_ARG)
+				return eleType
+			}
+		}
+	} else if dype.NodeType == DYPE_UNION {
+		subNodes := NodGetChildList(dype)
+		subElementTypes := []Nod{}
+		for _, subNode := range subNodes {
+			subElementTypes = append(subElementTypes, x.getIndexableElementDype(subNode))
+		}
+		newUnion := NodNewChildList(DYPE_UNION, subElementTypes)
+		return DypeSimplifyShallow(newUnion)
+	}
+
+	return NodNew(DYPE_EMPTY)
 }

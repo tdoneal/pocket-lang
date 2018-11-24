@@ -690,12 +690,18 @@ func (p *ParserPocket) parseTypeBase() Nod {
 
 func (p *ParserPocket) parseTypeArged() Nod {
 	baseType := p.parseTypeBase()
-	// for now only support single type args
-	typeArg := p.parseTypeBase()
-	rv := NodNew(NT_TYPEARGED)
-	NodSetChild(rv, NTR_TYPEARGED_BASE, baseType)
-	NodSetChild(rv, NTR_TYPEARGED_ARG, typeArg)
+	typeArg := p.parseTypeArg()
+	rv := NodNew(NT_TYPECALL)
+	NodSetChild(rv, NTR_RECEIVERCALL_BASE, baseType)
+	NodSetChild(rv, NTR_RECEIVERCALL_ARG, typeArg)
 	return rv
+}
+
+func (p *ParserPocket) parseTypeArg() Nod {
+	return p.ParseDisjunction([]ParseFunc{
+		func() Nod { return p.parseTypeBase() },
+		func() Nod { return p.parseConfigArgs() },
+	})
 }
 
 func (p *ParserPocket) parseParameterList() Nod {

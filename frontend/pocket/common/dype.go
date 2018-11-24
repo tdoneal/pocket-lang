@@ -17,6 +17,9 @@ const (
 )
 
 func DypeXSect(a Nod, b Nod) Nod {
+	// returns the intersection of two nodes
+	// does some very basic simplifications, if can't simplify then
+	// just returns a representation of the intersection
 	if a.NodeType == DYPE_EMPTY || b.NodeType == DYPE_EMPTY {
 		return NodNew(DYPE_EMPTY)
 	}
@@ -146,9 +149,123 @@ func DypeWouldChangeXSect(a Nod, b Nod) bool {
 func DypeSimplifyShallow(n Nod) Nod {
 	// performs quick simplifications (non-recursive),
 	// returns original Nod if no simplifications made (Nod-Idem)
+	n = DypeCollapseShallow(n)
 	n = DypeRemoveMonoArgs(n)
 	n = DypeDeassociate(n)
 	n = DypeDeduplicate(n)
+	return n
+}
+
+func DypeCollapseShallow(n Nod) Nod {
+	// performs simplifications of the form:
+	// Union[m, n, empty] -> Union[m, n]
+	// Union[m, n, all] -> all
+	// Union[m, empty] -> Union[m]
+	if n.NodeType == DYPE_UNION {
+		args := NodGetChildList(n)
+
+		// first check if anything can be done
+		// avoid allocating new output array if nothing can be done
+		anyEmpty := false
+		for _, arg := range args {
+			if arg.NodeType == DYPE_ALL {
+				return NodNew(DYPE_ALL)
+			} else if arg.NodeType == DYPE_EMPTY {
+				anyEmpty = true
+				break
+			}
+		}
+		if !anyEmpty {
+			// nothing else to do
+			return n
+		}
+
+		nargs := []Nod{}
+		// filter, removing all EMPTY nodes
+		for _, arg := range args {
+			if arg.NodeType == DYPE_EMPTY {
+				// purposeful pass
+			} else {
+				nargs = append(nargs, arg)
+			}
+		}
+		return NodNewChildList(DYPE_UNION, nargs)
+	}
+	return n
+}
+
+func DypeRemoveMonoArgs(n Nod) Nod {
+	// Union[] -> EMPTY
+	// Union[n] -> n
+	if DypeIsOperator(n.NodeType) {
+		args := NodGetChildList(n)
+		if len(args) == 0 {
+			return NodNew(DYPE_EMPTY)
+		} else if len(args) == 1 {
+			return args[0]
+		}
+	}
+	return n
+}
+
+func DypeDeassociate(n Nod) Nod {
+	// flattens nested similar operators in arguments
+	if DypeIsOperator(n.NodeType) {
+		args := NodGetChildList(n)
+		couldSimp := false
+		for _, arg := range args {
+			if arg.NodeType == n.NodeType {
+				couldSimp = true
+				break
+			}
+		}
+		if !couldSimp {
+			return n
+		}
+		newArgs := []Nod{}
+		for _, arg := range args {
+			if arg.NodeType == n.NodeType {
+				newArgs = append(newArgs, NodGetChildList(arg)...)
+			} else {
+				newArgs = append(newArgs, arg)
+			}
+		}
+		newNod := NodNewChildList(n.NodeType, newArgs)
+		return DypeDeassociate(newNod)
+	}
+	return n
+}
+
+func DypeDeduplicate(n Nod) Nod {
+	// removes duplicate args in operators
+	// works best if the arg list has already been flattened (using DypeDeassociate or the like)
+	if DypeIsOperator(n.NodeType) {
+		args := NodGetChildList(n)
+		var toRm []bool
+		for i := 0; i < len(args); i++ {
+			a0 := args[i]
+			for j := i + 1; j < len(args); j++ {
+				a1 := args[j]
+				if DypeDeepForwardsEqual(a0, a1) {
+					if toRm == nil {
+						toRm = make([]bool, len(args))
+					}
+					toRm[j] = true
+				}
+			}
+		}
+		if toRm == nil {
+			return n
+		}
+		newArgs := []Nod{}
+		for i := 0; i < len(args); i++ {
+			if !toRm[i] {
+				newArgs = append(newArgs, args[i])
+			}
+		}
+		newNod := NodNewChildList(n.NodeType, newArgs)
+		return newNod
+	}
 	return n
 }
 
@@ -260,81 +377,6 @@ func DypeSimplifyChildren(n Nod) Nod {
 	}
 	newN := NodNewChildList(n.NodeType, simpArgs)
 	return newN
-}
-
-func DypeRemoveMonoArgs(n Nod) Nod {
-	// Union[] -> EMPTY
-	// Union[n] -> n
-	if DypeIsOperator(n.NodeType) {
-		args := NodGetChildList(n)
-		if len(args) == 0 {
-			return NodNew(DYPE_EMPTY)
-		} else if len(args) == 1 {
-			return args[0]
-		}
-	}
-	return n
-}
-
-func DypeDeduplicate(n Nod) Nod {
-	// removes duplicate args in operators
-	// works best if the arg list has already been flattened (using DypeDeassociate or the like)
-	if DypeIsOperator(n.NodeType) {
-		args := NodGetChildList(n)
-		var toRm []bool
-		for i := 0; i < len(args); i++ {
-			a0 := args[i]
-			for j := i + 1; j < len(args); j++ {
-				a1 := args[j]
-				if DypeDeepForwardsEqual(a0, a1) {
-					if toRm == nil {
-						toRm = make([]bool, len(args))
-					}
-					toRm[j] = true
-				}
-			}
-		}
-		if toRm == nil {
-			return n
-		}
-		newArgs := []Nod{}
-		for i := 0; i < len(args); i++ {
-			if !toRm[i] {
-				newArgs = append(newArgs, args[i])
-			}
-		}
-		newNod := NodNewChildList(n.NodeType, newArgs)
-		return newNod
-	}
-	return n
-}
-
-func DypeDeassociate(n Nod) Nod {
-	// flattens nested similar operators in arguments
-	if DypeIsOperator(n.NodeType) {
-		args := NodGetChildList(n)
-		couldSimp := false
-		for _, arg := range args {
-			if arg.NodeType == n.NodeType {
-				couldSimp = true
-				break
-			}
-		}
-		if !couldSimp {
-			return n
-		}
-		newArgs := []Nod{}
-		for _, arg := range args {
-			if arg.NodeType == n.NodeType {
-				newArgs = append(newArgs, NodGetChildList(arg)...)
-			} else {
-				newArgs = append(newArgs, arg)
-			}
-		}
-		newNod := NodNewChildList(n.NodeType, newArgs)
-		return DypeDeassociate(newNod)
-	}
-	return n
 }
 
 func DypeIsOperator(nt int) bool {

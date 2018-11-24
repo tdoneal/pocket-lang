@@ -94,9 +94,19 @@ func testSimpDeep(input Nod, expected Nod) {
 }
 
 func testSimplifyCases() {
+	testSimplifyCasesShal()
+	testSimplifyCasesDeep()
+}
+
+func testSimplifyCasesShal() {
 	testSimpShal(NodNewChildList(DYPE_UNION, []Nod{MakeInt()}), MakeInt())
 	testSimpShal(NodNewChildList(DYPE_XSECT, []Nod{MakeInt()}), MakeInt())
 	testSimpShal(NodNewChildList(DYPE_UNION, []Nod{}), MakeEmpty())
+
+	// 11/23/2018: cases where unions should be able to "get rid of baggage"
+	testSimpShal(NodNewChildList(DYPE_UNION, []Nod{MakeInt(), MakeEmpty()}), MakeInt())
+	testSimpShal(NodNewChildList(DYPE_UNION, []Nod{MakeEmpty()}), MakeEmpty())
+	testSimpShal(NodNewChildList(DYPE_UNION, []Nod{MakeInt(), MakeFull()}), MakeFull())
 
 	// Simp(Union(Union(int, float),int)) -> Union(int, float)
 	u := DypeUnion(NodNewData(NT_TYPEBASE, TY_INT), NodNewData(NT_TYPEBASE, TY_FLOAT))
@@ -105,8 +115,6 @@ func testSimplifyCases() {
 	fmt.Println("u2", PrettyPrint(u2))
 	testSimpShal(u2, NodNewChildList(DYPE_UNION,
 		[]Nod{NodNewData(NT_TYPEBASE, TY_INT), NodNewData(NT_TYPEBASE, TY_FLOAT)}))
-
-	testSimplifyCasesDeep()
 
 }
 
@@ -133,6 +141,16 @@ func testSimplifyCasesDeep() {
 
 	cmplxXSect = MakeXSect(MakeUnion(MakeFloat(), MakeBool()), MakeUnion(MakeBool(), MakeInt()))
 	testSimpDeep(cmplxXSect, MakeBool())
+
+	// complex structure comparison in union
+	arg0 := NodNewChildList(DYPE_UNION, []Nod{
+		NodNewChild(NT_TYPECALL, NTR_RECEIVERCALL_BASE, MakeInt()),
+		MakeInt(),
+	})
+	arg1 := NodNewChild(NT_TYPECALL, NTR_RECEIVERCALL_BASE, MakeInt())
+	cmplxXSect = MakeXSect(arg0, arg1)
+	testSimpDeep(cmplxXSect, NodNewChild(NT_TYPECALL, NTR_RECEIVERCALL_BASE, MakeInt()))
+
 }
 
 func exploreUnion() {

@@ -294,7 +294,7 @@ func (g *Generator) getGenTypeBase(n Nod) string {
 	}
 	lut := map[int]string{
 		TY_BOOL:   "bool",
-		TY_INT:    "int64",
+		TY_INT:    "int",
 		TY_FLOAT:  "float64",
 		TY_NUMBER: "number",
 		TY_STRING: "string",
@@ -327,18 +327,28 @@ func (g *Generator) genType(n Nod) {
 		}
 	} else if n.NodeType == NT_TYPEBASE || n.NodeType == DYPE_ALL {
 		g.WS(g.getGenTypeBase(n))
-	} else if n.NodeType == NT_TYPEARGED {
-		panic("typearged is obsolete; use TYPECALL instead")
 	} else if n.NodeType == NT_CLASSDEF {
 		clsDef := n
 		g.WS("*")
 		g.WS(NodGetChild(clsDef, NTR_CLASSDEF_NAME).Data.(string))
 	} else if n.NodeType == NT_FUNCDEF {
 		g.genTypeFuncDef(n)
+	} else if n.NodeType == NT_TYPECALL {
+		g.genTypeCall(n)
 	} else {
 		g.WS("<type>")
 	}
+}
 
+func (g *Generator) genTypeCall(n Nod) {
+	base := NodGetChild(n, NTR_RECEIVERCALL_BASE)
+	arg := NodGetChild(n, NTR_RECEIVERCALL_ARG)
+	if base.NodeType == NT_TYPEBASE && base.Data.(int) == TY_LIST {
+		g.WS("[]")
+		g.genType(arg)
+		return
+	}
+	g.WS("<typecall>")
 }
 
 func (g *Generator) genTypeFuncDef(n Nod) {
@@ -531,6 +541,8 @@ func (g *Generator) genLValue(n Nod, varDef Nod) {
 	} else if n.NodeType == NT_IDENTIFIER || n.NodeType == NT_IDENTIFIER_RESOLVED ||
 		n.NodeType == NT_IDENTIFIER_FUNC_NOSCOPE {
 		g.WS(n.Data.(string))
+	} else if n.NodeType == NT_COLLECTION_INDEXOR {
+		g.genCollectionIndexor(n)
 	} else {
 		g.WS("lvalue")
 	}
@@ -600,6 +612,16 @@ func (g *Generator) genListIndexor(n Nod) {
 	g.WS("]")
 }
 
+func (g *Generator) genListConcat(n Nod) {
+	left := NodGetChild(n, NTR_BINOP_LEFT)
+	right := NodGetChild(n, NTR_BINOP_RIGHT)
+	g.WS("append(")
+	g.genValue(left)
+	g.WS(",")
+	g.genValue(right)
+	g.WS("...)")
+}
+
 func (g *Generator) genValue(n Nod) {
 	nt := n.NodeType
 	if nt == NT_LIT_INT {
@@ -629,9 +651,13 @@ func (g *Generator) genValue(n Nod) {
 	} else if nt == PNT_WRAP_OBJ_INIT {
 		g.genObjInitClassWrapper(n)
 	} else if nt == NT_DOTOP {
-		g.genValueDotOp(n)
+		panic("desyntax error")
 	} else if nt == NT_OBJFIELD_ACCESSOR {
 		g.genObjFieldAccessor(n)
+	} else if nt == PNT_PSEUD_COLLECTION_LEN {
+		g.genPseudoCollectionLen(n)
+	} else if nt == PNT_PSEUD_LIST_CONCAT {
+		g.genListConcat(n)
 	} else if g.isBinaryInlineDuckOpType(n.NodeType) {
 		g.genDuckOp(n)
 	} else if isBinaryInlineOpType(n.NodeType) {
@@ -680,6 +706,12 @@ func (g *Generator) genObjFieldAccessor(n Nod) {
 	g.genValue(obj)
 	g.WS(".")
 	g.WS(g.convertToGoFieldName(fieldName))
+}
+
+func (g *Generator) genPseudoCollectionLen(n Nod) {
+	g.WS("len(")
+	g.genValue(NodGetChild(n, NTR_RECEIVERCALL_BASE))
+	g.WS(")")
 }
 
 func (g *Generator) genDuckFieldRead(n Nod) {
@@ -850,26 +882,10 @@ func (g *Generator) isBinaryInlineDuckOpType(nt int) bool {
 	return nt == PNT_DUCK_BINOP
 }
 
-func (g *Generator) genValueDotOp(n Nod) {
-	qualName := NodGetChild(n, NTR_BINOP_RIGHT).Data.(string)
-	objNod := NodGetChild(n, NTR_BINOP_LEFT)
-	if qualName == "len" {
-		g.WS("int64(len(")
-		g.genValue(objNod)
-		g.WS("))")
-	} else {
-		g.WS("(")
-		g.genValue(objNod)
-		g.WS(")")
-		g.WS(".")
-		g.WS(g.convertToGoFieldName(qualName))
-	}
-}
-
 func (g *Generator) genLiteralInt(n Nod) {
-	g.WS("int64(")
+	// g.WS("int64(")
 	g.WS(strconv.Itoa(n.Data.(int)))
-	g.WS(")")
+	// g.WS(")")
 }
 
 func (g *Generator) genLiteralFloat(n Nod) {

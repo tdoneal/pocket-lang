@@ -28,9 +28,6 @@ const (
 	NT_IDENTIFIER_KWARG          = 37
 	NT_IDENTIFIER_RESOLVED       = 40
 	NT_TYPEBASE                  = 41
-	NT_TYPEARGED                 = 42
-	NTR_TYPEARGED_BASE           = 43
-	NTR_TYPEARGED_ARG            = 44
 	NT_TYPE                      = 46
 	NTR_TYPE                     = 47
 	NTR_TYPE_DECL                = 48

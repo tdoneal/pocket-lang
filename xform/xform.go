@@ -18,10 +18,18 @@ func (x *Xformer) OneParentIs(n Nod, cond func(Nod) bool) bool {
 	return false
 }
 
+// deprecated.  new version: SearchReplaceAll2
 func (x *Xformer) SearchReplaceAll(cond func(Nod) bool, with func(Nod) Nod) {
 	toReplace := x.SearchRoot(cond)
 	for _, ele := range toReplace {
 		x.Replace(ele, with(ele))
+	}
+}
+
+func (x *Xformer) SearchReplaceAll2(cond func(Nod) bool, with func(Nod) Nod) {
+	toReplace := x.SearchRoot(cond)
+	for _, ele := range toReplace {
+		x.Replace2(ele, with)
 	}
 }
 

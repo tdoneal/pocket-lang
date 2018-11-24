@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 func RunFile(filePath string) string {
@@ -25,13 +26,21 @@ func RunFile(filePath string) string {
 	fmt.Println("created runtime lib at", outLibPath)
 
 	fmt.Println("running file", filePath)
+	startClock := NowAsUnixMilli()
 	output, _ := exec.Command("go", "run", dst, outLibPath).CombinedOutput()
 
 	fmt.Println("Output:")
 	fmt.Println(string(output))
 	fmt.Println("Run done.")
 
+	endClock := NowAsUnixMilli()
+	fmt.Println("pocket execution time:", (endClock - startClock), "ms")
+
 	return string(output)
+}
+
+func NowAsUnixMilli() int64 {
+	return time.Now().UnixNano() / 1e6
 }
 
 func cleanr(path string) {

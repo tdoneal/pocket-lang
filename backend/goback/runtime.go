@@ -16,27 +16,27 @@ type duck interface{}
 
 // TODO: build symmetrical and asymmetrical duck operation luts
 var __pk_dot_add = map[uint32]func(a duck, b duck) duck{
-	(1 << DTY_INT) | (1 << DTY_INT):       func(a duck, b duck) duck { return a.(int64) + b.(int64) },
+	(1 << DTY_INT) | (1 << DTY_INT):       func(a duck, b duck) duck { return a.(int) + b.(int) },
 	(1 << DTY_FLOAT) | (1 << DTY_FLOAT):   func(a duck, b duck) duck { return a.(float64) + b.(float64) },
-	(1 << DTY_INT) | (1 << DTY_FLOAT):     func(a duck, b duck) duck { return float64(a.(int64)) + b.(float64) },
+	(1 << DTY_INT) | (1 << DTY_FLOAT):     func(a duck, b duck) duck { return float64(a.(int)) + b.(float64) },
 	(1 << DTY_STRING) | (1 << DTY_STRING): func(a duck, b duck) duck { return a.(string) + b.(string) },
-	(1 << DTY_INT) | (1 << DTY_STRING):    func(a duck, b duck) duck { return strconv.Itoa(int(a.(int64))) + b.(string) },
+	(1 << DTY_INT) | (1 << DTY_STRING):    func(a duck, b duck) duck { return strconv.Itoa(int(a.(int))) + b.(string) },
 	(1 << DTY_FLOAT) | (1 << DTY_STRING):  func(a duck, b duck) duck { return __pk_duck_ftoa(a.(float64)) + b.(string) },
 }
 
 var __pk_dot_asym_add = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:    func(a duck, b duck) duck { return a.(int64) + b.(int64) },
-		DTY_FLOAT:  func(a duck, b duck) duck { return float64(a.(int64)) + b.(float64) },
-		DTY_STRING: func(a duck, b duck) duck { return strconv.Itoa(int(a.(int64))) + b.(string) },
+		DTY_INT:    func(a duck, b duck) duck { return a.(int) + b.(int) },
+		DTY_FLOAT:  func(a duck, b duck) duck { return float64(a.(int)) + b.(float64) },
+		DTY_STRING: func(a duck, b duck) duck { return strconv.Itoa(int(a.(int))) + b.(string) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:    func(a duck, b duck) duck { return a.(float64) + float64(b.(int64)) },
+		DTY_INT:    func(a duck, b duck) duck { return a.(float64) + float64(b.(int)) },
 		DTY_FLOAT:  func(a duck, b duck) duck { return a.(float64) + b.(float64) },
 		DTY_STRING: func(a duck, b duck) duck { return __pk_duck_ftoa(a.(float64)) + b.(string) },
 	},
 	DTY_STRING: map[uint32]func(duck, duck) duck{
-		DTY_INT:    func(a duck, b duck) duck { return a.(string) + strconv.Itoa(int(b.(int64))) },
+		DTY_INT:    func(a duck, b duck) duck { return a.(string) + strconv.Itoa(int(b.(int))) },
 		DTY_FLOAT:  func(a duck, b duck) duck { return a.(string) + __pk_duck_ftoa(b.(float64)) },
 		DTY_STRING: func(a duck, b duck) duck { return a.(string) + b.(string) },
 	},
@@ -44,99 +44,99 @@ var __pk_dot_asym_add = map[uint32]map[uint32]func(duck, duck) duck{
 
 var __pk_dot_asym_sub = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(int64) - b.(int64) },
-		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int64)) - b.(float64) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(int) - b.(int) },
+		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int)) - b.(float64) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(float64) - float64(b.(int64)) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(float64) - float64(b.(int)) },
 		DTY_FLOAT: func(a duck, b duck) duck { return a.(float64) - b.(float64) },
 	},
 }
 
 var __pk_dot_asym_mul = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(int64) * b.(int64) },
-		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int64)) * b.(float64) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(int) * b.(int) },
+		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int)) * b.(float64) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(float64) * float64(b.(int64)) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(float64) * float64(b.(int)) },
 		DTY_FLOAT: func(a duck, b duck) duck { return a.(float64) * b.(float64) },
 	},
 }
 
 var __pk_dot_asym_div = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(int64) / b.(int64) },
-		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int64)) / b.(float64) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(int) / b.(int) },
+		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int)) / b.(float64) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(float64) / float64(b.(int64)) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(float64) / float64(b.(int)) },
 		DTY_FLOAT: func(a duck, b duck) duck { return a.(float64) / b.(float64) },
 	},
 }
 
 var __pk_dot_asym_mod = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(int64) % b.(int64) },
-		DTY_FLOAT: func(a duck, b duck) duck { return math.Mod(float64(a.(int64)), b.(float64)) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(int) % b.(int) },
+		DTY_FLOAT: func(a duck, b duck) duck { return math.Mod(float64(a.(int)), b.(float64)) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return math.Mod(a.(float64), float64(b.(int64))) },
+		DTY_INT:   func(a duck, b duck) duck { return math.Mod(a.(float64), float64(b.(int))) },
 		DTY_FLOAT: func(a duck, b duck) duck { return math.Mod(a.(float64), b.(float64)) },
 	},
 }
 
 var __pk_dot_asym_gt = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(int64) > b.(int64) },
-		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int64)) > b.(float64) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(int) > b.(int) },
+		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int)) > b.(float64) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(float64) > float64(b.(int64)) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(float64) > float64(b.(int)) },
 		DTY_FLOAT: func(a duck, b duck) duck { return a.(float64) > b.(float64) },
 	},
 }
 
 var __pk_dot_asym_gteq = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(int64) >= b.(int64) },
-		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int64)) >= b.(float64) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(int) >= b.(int) },
+		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int)) >= b.(float64) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(float64) >= float64(b.(int64)) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(float64) >= float64(b.(int)) },
 		DTY_FLOAT: func(a duck, b duck) duck { return a.(float64) >= b.(float64) },
 	},
 }
 
 var __pk_dot_asym_lt = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(int64) < b.(int64) },
-		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int64)) < b.(float64) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(int) < b.(int) },
+		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int)) < b.(float64) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(float64) < float64(b.(int64)) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(float64) < float64(b.(int)) },
 		DTY_FLOAT: func(a duck, b duck) duck { return a.(float64) < b.(float64) },
 	},
 }
 
 var __pk_dot_asym_lteq = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(int64) <= b.(int64) },
-		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int64)) <= b.(float64) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(int) <= b.(int) },
+		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int)) <= b.(float64) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(float64) <= float64(b.(int64)) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(float64) <= float64(b.(int)) },
 		DTY_FLOAT: func(a duck, b duck) duck { return a.(float64) <= b.(float64) },
 	},
 }
 
 var __pk_dot_asym_defeq = map[uint32]map[uint32]func(duck, duck) duck{
 	DTY_INT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(int64) == b.(int64) },
-		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int64)) == b.(float64) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(int) == b.(int) },
+		DTY_FLOAT: func(a duck, b duck) duck { return float64(a.(int)) == b.(float64) },
 	},
 	DTY_FLOAT: map[uint32]func(duck, duck) duck{
-		DTY_INT:   func(a duck, b duck) duck { return a.(float64) == float64(b.(int64)) },
+		DTY_INT:   func(a duck, b duck) duck { return a.(float64) == float64(b.(int)) },
 		DTY_FLOAT: func(a duck, b duck) duck { return a.(float64) == b.(float64) },
 	},
 	DTY_STRING: map[uint32]func(duck, duck) duck{
@@ -145,7 +145,7 @@ var __pk_dot_asym_defeq = map[uint32]map[uint32]func(duck, duck) duck{
 }
 
 func goty_to_dty(k reflect.Kind) uint32 {
-	if k == reflect.Int64 {
+	if k == reflect.Int {
 		return DTY_INT
 	} else if k == reflect.Float64 {
 		return DTY_FLOAT

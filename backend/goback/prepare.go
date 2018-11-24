@@ -18,6 +18,13 @@ const (
 
 	PNT_WRAP_OBJ_INIT
 
+	//// structure inherits from OBJFIELDACCESS
+	PNT_PSEUD_COLLECTION_LEN
+	//// end
+
+	// inherits structure from NT_BINOP
+	PNT_PSEUD_LIST_CONCAT
+
 	// duck annotation flags
 	PNTR_TYPE_INDEXABLE
 )
@@ -30,9 +37,48 @@ func (p *Preparer) Prepare(code Nod) {
 	p.Root = code
 	p.checkForPrintStatements()
 	p.createExplicitIndexors()
+	p.rewritePseudoFields()
+	p.createListConcats()
 	p.rewriteDuckedOps()
 	p.serializeKeywordArgs()
 	p.createObjInitWrappers()
+}
+
+func (p *Preparer) createListConcats() {
+	p.SearchReplaceAll2(func(n Nod) bool {
+		if n.NodeType == NT_ADDOP {
+			left := NodGetChild(n, NTR_BINOP_LEFT)
+			right := NodGetChild(n, NTR_BINOP_RIGHT)
+			leftType := NodGetChild(left, NTR_TYPE)
+			rightType := NodGetChild(right, NTR_TYPE)
+			if p.isIndexableType(leftType) && p.isIndexableType(rightType) {
+				return true
+			}
+		}
+		return false
+	}, func(n Nod) Nod {
+		n.NodeType = PNT_PSEUD_LIST_CONCAT
+		return n
+	})
+}
+
+func (p *Preparer) rewritePseudoFields() {
+	// certain field accesses, like <collection>.len, have a special syntactic meaning in
+	// Go.  So we note that by changing the node type of the objfieldaccess to something
+	// more specific
+	fieldAccesses := p.SearchRoot(func(n Nod) bool {
+		if n.NodeType == NT_OBJFIELD_ACCESSOR {
+			qualName := NodGetChild(n, NTR_OBJFIELD_ACCESSOR_NAME).Data.(string)
+			if qualName == "len" {
+				return true
+			}
+		}
+		return false
+	})
+
+	for _, fieldAccess := range fieldAccesses {
+		fieldAccess.NodeType = PNT_PSEUD_COLLECTION_LEN
+	}
 }
 
 func (p *Preparer) createObjInitWrappers() {
@@ -136,9 +182,6 @@ func (p *Preparer) isIndexableType(n Nod) bool {
 	if n.NodeType == NT_TYPEBASE {
 		bt := n.Data.(int)
 		return bt == TY_LIST || bt == TY_MAP
-	} else if n.NodeType == NT_TYPEARGED {
-		// TODO: remove this path
-		return p.isIndexableType(NodGetChild(n, NTR_TYPEARGED_BASE))
 	} else if n.NodeType == NT_CLASSDEF || n.NodeType == NT_FUNCDEF {
 		return false
 	} else if n.NodeType == NT_TYPECALL {

@@ -1,8 +1,20 @@
 
+# classic style for loops
+
 main func
     for i: 0, i < 3, i ++ 
         print(i)
 
 >>> 0
 1
-2
+2 >>>
+
+# iterate through a list the old fashioned way
+
+main func
+    ip list : [2, 1]
+
+    for i : 0, i < ip.len, i++
+        print(ip(i))
+>>> 2
+1
