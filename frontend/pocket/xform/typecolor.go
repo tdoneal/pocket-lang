@@ -246,6 +246,7 @@ func (x *XformerPocket) generateValidMypes(nodes []Nod) {
 		posMype := NodGetChild(node, NTR_MYPE_POS).Data.(Nod)
 		negMype := NodGetChild(node, NTR_MYPE_NEG).Data.(Nod)
 		validMype := DypeSimplifyDeep(DypeXSect(posMype, negMype))
+		validMype = x.postProcessDype(validMype)
 
 		if validMype.NodeType == DYPE_EMPTY {
 			if node.NodeType == NT_RECEIVERCALL_CMD || node.NodeType == NT_FUNCDEF_RV_PLACEHOLDER ||
@@ -259,6 +260,31 @@ func (x *XformerPocket) generateValidMypes(nodes []Nod) {
 		NodRemoveChild(node, NTR_MYPE_POS)
 		NodRemoveChild(node, NTR_MYPE_NEG)
 	}
+}
+
+func (x *XformerPocket) postProcessDype(dype Nod) Nod {
+	// returns a postprocessed dype for the final type coloring
+	// allows for a layer of postprocessing after the solver has concluded
+	// to determine what type is "assigned"
+	// currently all this does is remove lists with empty element specifications
+	if dype.NodeType == DYPE_UNION {
+		args := NodGetChildList(dype)
+		nargs := []Nod{}
+		for _, arg := range args {
+			shouldAdd := true
+			if arg.NodeType == NT_TYPEBASE {
+				if arg.Data.(int) == TY_LIST {
+					shouldAdd = false
+				}
+			}
+			if shouldAdd {
+				nargs = append(nargs, arg)
+			}
+		}
+		return x.postProcessDype(
+			DypeSimplifyDeep(NodNewChildList(DYPE_UNION, nargs)))
+	}
+	return dype
 }
 
 func (x *XformerPocket) marPosFuncCallUser() *RewriteRule {
@@ -830,12 +856,15 @@ func (x *XformerPocket) marGenPCCollectionIndex() *RewriteRule {
 func (x *XformerPocket) getIndexableElementDype(dype Nod) Nod {
 	// returns the element dype of the input dype, if it's a collection
 	// given e.g. list ~int~ returns int
-	// given e.g. Union(list~int~, list) returns Union(int, all) = all
+	// given e.g. Union(list~int~, list) returns Union(int, empty) = int
 	// given a non-collection dype returns EMPTY
-	if dype.NodeType == NT_TYPEBASE {
+	// given ALL returns ALL
+	if dype.NodeType == DYPE_ALL {
+		return dype
+	} else if dype.NodeType == NT_TYPEBASE {
 		whichType := dype.Data.(int)
 		if whichType == TY_LIST {
-			return NodNew(DYPE_ALL)
+			return NodNew(DYPE_EMPTY)
 		}
 	} else if dype.NodeType == NT_TYPECALL {
 		baseType := NodGetChild(dype, NTR_RECEIVERCALL_BASE)

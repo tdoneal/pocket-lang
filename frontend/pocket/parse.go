@@ -94,8 +94,10 @@ func (p *ParserPocket) parseFuncHeaderInto(fDef Nod) {
 	funcInputType := p.ParseAtMostOne(func() Nod { return p.parseFuncDefTypeValue() })
 
 	if funcInputType != nil {
+
 		NodSetChild(fDef, NTR_FUNCDEF_INTYPE, funcInputType)
 		funcOutputType := p.ParseAtMostOne(func() Nod { return p.parseFuncDefTypeValue() })
+
 		if funcOutputType != nil {
 			NodSetChild(fDef, NTR_FUNCDEF_OUTTYPE, funcOutputType)
 		}
@@ -654,7 +656,7 @@ func (p *ParserPocket) parseFuncDefTypeValue() Nod {
 		func() Nod { return p.parseFDTEmptyParenBracketLike() },
 		func() Nod { return p.parseParameterParenthetical() },
 		func() Nod { return p.parseParameterList() },
-		func() Nod { return p.parseLiteralKeyword() },
+		func() Nod { return p.parseType() },
 	})
 }
 
