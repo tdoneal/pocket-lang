@@ -217,14 +217,15 @@ func (d *DebugPrinter) String() string {
 }
 
 func (d *DebugPrinter) internalPrettyPrint(node *Node, depth int) {
+	// 0 depth means include the current node, but go no deeper
 	// -1 means unlimited depth
 	seen := false
 	if _, ok := d.alreadySeen[node]; ok {
 		seen = true
 	}
 	d.alreadySeen[node] = true
-	d.PrintNodeType(node.NodeType)
 
+	d.PrintNodeType(node.NodeType)
 	d.PrintLocalDataIfExtant(node)
 
 	if depth == 0 {
@@ -241,13 +242,24 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node, depth int) {
 	if len(node.Out) > 0 && !seen {
 		d.incIndent(1)
 		d.printEOL()
+
+		// gather the appropriate display edges
+		edges := []*Edge{}
 		for _, edge := range node.Out {
+			if !d.shouldSkipNode(node, edge.Out) {
+				edges = append(edges, edge)
+			}
+		}
+
+		for _, edge := range edges {
+			child := edge.Out
+			// print child link and child
 			d.PrintNodeType(edge.EdgeType)
 			d.buf.WriteString("->")
 			childDepth := d.getAppropriateChildDepth(
-				node.NodeType, edge.EdgeType, edge.Out.NodeType, depth)
-			d.internalPrettyPrint(edge.Out, childDepth)
-			if cnt < (len(node.Out) - 1) {
+				node.NodeType, edge.EdgeType, child.NodeType, depth)
+			d.internalPrettyPrint(child, childDepth)
+			if cnt < (len(edges) - 1) {
 				d.printEOL()
 			}
 			cnt++
@@ -259,6 +271,17 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node, depth int) {
 		d.buf.WriteString(" (SEEN)")
 	}
 
+}
+
+func (d *DebugPrinter) shouldSkipNode(parent Nod, child Nod) bool {
+	childType := child.NodeType
+	if childType == NT_CLASSTABLE || childType == NT_FUNCTABLE ||
+		childType == NT_VARTABLE {
+		if len(child.Out) == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *DebugPrinter) getAppropriateChildDepth(

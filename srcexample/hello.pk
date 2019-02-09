@@ -1,7 +1,11 @@
+Rectangle class
+    width
+    height
+    area func
+        return width * height
 
 main func
-    l : foo()
-    print(l(0))
-
-foo func() list~int~
-    return [1]
+    r : Rectangle()
+    r.width : 3
+    r.height: 4
+    print r.area()
