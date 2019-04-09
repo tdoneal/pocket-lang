@@ -14,7 +14,7 @@ This repository contains the Pocket compiler.  It comprises a handwritten lexer,
 The compiler's approach is to use Go as an IR (by compiling Pocket code to Go, then calling the Go compiler).
 
 ## Hello, world!
-A basic example of a simple Pocket program.
+A basic example of a Pocket program.
 ```
 main func
     print('Hello, world!')
