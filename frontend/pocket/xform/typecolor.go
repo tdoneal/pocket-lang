@@ -284,11 +284,11 @@ func (x *XformerPocket) postProcessDype(dype Nod) Nod {
 
 		// simplify and recurse
 		simplified := DypeSimplifyDeep(NodNewChildList(DYPE_UNION, nargs))
-		if simplified.NodeType == DYPE_UNION {
-			fmt.Println("offending type:", PrettyPrint(simplified))
-			panic("Couldn't simplify post processed type enough")
-		}
-		return x.postProcessDype(simplified)
+		// if simplified.NodeType == DYPE_UNION {
+		// 	fmt.Println("offending type:", PrettyPrint(simplified))
+		// 	panic("Couldn't simplify post processed type enough")
+		// }
+		return simplified
 	}
 	return dype
 }

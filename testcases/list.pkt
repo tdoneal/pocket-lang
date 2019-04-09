@@ -23,7 +23,15 @@ main func
 main func
     l : [6] + [7]
     print(l)
+
 >>> [6 7] >>>
+main func
+    r : []
+    r +: [1, 2]
+    print(r)
+
+
+>>> [1 2] >>>
 # arged types
 
 main func

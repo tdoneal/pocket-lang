@@ -40,18 +40,17 @@ func (x *XformerPocket) Xform() {
 
 	fmt.Println("after desugaring:", PrettyPrint(x.Root))
 
-	x.solve()
+	x.newSolve()
 	fmt.Println("after solving", PrettyPrint(x.Root))
 
-	x.colorTypes()
-
-	x.checkAllVarsResolved()
-	x.checkAllCallsResolved()
-
-	fmt.Println("after xform:", PrettyPrint(x.Root))
 }
 
-func (x *XformerPocket) solve() {
+func (x *XformerPocket) newSolve() {
+	nsolver := &NSolver{x}
+	nsolver.solve()
+}
+
+func (x *XformerPocket) oldSolve() {
 	// resolves identifiers and types to the best of our ability
 	rules := x.getAllSolveRules()
 	nodes := x.getSolvableNodes()
@@ -59,6 +58,10 @@ func (x *XformerPocket) solve() {
 	fmt.Println("after initializing solveable nodes", PrettyPrint(x.Root))
 
 	x.applyGraphRewritesUntilStable(rules)
+	x.colorTypes()
+
+	x.checkAllVarsResolved()
+	x.checkAllCallsResolved()
 }
 
 func (x *XformerPocket) initializeSolvableNodes(ns []Nod) {

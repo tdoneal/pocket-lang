@@ -143,6 +143,20 @@ const (
 	NTR_PRAGMA_BODY = 271
 	NTR_PRAGMAPAINT = 273
 	NT_PRAGMAPAINT  = 274
+
+	// "NNT": solver type for the nsolver (new solver)
+	// this is just to help keep these types mentally separate
+	// eventually a cleanup needs to be performed and remove unused NTs
+	NNT_SYMTABLE  = 300
+	NNTR_SYMTABLE = 301
+
+	KNOW_RUNVALUE = 305
+	KNOW_RUNTYPE  = 306
+
+	NNT_RUNVALUE              = 310 // entropy stored in .data field
+	NNTR_RUNVALUE_TYPE        = 311 // target is TY
+	NNTR_KNOWLEDGE            = 315
+	NNT_KNOWLEDGE_DISJUNCTION = 316
 )
 
 const (

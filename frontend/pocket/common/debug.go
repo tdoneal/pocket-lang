@@ -158,6 +158,17 @@ func (d *Debug) initialize() {
 	ntl[NTR_PRAGMAPAINT] = "PRAGMAPAINT"
 	ntl[NT_PRAGMAPAINT] = "PRAGMAPAINT"
 
+	ntl[NNT_SYMTABLE] = "SYMTABLE"
+	ntl[NNTR_SYMTABLE] = "SYMTABLE"
+
+	ntl[NNT_RUNVALUE] = "RUNVALUE"
+	ntl[NNTR_RUNVALUE_TYPE] = "RUNTYPE"
+
+	ntl[NNT_KNOWLEDGE_DISJUNCTION] = "THATALLOF"
+	ntl[NNTR_KNOWLEDGE] = "KNOW"
+	ntl[KNOW_RUNVALUE] = "RUNVALUE_IS"
+	ntl[KNOW_RUNTYPE] = "RUNTYPE_IS"
+
 	// dype
 	ntl[DYPE_ALL] = "DYPE_ALL"
 	ntl[DYPE_EMPTY] = "DYPE_EMPTY"
@@ -273,12 +284,16 @@ func (d *DebugPrinter) internalPrettyPrint(node *Node, depth int) {
 
 }
 
+var dbgPrintSkipEmptyTables bool = false
+
 func (d *DebugPrinter) shouldSkipNode(parent Nod, child Nod) bool {
-	childType := child.NodeType
-	if childType == NT_CLASSTABLE || childType == NT_FUNCTABLE ||
-		childType == NT_VARTABLE {
-		if len(child.Out) == 0 {
-			return true
+	if dbgPrintSkipEmptyTables {
+		childType := child.NodeType
+		if childType == NT_CLASSTABLE || childType == NT_FUNCTABLE ||
+			childType == NT_VARTABLE {
+			if len(child.Out) == 0 {
+				return true
+			}
 		}
 	}
 	return false
@@ -333,13 +348,20 @@ func (d *DebugPrinter) PrintLocalDataIfExtant(node *Node) {
 		d.buf.WriteString(": \"")
 		d.buf.WriteString(val)
 		d.buf.WriteString("\"")
-	} else if val, ok := node.Data.(Nod); ok && node.NodeType == NT_DYPE {
+	} else if val, ok := node.Data.(Nod); ok && node.NodeType == NT_DYPE || ldIsKnowledgeNode(node.NodeType) {
 		d.buf.WriteString(": ")
 		d.internalPrettyPrint(val, 3)
 	} else if node.NodeType == NT_NAMESPACE {
 		d.buf.WriteString(" @ ")
 		d.buf.WriteString(fmt.Sprintf("%p", node))
+	} else if val, ok := node.Data.(map[string]Nod); ok {
+		d.buf.WriteString(": ")
+		d.buf.WriteString(fmt.Sprint(val))
 	}
+}
+
+func ldIsKnowledgeNode(nt int) bool {
+	return nt == KNOW_RUNVALUE || nt == KNOW_RUNTYPE
 }
 
 func (d *DebugPrinter) printEOL() {

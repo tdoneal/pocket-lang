@@ -1,11 +1,9 @@
-Rectangle class
-    width
-    height
-    area func
-        return width * height
+
 
 main func
-    r : Rectangle()
-    r.width : 3
-    r.height: 4
-    print r.area()
+    x : 1
+    # if x = 1
+    #    print(x)
+
+
+
